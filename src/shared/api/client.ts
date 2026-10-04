@@ -105,11 +105,13 @@ function refresh(observedCsrf: string, sessionSignal: AbortSignal) {
   return refreshFlight
 }
 
-export async function apiGet<T>(
+async function request<T>(
   path: string,
+  method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE',
   schema: z.ZodType<T>,
-  signal?: AbortSignal,
-  authenticated = false,
+  signal: AbortSignal | undefined,
+  authenticated: boolean,
+  body?: unknown,
 ): Promise<T> {
   const sessionSignal = sessionRequests.signal
   const activeSignal = signal ?? new AbortController().signal
@@ -120,7 +122,7 @@ export async function apiGet<T>(
   let response: Response
   try {
     try {
-      response = await http(path, 'GET', combined)
+      response = await http(path, method, combined, body)
     } catch (error) {
       if (
         !authenticated ||
@@ -136,7 +138,7 @@ export async function apiGet<T>(
         throw refreshError
       }
       combined.throwIfAborted()
-      response = await http(path, 'GET', combined)
+      response = await http(path, method, combined, body)
     }
   } catch (error) {
     if (authenticated && error instanceof ApiError && error.status === 401)
@@ -150,15 +152,25 @@ export async function apiGet<T>(
       sessionEvents.dispatchEvent(new Event('forbidden'))
     throw error
   }
-  const result = z
-    .object({ data: schema, errors: z.null() })
-    .parse(await response.json()).data
+  const parsed = z.object({ data: schema, errors: z.null() }).safeParse(await response.json())
+  if (!parsed.success) {
+    throw new ApiError(502, 'CLIENT_RESPONSE_INVALID', response.headers.get('x-request-id') ?? undefined,
+      'Phản hồi không hợp lệ. Vui lòng kiểm tra trạng thái giao dịch trước khi thử lại.')
+  }
   combined.throwIfAborted()
-  return result
+  return parsed.data.data
 }
 
-// Mutations with optional CSRF and session refresh (authenticated defaults to true)
-export async function apiMutate<T>(
+export function apiGet<T>(
+  path: string,
+  schema: z.ZodType<T>,
+  signal?: AbortSignal,
+  authenticated = false,
+): Promise<T> {
+  return request(path, 'GET', schema, signal, authenticated)
+}
+
+export function apiMutate<T>(
   path: string,
   method: 'POST' | 'PUT' | 'PATCH' | 'DELETE',
   schema: z.ZodType<T>,
@@ -166,56 +178,12 @@ export async function apiMutate<T>(
   signal?: AbortSignal,
   authenticated = true,
 ): Promise<T> {
-  const sessionSignal = sessionRequests.signal
-  const combined = authenticated
-    ? signal
-      ? AbortSignal.any([signal, sessionSignal])
-      : sessionSignal
-    : (signal ?? new AbortController().signal)
-  const observedCsrf = csrfToken()
-  let response: Response
-  try {
-    try {
-      response = await http(path, method, combined, body)
-    } catch (error) {
-      if (
-        !authenticated ||
-        !(error instanceof ApiError) ||
-        error.status !== 401
-      )
-        throw error
-      try {
-        await refresh(observedCsrf, sessionSignal)
-      } catch (refreshError) {
-        if (!sessionSignal.aborted)
-          sessionEvents.dispatchEvent(new Event('expired'))
-        throw refreshError
-      }
-      combined.throwIfAborted()
-      response = await http(path, method, combined, body)
-    }
-  } catch (error) {
-    if (authenticated && error instanceof ApiError && error.status === 401)
-      sessionEvents.dispatchEvent(new Event('expired'))
-    if (
-      authenticated &&
-      !path.startsWith('/auth/') &&
-      error instanceof ApiError &&
-      error.status === 403
-    )
-      sessionEvents.dispatchEvent(new Event('forbidden'))
-    throw error
-  }
-  const result = z
-    .object({ data: schema, errors: z.null() })
-    .parse(await response.json()).data
-  combined.throwIfAborted()
-  return result
+  return request(path, method, schema, signal, authenticated, body)
 }
 
 // No automatic retries for auth commands, including timeout and 401.
 export async function authCommand(
-  path: '/auth/sign-in' | '/auth/logout',
+  path: '/auth/sign-in' | '/auth/sign-up' | '/auth/google' | '/auth/logout',
   body: unknown,
 ) {
   return withSessionLock(async () => {
@@ -248,4 +216,3 @@ export function errorMessage(error: unknown) {
     return 'Không tìm thấy dữ liệu yêu cầu.'
   return 'Dịch vụ tạm thời không khả dụng. Vui lòng thử lại.'
 }
-

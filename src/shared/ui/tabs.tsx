@@ -1,7 +1,8 @@
-import React, { createContext, useContext } from 'react'
+import React, { createContext, useContext, useId } from 'react'
 import { cn } from './utils'
 
 interface TabsContextValue {
+  id: string
   value: string
   onValueChange: (val: string) => void
 }
@@ -19,8 +20,9 @@ export function Tabs({
   children: React.ReactNode
   className?: string
 }) {
+  const id = useId()
   return (
-    <TabsContext.Provider value={{ value, onValueChange }}>
+    <TabsContext.Provider value={{ id, value, onValueChange }}>
       <div className={cn('w-full', className)}>{children}</div>
     </TabsContext.Provider>
   )
@@ -28,6 +30,7 @@ export function Tabs({
 
 export function TabsList({
   className,
+  onKeyDown,
   ...props
 }: React.HTMLAttributes<HTMLDivElement>) {
   return (
@@ -37,6 +40,18 @@ export function TabsList({
         className,
       )}
       role="tablist"
+      onKeyDown={(event) => {
+        onKeyDown?.(event)
+        if (event.defaultPrevented || !['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
+        const tabs = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="tab"]:not(:disabled)'))
+        const current = tabs.indexOf(document.activeElement as HTMLButtonElement)
+        if (current < 0 || !tabs.length) return
+        const index = event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1
+          : (current + (event.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length
+        event.preventDefault()
+        tabs[index]?.focus()
+        tabs[index]?.click()
+      }}
       {...props}
     />
   )
@@ -56,6 +71,9 @@ export function TabsTrigger({
     <button
       type="button"
       role="tab"
+      id={`${context.id}-tab-${value}`}
+      aria-controls={`${context.id}-panel-${value}`}
+      tabIndex={isSelected ? 0 : -1}
       aria-selected={isSelected}
       onClick={() => context.onValueChange(value)}
       className={cn(
@@ -80,15 +98,18 @@ export function TabsContent({
 }: React.HTMLAttributes<HTMLDivElement> & { value: string }) {
   const context = useContext(TabsContext)
   if (!context) throw new Error('TabsContent must be used within Tabs')
-  if (context.value !== value) return null
 
   return (
     <div
       role="tabpanel"
+      id={`${context.id}-panel-${value}`}
+      aria-labelledby={`${context.id}-tab-${value}`}
+      hidden={context.value !== value}
+      tabIndex={0}
       className={cn('mt-3 ring-offset-white focus-visible:outline-none', className)}
       {...props}
     >
-      {children}
+      {context.value === value ? children : null}
     </div>
   )
 }

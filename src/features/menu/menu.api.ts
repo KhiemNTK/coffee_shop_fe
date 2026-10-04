@@ -1,9 +1,8 @@
 import { z } from 'zod'
 import { apiGet } from '../../shared/api/client'
 
-const decimalSchema = z.string().regex(/^\d{1,15}(\.\d{1,2})?$/)
-// The backend DecimalInterceptor currently emits numbers. Reject amounts whose
-// minor units are unsafe; client code cannot recover precision lost by a server.
+const decimalSchema = z.string().regex(/^\d{1,16}(\.\d{1,2})?$/)
+
 export const moneySchema = z.union([
   decimalSchema,
   z
@@ -15,7 +14,7 @@ export const moneySchema = z.union([
     .pipe(decimalSchema),
 ])
 const categorySchema = z.object({ id: z.uuid(), name: z.string() })
-const itemSchema = z.object({
+export const itemSchema = z.object({
   id: z.uuid(),
   name: z.string(),
   price: moneySchema,
@@ -56,9 +55,4 @@ export function getMenu(filters: MenuFilters, signal: AbortSignal) {
   return apiGet(`/menu/public/items?${params}`, pageSchema, signal)
 }
 
-const formatter = new Intl.NumberFormat('vi-VN')
-export function formatPrice(value: string) {
-  const [integer = '0', fraction = ''] = value.split('.')
-  const decimals = /[1-9]/.test(fraction) ? `,${fraction.padEnd(2, '0')}` : ''
-  return `${formatter.format(BigInt(integer))}${decimals} ₫`
-}
+export { formatPrice, formatVnd } from '@/shared/lib/format'
