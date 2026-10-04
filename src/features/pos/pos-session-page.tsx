@@ -1,18 +1,12 @@
 import { useState } from 'react'
-import { useParams, useNavigate, Link } from 'react-router-dom'
+import { useParams, useNavigate, useOutletContext, Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   AlertCircle,
   ArrowLeft,
   CheckCircle2,
-  Coffee,
   DollarSign,
-  Minus,
-  Plus,
   RefreshCw,
-  Search,
-  Send,
-  Trash2,
   UtensilsCrossed,
 } from 'lucide-react'
 import { errorMessage } from '../../shared/api/client'
@@ -31,33 +25,25 @@ import {
   transferTable,
   type AddOrderItemPayload,
 } from './pos.api'
+import { getPosRecommendations } from '../recommendations/recommendations.api'
 import { Card, CardContent } from '../../shared/ui/card'
 import { Button } from '../../shared/ui/button'
 import { buttonVariants } from '../../shared/ui/button-variants'
-import { Badge } from '../../shared/ui/badge'
-import { Input } from '../../shared/ui/input'
-import {
-  Dialog,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-} from '../../shared/ui/dialog'
 import { cn } from '../../shared/ui/utils'
-
-type DraftItem = {
-  id: string
-  menuItem: MenuItem
-  quantity: number
-  note: string
-  selectedOptionIds: string[]
-  calculatedPrice: number
-}
+import type { DraftItem } from './pos.types'
+import { PosMenuCatalog } from './components/pos-menu-catalog'
+import { PosOrderItemsList } from './components/pos-order-items-list'
+import { PosDraftItemsList } from './components/pos-draft-items-list'
+import { PosItemOptionsDialog } from './components/pos-item-options-dialog'
+import { PosTransferDialog } from './components/pos-transfer-dialog'
+import { posKeys } from './pos.keys'
+import type { Session } from '../auth/session'
 
 export default function PosSessionPage() {
   const { sessionId } = useParams<{ sessionId: string }>()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+  const { employee } = useOutletContext<Session>()
 
   const [keyword, setKeyword] = useState('')
   const [selectedCategoryId, setSelectedCategoryId] = useState('')
@@ -65,12 +51,9 @@ export default function PosSessionPage() {
 
   // Modal chọn tùy chọn món (options / size / topping)
   const [configuringItem, setConfiguringItem] = useState<MenuItem | null>(null)
-  const [configuredOptions, setConfiguredOptions] = useState<Record<string, string[]>>({})
-  const [configuredNote, setConfiguredNote] = useState('')
 
   // Modal chuyển bàn
   const [showTransferModal, setShowTransferModal] = useState(false)
-  const [targetTableId, setTargetTableId] = useState('')
 
   // Modal thanh toán
   const [showCheckoutModal, setShowCheckoutModal] = useState(false)
@@ -79,7 +62,7 @@ export default function PosSessionPage() {
   const [actionSuccess, setActionSuccess] = useState<string | null>(null)
 
   const sessionQuery = useQuery({
-    queryKey: ['pos', 'session', sessionId],
+    queryKey: posKeys.session(employee.id, sessionId),
     queryFn: ({ signal }) => getSessionDetail(sessionId!, signal),
     enabled: Boolean(sessionId),
     refetchInterval: 5_000,
@@ -97,9 +80,16 @@ export default function PosSessionPage() {
   })
 
   const tablesQuery = useQuery({
-    queryKey: ['private', 'dining-tables'],
+    queryKey: posKeys.tables(employee.id),
     queryFn: ({ signal }) => getDiningTables(signal),
     enabled: showTransferModal,
+  })
+
+  const recommendationsQuery = useQuery({
+    queryKey: ['recommendations', 'pos', sessionId],
+    queryFn: ({ signal }) => getPosRecommendations(sessionId!, signal),
+    enabled: Boolean(sessionId) && (sessionQuery.data?.orderItems.length ?? 0) > 0,
+    staleTime: 60_000,
   })
 
   const addItemsMutation = useMutation({
@@ -118,7 +108,7 @@ export default function PosSessionPage() {
     onSuccess: () => {
       setDraftItems([])
       setActionSuccess('Đã gửi món vào bếp thành công')
-      void queryClient.invalidateQueries({ queryKey: ['pos', 'session', sessionId] })
+      void queryClient.invalidateQueries({ queryKey: posKeys.session(employee.id, sessionId) })
     },
     onError: (err) => {
       setActionError(errorMessage(err))
@@ -133,7 +123,7 @@ export default function PosSessionPage() {
     },
     onSuccess: () => {
       setActionSuccess('Đã hủy món thành công')
-      void queryClient.invalidateQueries({ queryKey: ['pos', 'session', sessionId] })
+      void queryClient.invalidateQueries({ queryKey: posKeys.session(employee.id, sessionId) })
     },
     onError: (err) => {
       setActionError(errorMessage(err))
@@ -141,7 +131,7 @@ export default function PosSessionPage() {
   })
 
   const transferMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (targetTableId: string) => {
       setActionError(null)
       setActionSuccess(null)
       const currentTableId = sessionQuery.data?.table?.id
@@ -153,8 +143,9 @@ export default function PosSessionPage() {
     onSuccess: () => {
       setShowTransferModal(false)
       setActionSuccess('Đã chuyển bàn thành công')
-      void queryClient.invalidateQueries({ queryKey: ['pos', 'session', sessionId] })
-      void queryClient.invalidateQueries({ queryKey: ['private', 'dining-tables'] })
+      void queryClient.invalidateQueries({ queryKey: posKeys.session(employee.id, sessionId) })
+      void queryClient.invalidateQueries({ queryKey: posKeys.tables(employee.id) })
+      void queryClient.invalidateQueries({ queryKey: posKeys.sessions(employee.id) })
     },
     onError: (err) => {
       setActionError(errorMessage(err))
@@ -217,62 +208,43 @@ export default function PosSessionPage() {
   )
   const grandTotal = existingUnpaidTotal + draftTotal
 
-  function openOptionConfig(item: MenuItem) {
+  function handleSelectItem(item: MenuItem) {
     if (item.optionGroups.length === 0) {
-      // Món không có options: thêm trực tiếp
-      addDraftDirect(item, [])
+      // Món không có options: thêm trực tiếp vào giỏ
+      const basePrice = Number(item.price) || 0
+      setDraftItems((prev) => [
+        ...prev,
+        {
+          id: crypto.randomUUID(),
+          menuItem: item,
+          quantity: 1,
+          note: '',
+          selectedOptionIds: [],
+          calculatedPrice: basePrice,
+        },
+      ])
       return
     }
     setConfiguringItem(item)
-    setConfiguredOptions({})
-    setConfiguredNote('')
   }
 
-  function addDraftDirect(item: MenuItem, selectedOptionIds: string[]) {
-    let price = Number(item.price) || 0
-    for (const group of item.optionGroups) {
-      for (const opt of group.options) {
-        if (selectedOptionIds.includes(opt.id)) {
-          price += Number(opt.priceDelta) || 0
-        }
-      }
-    }
+  function handleConfirmOptions(
+    item: MenuItem,
+    selectedOptionIds: string[],
+    note: string,
+    calculatedPrice: number,
+  ) {
     setDraftItems((prev) => [
       ...prev,
       {
         id: crypto.randomUUID(),
         menuItem: item,
         quantity: 1,
-        note: '',
+        note,
         selectedOptionIds,
-        calculatedPrice: price,
+        calculatedPrice,
       },
     ])
-  }
-
-  function confirmConfiguredItem() {
-    if (!configuringItem) return
-    const allSelectedIds = Object.values(configuredOptions).flat()
-    let price = Number(configuringItem.price) || 0
-    for (const group of configuringItem.optionGroups) {
-      for (const opt of group.options) {
-        if (allSelectedIds.includes(opt.id)) {
-          price += Number(opt.priceDelta) || 0
-        }
-      }
-    }
-    setDraftItems((prev) => [
-      ...prev,
-      {
-        id: crypto.randomUUID(),
-        menuItem: configuringItem,
-        quantity: 1,
-        note: configuredNote,
-        selectedOptionIds: allSelectedIds,
-        calculatedPrice: price,
-      },
-    ])
-    setConfiguringItem(null)
   }
 
   function updateDraftQuantity(draftId: string, delta: number) {
@@ -297,7 +269,7 @@ export default function PosSessionPage() {
             variant="ghost"
             size="sm"
             onClick={() => navigate('/staff/pos')}
-            className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground"
+            className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground cursor-pointer"
           >
             <ArrowLeft className="h-4 w-4" /> Sơ đồ bàn
           </Button>
@@ -318,7 +290,7 @@ export default function PosSessionPage() {
               variant="outline"
               size="sm"
               onClick={() => setShowTransferModal(true)}
-              className="flex items-center gap-1.5"
+              className="flex items-center gap-1.5 cursor-pointer"
             >
               <RefreshCw className="h-4 w-4" /> Chuyển bàn
             </Button>
@@ -329,7 +301,7 @@ export default function PosSessionPage() {
               type="button"
               size="default"
               onClick={() => setShowCheckoutModal(true)}
-              className="flex items-center gap-1.5 shadow-sm"
+              className="flex items-center gap-1.5 shadow-sm cursor-pointer"
             >
               <DollarSign className="h-4 w-4" /> Thanh toán ({formatPrice(String(existingUnpaidTotal))})
             </Button>
@@ -373,7 +345,7 @@ export default function PosSessionPage() {
           <Button
             type="button"
             onClick={() => navigate('/staff/pos')}
-            className="shrink-0"
+            className="shrink-0 cursor-pointer"
           >
             Quay lại sơ đồ bàn
           </Button>
@@ -382,72 +354,20 @@ export default function PosSessionPage() {
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-12 items-start">
         {/* Cột trái: Danh mục & Thực đơn gọi món */}
-        <Card className="lg:col-span-7 p-5">
-          <CardContent className="p-0">
-            <h2 className="mb-4 flex items-center gap-2 text-lg font-bold text-foreground">
-              <Coffee className="h-5 w-5 text-primary" /> Chọn món
-            </h2>
+        <PosMenuCatalog
+          keyword={keyword}
+          onKeywordChange={setKeyword}
+          selectedCategoryId={selectedCategoryId}
+          onSelectCategory={setSelectedCategoryId}
+          categories={categoriesQuery.data}
+          menuItems={menuQuery.data?.list}
+          recommendations={recommendationsQuery.data}
+          isLoadingMenu={menuQuery.isPending}
+          onSelectItem={handleSelectItem}
+          disabled={isCompleted || isCancelled}
+        />
 
-            {/* Ô tìm kiếm & lọc danh mục */}
-            <div className="mb-4 flex flex-col gap-2.5 sm:flex-row">
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input
-                  type="search"
-                  placeholder="Tìm món nhanh…"
-                  value={keyword}
-                  onChange={(e) => setKeyword(e.target.value)}
-                  className="pl-9"
-                />
-              </div>
-
-              <select
-                value={selectedCategoryId}
-                onChange={(e) => setSelectedCategoryId(e.target.value)}
-                className="h-9 rounded-md border border-input bg-card px-3 text-sm font-medium text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-              >
-                <option value="">Tất cả danh mục</option>
-                {categoriesQuery.data?.map((cat) => (
-                  <option key={cat.id} value={cat.id}>
-                    {cat.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Lưới món ăn */}
-            {menuQuery.isPending ? (
-              <p className="py-8 text-center text-sm text-muted-foreground animate-pulse" role="status">
-                Đang tải món…
-              </p>
-            ) : menuQuery.data?.list.length === 0 ? (
-              <p className="py-8 text-center text-sm text-muted-foreground">
-                Không tìm thấy món phù hợp.
-              </p>
-            ) : (
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                {menuQuery.data?.list.map((item) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() => openOptionConfig(item)}
-                    disabled={isCompleted || isCancelled}
-                    className="group flex min-h-[85px] flex-col justify-between rounded-xl border border-border bg-card p-3 text-left transition-all hover:border-primary hover:shadow-xs focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-50 select-none"
-                  >
-                    <span className="text-sm font-semibold text-foreground group-hover:text-primary transition-colors line-clamp-2">
-                      {item.name}
-                    </span>
-                    <span className="mt-2 text-xs font-bold text-primary">
-                      {formatPrice(item.price)}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Cột phải: Đơn hàng (Món đã đặt + Giỏ hàng tạm) */}
+        {/* Cột phải: Đơn hàng (Món đã đặt + Giỏ hàng tạm + Tổng tiền) */}
         <Card className="lg:col-span-5 p-5">
           <CardContent className="p-0">
             <h2 className="mb-4 flex items-center gap-2 text-lg font-bold text-foreground">
@@ -455,158 +375,20 @@ export default function PosSessionPage() {
             </h2>
 
             {/* Danh sách món đã gửi trước đó */}
-            <div className="space-y-2">
-              <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                Món đã order ({session.orderItems.length})
-              </span>
-
-              {session.orderItems.length === 0 ? (
-                <p className="py-3 text-xs text-muted-foreground italic">
-                  Chưa có món nào được gửi.
-                </p>
-              ) : (
-                <div className="mt-2 space-y-2 max-h-[300px] overflow-y-auto pr-1">
-                  {session.orderItems.map((item) => {
-                    const isCancelable =
-                      !item.isPaid &&
-                      item.serveStatus !== 'SERVED' &&
-                      item.serveStatus !== 'CANCELLED'
-
-                    return (
-                      <div
-                        key={item.id}
-                        className={cn(
-                          'flex items-center justify-between gap-3 rounded-lg border p-2.5 transition-colors',
-                          item.serveStatus === 'CANCELLED'
-                            ? 'border-destructive/20 bg-destructive/5 opacity-70'
-                            : 'border-border bg-muted/20',
-                        )}
-                      >
-                        <div className="space-y-0.5">
-                          <div className="flex items-center gap-2">
-                            <span
-                              className={cn(
-                                'text-sm font-semibold text-foreground',
-                                item.serveStatus === 'CANCELLED' && 'line-through text-muted-foreground',
-                              )}
-                            >
-                              {item.quantity}x {item.menuItem.name}
-                            </span>
-                            <Badge
-                              variant={
-                                item.serveStatus === 'SERVED'
-                                  ? 'success'
-                                  : item.serveStatus === 'CANCELLED'
-                                    ? 'destructive'
-                                    : 'warning'
-                              }
-                              className="text-[10px]"
-                            >
-                              {item.serveStatus}
-                            </Badge>
-                          </div>
-                          {item.note && (
-                            <small className="block text-xs text-muted-foreground">
-                              {item.note}
-                            </small>
-                          )}
-                          <span className="block text-xs font-bold text-primary">
-                            {formatPrice(String(Number(item.priceAtTime) * item.quantity))}
-                          </span>
-                        </div>
-
-                        {isCancelable && (
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            title="Hủy món"
-                            onClick={() => {
-                              const reason = prompt('Nhập lý do hủy món:') || 'Khách đổi ý'
-                              cancelItemMutation.mutate({ itemId: item.id, reason })
-                            }}
-                            className="h-8 w-8 text-destructive hover:bg-destructive/10 shrink-0"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        )}
-                      </div>
-                    )
-                  })}
-                </div>
-              )}
-            </div>
+            <PosOrderItemsList
+              orderItems={session.orderItems}
+              onCancelItem={(itemId, reason) => cancelItemMutation.mutate({ itemId, reason })}
+              isCancelling={cancelItemMutation.isPending}
+            />
 
             {/* Giỏ hàng tạm (Draft items) */}
-            {draftItems.length > 0 && (
-              <div className="mt-5 border-t-2 border-dashed border-primary/20 pt-4">
-                <div className="mb-2 flex items-center justify-between">
-                  <span className="text-xs font-bold uppercase tracking-wider text-primary">
-                    Món mới chọn ({draftItems.length})
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setDraftItems([])}
-                    className="text-xs font-semibold text-destructive hover:underline"
-                  >
-                    Xóa tất cả
-                  </button>
-                </div>
-
-                <div className="space-y-2 mb-3 max-h-[220px] overflow-y-auto pr-1">
-                  {draftItems.map((item) => (
-                    <div
-                      key={item.id}
-                      className="flex items-center justify-between gap-3 rounded-lg border border-primary/30 bg-primary/5 p-2.5"
-                    >
-                      <div>
-                        <strong className="text-sm font-semibold text-foreground">
-                          {item.menuItem.name}
-                        </strong>
-                        {item.note && (
-                          <small className="block text-xs text-muted-foreground">
-                            {item.note}
-                          </small>
-                        )}
-                        <div className="mt-0.5 text-xs font-bold text-primary">
-                          {formatPrice(String(item.calculatedPrice * item.quantity))}
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-1.5">
-                        <button
-                          type="button"
-                          onClick={() => updateDraftQuantity(item.id, -1)}
-                          className="flex h-6 w-6 items-center justify-center rounded-md border border-border bg-card text-foreground hover:bg-muted"
-                        >
-                          <Minus className="h-3 w-3" />
-                        </button>
-                        <span className="w-5 text-center text-xs font-bold text-foreground">
-                          {item.quantity}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => updateDraftQuantity(item.id, 1)}
-                          className="flex h-6 w-6 items-center justify-center rounded-md border border-border bg-card text-foreground hover:bg-muted"
-                        >
-                          <Plus className="h-3 w-3" />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                <Button
-                  type="button"
-                  onClick={() => addItemsMutation.mutate()}
-                  isLoading={addItemsMutation.isPending}
-                  className="w-full flex items-center justify-center gap-2"
-                >
-                  <Send className="h-4 w-4" />
-                  {addItemsMutation.isPending ? 'Đang gửi món…' : 'Gửi order vào bếp'}
-                </Button>
-              </div>
-            )}
+            <PosDraftItemsList
+              draftItems={draftItems}
+              onUpdateQuantity={updateDraftQuantity}
+              onClearDraft={() => setDraftItems([])}
+              onSubmitOrder={() => addItemsMutation.mutate()}
+              isSubmitting={addItemsMutation.isPending}
+            />
 
             {/* Tổng tiền & thanh toán */}
             <div className="mt-5 border-t border-border pt-4">
@@ -624,7 +406,7 @@ export default function PosSessionPage() {
                   type="button"
                   size="lg"
                   onClick={() => setShowCheckoutModal(true)}
-                  className="w-full flex items-center justify-center gap-2 font-bold shadow-sm"
+                  className="w-full flex items-center justify-center gap-2 font-bold shadow-sm cursor-pointer"
                 >
                   <DollarSign className="h-5 w-5" />
                   Thanh toán hóa đơn
@@ -636,167 +418,22 @@ export default function PosSessionPage() {
       </div>
 
       {/* Modal tùy chọn món (Options modal) */}
-      <Dialog
-        open={Boolean(configuringItem)}
+      <PosItemOptionsDialog
+        item={configuringItem}
         onClose={() => setConfiguringItem(null)}
-        maxWidth="sm"
-      >
-        {configuringItem && (
-          <div>
-            <DialogHeader>
-              <DialogTitle>{configuringItem.name}</DialogTitle>
-              <DialogDescription>
-                Giá cơ bản: <strong className="text-primary font-bold">{formatPrice(configuringItem.price)}</strong>
-              </DialogDescription>
-            </DialogHeader>
-
-            <div className="mt-4 space-y-4 max-h-[380px] overflow-y-auto pr-1">
-              {configuringItem.optionGroups.map((group) => (
-                <div key={group.id} className="space-y-2">
-                  <span className="block text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                    {group.name}
-                  </span>
-                  <div className="space-y-1.5">
-                    {group.options.map((opt) => {
-                      const isSelected = configuredOptions[group.id]?.includes(opt.id)
-                      return (
-                        <label
-                          key={opt.id}
-                          className={cn(
-                            'flex cursor-pointer items-center justify-between rounded-lg border p-2.5 text-xs transition-colors',
-                            isSelected
-                              ? 'border-primary bg-primary/10 text-primary font-semibold ring-1 ring-primary'
-                              : 'border-border bg-card text-foreground hover:bg-muted',
-                          )}
-                        >
-                          <span className="flex items-center gap-2">
-                            <input
-                              type="checkbox"
-                              checked={isSelected}
-                              onChange={(e) => {
-                                const checked = e.target.checked
-                                setConfiguredOptions((prev) => {
-                                  const current = prev[group.id] || []
-                                  if (checked) {
-                                    return {
-                                      ...prev,
-                                      [group.id]: group.maxSelected === 1 ? [opt.id] : [...current, opt.id],
-                                    }
-                                  } else {
-                                    return {
-                                      ...prev,
-                                      [group.id]: current.filter((id) => id !== opt.id),
-                                    }
-                                  }
-                                })
-                              }}
-                              className="rounded border-border text-primary focus:ring-primary"
-                            />
-                            {opt.name}
-                          </span>
-                          <span className="font-bold text-primary">
-                            +{formatPrice(opt.priceDelta)}
-                          </span>
-                        </label>
-                      )
-                    })}
-                  </div>
-                </div>
-              ))}
-
-              <div className="space-y-1.5 pt-2">
-                <label
-                  htmlFor="configuredNote"
-                  className="block text-xs font-bold text-muted-foreground uppercase tracking-wider"
-                >
-                  Ghi chú thêm (ít đá, không đường,...)
-                </label>
-                <Input
-                  id="configuredNote"
-                  type="text"
-                  maxLength={255}
-                  placeholder="VD: Không đá, 50% đường"
-                  value={configuredNote}
-                  onChange={(e) => setConfiguredNote(e.target.value)}
-                />
-              </div>
-            </div>
-
-            <DialogFooter className="mt-6 gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setConfiguringItem(null)}
-                className="flex-1"
-              >
-                Hủy
-              </Button>
-              <Button
-                type="button"
-                onClick={confirmConfiguredItem}
-                className="flex-2"
-              >
-                Thêm vào đơn
-              </Button>
-            </DialogFooter>
-          </div>
-        )}
-      </Dialog>
+        onConfirm={handleConfirmOptions}
+      />
 
       {/* Modal chuyển bàn */}
-      <Dialog
+      <PosTransferDialog
         open={showTransferModal}
+        currentTableName={session.table?.name}
+        currentTableId={session.table?.id}
+        tables={tablesQuery.data}
         onClose={() => setShowTransferModal(false)}
-        maxWidth="sm"
-      >
-        <DialogHeader>
-          <DialogTitle>Chuyển bàn phục vụ</DialogTitle>
-          <DialogDescription>
-            Bàn hiện tại: <strong className="text-foreground">{session.table?.name}</strong>
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="mt-4 space-y-2">
-          <label htmlFor="transferSelect" className="block text-sm font-semibold text-foreground">
-            Chọn bàn trống muốn chuyển sang:
-          </label>
-          <select
-            id="transferSelect"
-            value={targetTableId}
-            onChange={(e) => setTargetTableId(e.target.value)}
-            className="w-full rounded-md border border-input bg-card px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-          >
-            <option value="">-- Chọn bàn trống --</option>
-            {tablesQuery.data
-              ?.filter((t) => t.status === 'EMPTY' && t.id !== session.table?.id)
-              .map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name}
-                </option>
-              ))}
-          </select>
-        </div>
-
-        <DialogFooter className="mt-6 gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => setShowTransferModal(false)}
-            className="flex-1"
-          >
-            Hủy
-          </Button>
-          <Button
-            type="button"
-            onClick={() => transferMutation.mutate()}
-            isLoading={transferMutation.isPending}
-            disabled={transferMutation.isPending || !targetTableId}
-            className="flex-2"
-          >
-            Xác nhận chuyển
-          </Button>
-        </DialogFooter>
-      </Dialog>
+        onConfirm={(targetId) => transferMutation.mutate(targetId)}
+        isPending={transferMutation.isPending}
+      />
 
       {/* Modal thanh toán tiền mặt */}
       {showCheckoutModal && (
@@ -806,7 +443,8 @@ export default function PosSessionPage() {
           onClose={() => setShowCheckoutModal(false)}
           onCompleted={() => {
             void queryClient.invalidateQueries({ queryKey: ['pos', 'session', sessionId] })
-            void queryClient.invalidateQueries({ queryKey: ['private', 'dining-tables'] })
+            void queryClient.invalidateQueries({ queryKey: posKeys.tables(employee.id) })
+            void queryClient.invalidateQueries({ queryKey: posKeys.sessions(employee.id) })
           }}
         />
       )}

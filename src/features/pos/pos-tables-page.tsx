@@ -36,6 +36,7 @@ import {
   DialogFooter,
 } from '../../shared/ui/dialog'
 import { cn } from '../../shared/ui/utils'
+import { posKeys } from './pos.keys'
 
 export default function PosTablesPage() {
   const { employee, authorization } = useOutletContext<Session>()
@@ -56,12 +57,12 @@ export default function PosTablesPage() {
   })
 
   const tablesQuery = useQuery({
-    queryKey: ['private', employee.id, 'dining-tables'],
+    queryKey: posKeys.tables(employee.id),
     queryFn: ({ signal }) => getDiningTables(signal),
   })
 
   const sessionsQuery = useQuery({
-    queryKey: ['private', employee.id, 'orders', 'active-sessions'],
+    queryKey: posKeys.sessions(employee.id),
     queryFn: ({ signal }) => getActiveSessions(signal),
     refetchInterval: 10_000,
   })
@@ -72,9 +73,9 @@ export default function PosTablesPage() {
       return openOrderSession(tableId, tableId ? guestCount : undefined)
     },
     onSuccess: (session) => {
-      void queryClient.invalidateQueries({ queryKey: ['private', employee.id, 'dining-tables'] })
+      void queryClient.invalidateQueries({ queryKey: posKeys.tables(employee.id) })
       void queryClient.invalidateQueries({
-        queryKey: ['private', employee.id, 'orders', 'active-sessions'],
+        queryKey: posKeys.sessions(employee.id),
       })
       navigate(`/staff/pos/sessions/${session.id}`)
     },

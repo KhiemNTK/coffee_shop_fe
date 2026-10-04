@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { apiGet, apiMutate } from '../../shared/api/client'
+import { apiIdempotentMutate } from '../../shared/api/idempotency'
 import { moneySchema } from '../menu/menu.api'
 
 export const diningTableSchema = z.object({
@@ -159,6 +160,7 @@ export async function transferTable(
 
 export type CheckoutInput = {
   orderSessionId: string
+  paymentMethod?: 'CASH' | 'CARD'
   amountTendered?: string
   closeSessionAfterPayment?: boolean
   idempotencyKey?: string
@@ -167,16 +169,15 @@ export type CheckoutInput = {
 export async function checkoutInvoice(
   input: CheckoutInput,
 ): Promise<Invoice> {
-  return apiMutate(
+  return apiIdempotentMutate(
     '/invoices/checkout',
-    'POST',
     invoiceSchema,
     {
       orderSessionId: input.orderSessionId,
-      paymentMethod: 'CASH',
+      paymentMethod: input.paymentMethod ?? 'CASH',
       amountTendered: input.amountTendered?.trim() || undefined,
       closeSessionAfterPayment: input.closeSessionAfterPayment ?? true,
-      idempotencyKey: input.idempotencyKey || crypto.randomUUID(),
+      idempotencyKey: input.idempotencyKey,
     },
   )
 }

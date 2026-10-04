@@ -1,12 +1,12 @@
 import { z } from 'zod'
 import { apiGet, apiMutate } from '../../shared/api/client'
+import { apiIdempotentMutate } from '../../shared/api/idempotency'
 import { moneySchema } from '../menu/menu.api'
 
 export const invoiceItemSchema = z.object({
   id: z.string(),
   quantity: z.number().int().positive(),
-  price: moneySchema,
-  subTotal: moneySchema,
+  priceAtTime: moneySchema,
   note: z.string().nullable().optional(),
   menuItem: z
     .object({
@@ -42,7 +42,7 @@ export const invoiceSchema = z.object({
     .object({
       id: z.string(),
       sessionStatus: z.string(),
-      tableId: z.string(),
+      tableId: z.string().nullable(),
       table: z
         .object({
           id: z.string(),
@@ -129,7 +129,7 @@ export interface InvoicesFilters {
 }
 
 export interface CreatePaymentAttemptPayload {
-  idempotencyKey: string
+  idempotencyKey?: string
   provider: PaymentProvider
   locale?: 'vn' | 'en'
   bankCode?: string
@@ -185,11 +185,10 @@ export async function createPaymentAttempt(
   invoiceId: string,
   payload: CreatePaymentAttemptPayload,
 ): Promise<PaymentAttempt> {
-  return apiMutate(
+  return apiIdempotentMutate(
     `/invoices/${invoiceId}/payment-attempts`,
-    'POST',
     paymentAttemptSchema,
-    payload,
+    { ...payload },
   )
 }
 
@@ -213,5 +212,20 @@ export async function reconcilePaymentAttempt(
     'POST',
     paymentAttemptSchema,
     {},
+  )
+}
+
+export function getPaymentAttempt(id: string, signal?: AbortSignal) {
+  return apiGet(`/payment-attempts/${id}`, paymentAttemptSchema, signal, true)
+}
+
+export async function createUnpaidInvoice(
+  orderSessionId: string,
+): Promise<Invoice> {
+  return apiMutate(
+    '/invoices',
+    'POST',
+    invoiceSchema,
+    { orderSessionId },
   )
 }
