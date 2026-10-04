@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { apiGet, apiMutate } from '../../shared/api/client'
+import { apiIdempotentMutate } from '../../shared/api/idempotency'
 import { moneySchema } from '../menu/menu.api'
 
 // --- SCHEMAS ---
@@ -164,7 +165,7 @@ export interface PublicOrderItemPayload {
 }
 
 export interface CreateOnlineOrderPayload {
-  clientRequestId: string
+  clientRequestId?: string
   pickupName: string
   phoneNumber: string
   pickupAt?: string
@@ -188,14 +189,36 @@ export function createOnlineOrder(
   payload: CreateOnlineOrderPayload,
   signal?: AbortSignal,
 ) {
-  return apiMutate(
-    '/online-orders/requests',
-    'POST',
-    CreateOrderResponseSchema,
-    payload,
-    signal,
-    false, // public endpoint
-  )
+  return apiIdempotentMutate('/online-orders/requests', CreateOrderResponseSchema,
+    { ...payload }, { keyField: 'clientRequestId', authenticated: false, signal })
+}
+
+export const reorderTemplateSchema = z.object({
+  items: z.array(z.object({
+    menuItemId: z.string(), quantity: z.number().int().positive(),
+    note: z.string().optional(), optionIds: z.array(z.string()),
+  })),
+  quote: z.object({
+    previousSubtotal: moneySchema, currentSubtotal: moneySchema.nullable(), canSubmit: z.boolean(),
+    lines: z.array(z.object({
+      lineNumber: z.number().int(), previousName: z.string(), previousUnitPrice: moneySchema,
+      currentName: z.string().nullable(), currentUnitPrice: moneySchema.nullable(),
+      available: z.boolean(), reason: z.string().nullable(),
+    })),
+  }),
+})
+export function getReorderTemplate(requestId: string, reorderToken: string) {
+  return apiMutate('/online-orders/requests/reorder-template', 'POST', reorderTemplateSchema,
+    { requestId, reorderToken }, undefined, false)
+}
+export function issueReorderKey(requestId: string, accessToken: string) {
+  return apiMutate('/online-orders/requests/reorder-key', 'POST',
+    z.object({ requestId: z.string(), reorderToken: z.string(), expiresAt: z.string() }),
+    { requestId, accessToken }, undefined, false)
+}
+export function revokeReorderKey(requestId: string, reorderToken: string) {
+  return apiMutate('/online-orders/requests/reorder-key/revoke', 'POST',
+    z.object({ revoked: z.literal(true) }), { requestId, reorderToken }, undefined, false)
 }
 
 export function trackOnlineOrder(
@@ -308,14 +331,13 @@ export function collectOnlineOrder(
   payload: {
     accessToken: string
     amountTendered: string
-    idempotencyKey: string
+    idempotencyKey?: string
   },
 ) {
-  return apiMutate(
+  return apiIdempotentMutate(
     `/online-orders/requests/${encodeURIComponent(id)}/collect`,
-    'POST',
     CollectOrderResponseSchema,
-    payload,
+    { ...payload },
   )
 }
 

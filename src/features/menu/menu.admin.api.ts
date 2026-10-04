@@ -17,6 +17,7 @@ export const adminCategoriesResponseSchema = z.object({
 })
 
 export type AdminCategory = z.infer<typeof adminCategorySchema>
+export type AdminCategoriesResponse = z.infer<typeof adminCategoriesResponseSchema>
 
 export function getAdminCategories(
   params: { page?: number; itemPerPage?: number; keyword?: string },
@@ -82,6 +83,7 @@ export const adminMenuItemsResponseSchema = z.object({
 })
 
 export type AdminMenuItem = z.infer<typeof adminMenuItemSchema>
+export type AdminMenuItemsResponse = z.infer<typeof adminMenuItemsResponseSchema>
 
 export function getAdminItems(
   params: {
@@ -164,6 +166,7 @@ export const itemStockStatusResponseSchema = z.object({
 })
 
 export type ItemStockStatus = z.infer<typeof itemStockStatusSchema>
+export type ItemStockStatusResponse = z.infer<typeof itemStockStatusResponseSchema>
 
 export function getItemStockStatus(
   params: {
