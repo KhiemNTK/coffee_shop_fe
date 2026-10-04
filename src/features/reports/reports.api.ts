@@ -2,6 +2,10 @@ import { z } from 'zod'
 import { apiGet, apiMutate } from '../../shared/api/client'
 import { moneySchema } from '../menu/menu.api'
 
+const signedMoneySchema = z.union([
+  moneySchema, z.string().regex(/^-\d{1,16}(\.\d{1,2})?$/),
+])
+
 // --- Dashboard Report Schemas ---
 
 export const reportPeriodSchema = z.object({
@@ -38,7 +42,7 @@ export const profitabilityMetricsSchema = z.object({
   estimatedNetSalesExTax: moneySchema,
   ingredientCost: moneySchema,
   wasteCost: moneySchema,
-  estimatedGrossProfit: moneySchema,
+  estimatedGrossProfit: signedMoneySchema,
   soldItemCount: z.number().int().nonnegative(),
   itemsWithCostSnapshot: z.number().int().nonnegative(),
   zeroCostSnapshotCount: z.number().int().nonnegative(),
@@ -114,10 +118,11 @@ export type TopSellingItem = z.infer<typeof topSellingItemSchema>
 export const kitchenSlaStationSchema = z.object({
   stationId: z.string().nullable().optional(),
   stationName: z.string(),
-  totalTickets: z.number().int().nonnegative(),
-  completedTickets: z.number().int().nonnegative(),
-  breachedTickets: z.number().int().nonnegative(),
-  breachRatePercent: z.number().nonnegative(),
+  ticketCount: z.number().int().nonnegative(),
+  completedCount: z.number().int().nonnegative(),
+  lateCompletedCount: z.number().int().nonnegative(),
+  overdueOpenCount: z.number().int().nonnegative(),
+  lateRatePercent: z.string().regex(/^\d+(\.\d+)?$/).nullable(),
   averageTicketToReadySeconds: z.number().nullable().optional(),
   p95TicketToReadySeconds: z.number().nullable().optional(),
 })
@@ -127,16 +132,8 @@ export const kitchenSlaResponseSchema = z.object({
   stations: z.array(kitchenSlaStationSchema),
 })
 
-export const kitchenBottleneckSlotSchema = z.object({
+export const kitchenBottleneckSlotSchema = kitchenSlaStationSchema.extend({
   bucketStartAt: z.string(),
-  stationId: z.string().nullable().optional(),
-  stationName: z.string(),
-  totalTickets: z.number().int().nonnegative(),
-  completedTickets: z.number().int().nonnegative(),
-  breachedTickets: z.number().int().nonnegative(),
-  breachRatePercent: z.number().nonnegative(),
-  averageTicketToReadySeconds: z.number().nullable().optional(),
-  p95TicketToReadySeconds: z.number().nullable().optional(),
   orderedUnitCount: z.number().int().nonnegative().optional(),
   openNowCount: z.number().int().nonnegative().optional(),
 })
@@ -155,7 +152,7 @@ export const dailySalesCloseSchema = z.object({
   id: z.string(),
   businessDate: z.string(),
   closedAt: z.string(),
-  closedByEmployeeId: z.string(),
+  closedById: z.string(),
   snapshot: z.record(z.string(), z.unknown()),
   refundDeltaSinceClose: z
     .object({

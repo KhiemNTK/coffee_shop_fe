@@ -1,6 +1,8 @@
 import { z } from 'zod'
 import { apiGet, apiMutate } from '../../shared/api/client'
+import { apiIdempotentMutate } from '../../shared/api/idempotency'
 import { moneySchema } from '../menu/menu.api'
+import { paginatedResponseSchema } from '../../shared/api/types'
 
 export const inventoryCategorySchema = z.object({
   id: z.string(),
@@ -69,7 +71,7 @@ export const inventoryTransactionSchema = z.object({
   quantity: z.union([z.number(), z.string()]),
   unitPrice: moneySchema.nullable().optional(),
   transactionDate: z.string(),
-  note: z.string(),
+  note: z.string().nullable(),
   inventoryItemId: z.string(),
   inventoryItem: z
     .object({
@@ -92,7 +94,9 @@ export type Unit = z.infer<typeof unitSchema>
 export type InventoryItem = z.infer<typeof inventoryItemSchema>
 export type InventoryItemsResponse = z.infer<typeof inventoryItemsResponseSchema>
 export type ReorderAlertRow = z.infer<typeof reorderAlertRowSchema>
+export type ReorderAlertsResponse = z.infer<typeof reorderAlertsResponseSchema>
 export type InventoryTransaction = z.infer<typeof inventoryTransactionSchema>
+export type InventoryTransactionsResponse = z.infer<typeof inventoryTransactionsResponseSchema>
 
 export interface GetInventoryItemsFilters {
   page?: number
@@ -178,25 +182,36 @@ export async function getReorderAlerts(
   return apiGet(path, reorderAlertsResponseSchema, signal ?? new AbortController().signal, true)
 }
 
+async function getLookup<T>(path: string, schema: z.ZodType<T>, signal?: AbortSignal): Promise<T[]> {
+  const values: T[] = []
+  let page = 1
+  let totalPages = 1
+  do {
+    const result = await apiGet(`${path}?page=${page}&itemPerPage=100`, paginatedResponseSchema(schema), signal, true)
+    values.push(...result.list)
+    totalPages = result.totalPages
+    page++
+  } while (page <= totalPages)
+  return values
+}
+
 export async function getInventoryCategories(
   signal?: AbortSignal,
 ): Promise<InventoryCategory[]> {
-  return apiGet(
+  return getLookup(
     '/inventory/categories',
-    z.array(inventoryCategorySchema),
+    inventoryCategorySchema,
     signal ?? new AbortController().signal,
-    true,
   )
 }
 
 export async function getInventoryUnits(
   signal?: AbortSignal,
 ): Promise<Unit[]> {
-  return apiGet(
+  return getLookup(
     '/inventory/units',
-    z.array(unitSchema),
+    unitSchema,
     signal ?? new AbortController().signal,
-    true,
   )
 }
 
@@ -224,14 +239,14 @@ export async function importInventory(
   id: string,
   payload: InventoryImportPayload,
 ): Promise<unknown> {
-  return apiMutate(`/inventory/items/${id}/import`, 'POST', z.unknown(), payload)
+  return apiIdempotentMutate(`/inventory/items/${id}/import`, z.unknown(), { ...payload })
 }
 
 export async function exportInventory(
   id: string,
   payload: InventoryExportPayload,
 ): Promise<unknown> {
-  return apiMutate(`/inventory/items/${id}/export`, 'POST', z.unknown(), payload)
+  return apiIdempotentMutate(`/inventory/items/${id}/export`, z.unknown(), { ...payload })
 }
 
 export async function createInventoryItem(
