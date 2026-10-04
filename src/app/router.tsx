@@ -1,6 +1,7 @@
 import { lazy, Suspense } from 'react'
 import { BrowserRouter, Link, Route, Routes } from 'react-router-dom'
 import { MenuPage } from '../features/menu/menu-page'
+import { authConfig } from '../features/auth/auth.config'
 import {
   PermissionGate,
   StaffHome,
@@ -8,6 +9,10 @@ import {
 } from '../features/auth/staff-layout'
 
 const SignInPage = lazy(() => import('../features/auth/sign-in-page'))
+const SignUpPage = authConfig.signupEnabled ? lazy(() => import('../features/auth/sign-up-page')) : undefined
+const PasswordRecoveryPage = lazy(() => import('../features/auth/password-recovery-page'))
+const PaymentReturnPage = lazy(() => import('../features/invoices/payment-return-page'))
+const ReorderPage = lazy(() => import('../features/online-orders/reorder-page'))
 const StaffMenuPage = lazy(() => import('../features/menu/staff-menu-page'))
 const CashierShiftPage = lazy(
   () => import('../features/cashier-shifts/cashier-shift-page'),
@@ -38,6 +43,26 @@ const DiningTablesPage = lazy(() =>
     default: m.DiningTablesPage,
   })),
 )
+const EmployeesPage = lazy(() =>
+  import('@/features/employees/employees-page').then((m) => ({
+    default: m.EmployeesPage,
+  })),
+)
+const SettingsPage = lazy(() =>
+  import('@/features/settings/settings-page').then((m) => ({
+    default: m.SettingsPage,
+  })),
+)
+const AuditLogsPage = lazy(() =>
+  import('@/features/audit-logs/audit-logs-page').then((m) => ({
+    default: m.AuditLogsPage,
+  })),
+)
+const PrintingPage = lazy(() =>
+  import('@/features/printing/printing-page').then((m) => ({
+    default: m.PrintingPage,
+  })),
+)
 
 export function AppRouter() {
   return (
@@ -52,8 +77,15 @@ export function AppRouter() {
         <Routes>
           <Route path="/" element={<MenuPage />} />
           <Route path="/order" element={<OnlineOrderPage />} />
+          <Route path="/reorder" element={<ReorderPage />} />
           <Route path="/reservations" element={<PublicReservationsPage />} />
           <Route path="/sign-in" element={<SignInPage />} />
+          {SignUpPage && <Route path="/sign-up" element={<SignUpPage />} />}
+          <Route path="/forgot-password" element={<PasswordRecoveryPage />} />
+          <Route path="/reset-password" element={<PasswordRecoveryPage />} />
+          <Route path="/payment/:provider/return" element={<PaymentReturnPage />} />
+          <Route path="/auth/sign-in" element={<SignInPage />} />
+          {SignUpPage && <Route path="/auth/sign-up" element={<SignUpPage />} />}
           <Route path="/staff" element={<StaffLayout />}>
             <Route index element={<StaffHome />} />
             <Route element={<PermissionGate permission="/reservations_read" />}>
@@ -69,6 +101,11 @@ export function AppRouter() {
                     '/cashier-shifts_current',
                     '/cashier-shifts_read',
                     '/cashier-shifts_open',
+                    '/cashier-shifts_expenses-review',
+                    '/cash-handovers_read',
+                    '/cash-handovers_create',
+                    '/funds_read',
+                    '/funds_manage',
                   ]}
                 />
               }
@@ -115,6 +152,40 @@ export function AppRouter() {
             </Route>
             <Route element={<PermissionGate permission="/dining-tables_read" />}>
               <Route path="tables" element={<DiningTablesPage />} />
+            </Route>
+            <Route
+              element={
+                <PermissionGate
+                  anyOf={['/employees_read', '/positions_read', '/roles_read']}
+                />
+              }
+            >
+              <Route path="employees" element={<EmployeesPage />} />
+            </Route>
+            <Route
+              element={
+                <PermissionGate
+                  anyOf={[
+                    '/equipment_read',
+                    '/system-settings_read',
+                    '/management-exceptions_read',
+                  ]}
+                />
+              }
+            >
+              <Route path="settings" element={<SettingsPage />} />
+            </Route>
+            <Route element={<PermissionGate permission="/audit-logs_read" />}>
+              <Route path="audit-logs" element={<AuditLogsPage />} />
+            </Route>
+            <Route
+              element={
+                <PermissionGate
+                  anyOf={['/print-devices_read', '/print-jobs_read']}
+                />
+              }
+            >
+              <Route path="printing" element={<PrintingPage />} />
             </Route>
           </Route>
           <Route
