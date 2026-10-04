@@ -15,17 +15,23 @@ import {
   ChefHat,
   Coffee,
   Coins,
+  Cpu,
   LogOut,
   LayoutGrid,
+  Printer,
   Receipt,
+  ScrollText,
   ShoppingBag,
   Ticket,
   UserRound,
+  Users,
   UtensilsCrossed,
 } from 'lucide-react'
 import { useSession, type Session } from './session'
+import { GoogleAccount } from './google-account'
 import { authCommand, ApiError, errorMessage } from '../../shared/api/client'
 import { announceSessionChange, clearIdentity } from '../../app/query-client'
+import { clearPrivatePendingOperations } from '../../shared/api/idempotency'
 import { Card, CardHeader, CardTitle, CardContent } from '../../shared/ui/card'
 import { Button } from '../../shared/ui/button'
 import { buttonVariants } from '../../shared/ui/button-variants'
@@ -75,6 +81,7 @@ export function StaffLayout() {
     setLogoutError(undefined)
     try {
       await authCommand('/auth/logout', {})
+      clearPrivatePendingOperations()
       clearIdentity()
       announceSessionChange()
       navigate('/sign-in', { replace: true })
@@ -177,9 +184,18 @@ export function StaffLayout() {
     {
       to: '/staff/shifts',
       end: false,
-      label: 'Ca thu ngân',
+      label: 'Ca & Quỹ tiền mặt',
       icon: Coins,
-      visible: permissions.some((k) => ['/cashier-shifts_current', '/cashier-shifts_read', '/cashier-shifts_open'].includes(k)),
+      visible: permissions.some((k) =>
+        [
+          '/cashier-shifts_current',
+          '/cashier-shifts_read',
+          '/cashier-shifts_open',
+          '/cash-handovers_read',
+          '/cash-handovers_create',
+          '/funds_read',
+        ].includes(k),
+      ),
     },
     {
       to: '/staff/invoices',
@@ -216,11 +232,45 @@ export function StaffLayout() {
       icon: BarChart3,
       visible: permissions.includes('/reports_read'),
     },
+    {
+      to: '/staff/employees',
+      end: false,
+      label: 'Nhân sự',
+      icon: Users,
+      visible: permissions.some((k) =>
+        ['/employees_read', '/positions_read', '/roles_read'].includes(k),
+      ),
+    },
+    {
+      to: '/staff/settings',
+      end: false,
+      label: 'Cài đặt & Thiết bị',
+      icon: Cpu,
+      visible: permissions.some((k) =>
+        ['/equipment_read', '/system-settings_read', '/management-exceptions_read'].includes(k),
+      ),
+    },
+    {
+      to: '/staff/audit-logs',
+      end: false,
+      label: 'Nhật ký kiểm toán',
+      icon: ScrollText,
+      visible: permissions.includes('/audit-logs_read'),
+    },
+    {
+      to: '/staff/printing',
+      end: false,
+      label: 'Máy in & Lệnh in',
+      icon: Printer,
+      visible: permissions.some((k) =>
+        ['/print-devices_read', '/print-jobs_read'].includes(k),
+      ),
+    },
   ].filter((item) => item.visible)
 
   return (
     <div className="min-h-screen bg-muted/20">
-      <header className="sticky top-0 z-40 flex h-14 items-center justify-between border-b border-border bg-card px-4 sm:px-6 shadow-xs">
+      <header className="flex h-14 items-center justify-between border-b border-border bg-card px-4 sm:px-6 shadow-xs md:sticky md:top-0 md:z-40">
         <Link to="/" className="flex items-center gap-2 text-base font-bold text-primary">
           <Coffee className="h-5 w-5" />
           Coffee Shop
@@ -282,7 +332,7 @@ export function StaffLayout() {
           </nav>
         </aside>
 
-        <main className="flex-1 p-4 sm:p-6 lg:p-8">
+        <main className="min-w-0 flex-1 p-4 sm:p-6 lg:p-8">
           <Outlet context={session.data} />
         </main>
       </div>
@@ -298,6 +348,7 @@ export function StaffHome() {
         <p className="text-xs font-bold uppercase tracking-wider text-primary">TÀI KHOẢN</p>
         <h1 className="text-2xl font-bold tracking-tight text-foreground">{employee.fullName}</h1>
       </div>
+      <GoogleAccount linked={employee.googleLinked} />
 
       <Card>
         <CardHeader>
@@ -344,4 +395,3 @@ export function StaffHome() {
     </div>
   )
 }
-

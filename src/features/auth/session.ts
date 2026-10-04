@@ -8,6 +8,7 @@ const employeeSchema = z.object({
   fullName: z.string(),
   username: z.string(),
   isActive: z.boolean(),
+  googleLinked: z.boolean().default(false),
   position: z.object({ id: z.uuid(), name: z.string() }).nullable(),
 })
 const permissionsSchema = z.object({

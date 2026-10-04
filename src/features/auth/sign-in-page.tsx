@@ -9,6 +9,8 @@ import { Button } from '../../shared/ui/button'
 import { buttonVariants } from '../../shared/ui/button-variants'
 import { Input } from '../../shared/ui/input'
 import { cn } from '../../shared/ui/utils'
+import { authConfig } from './auth.config'
+import { GoogleButton } from './google-button'
 
 const siteKey =
   (import.meta.env.VITE_TURNSTILE_SITE_KEY as string | undefined)?.trim() ?? ''
@@ -31,6 +33,27 @@ export default function SignInPage() {
   const errorRef = useRef<HTMLDivElement>(null)
   const configMissing = import.meta.env.PROD && !siteKey
 
+  async function signInWithGoogle(idToken: string) {
+    if (submitting.current || configMissing || (siteKey && !token)) return
+    submitting.current = true
+    setPending(true)
+    setError(undefined)
+    try {
+      await authCommand('/auth/google', { idToken, ...(token ? { turnstileToken: token } : {}) })
+      clearIdentity()
+      announceSessionChange()
+      if (mounted.current) navigate('/staff', { replace: true })
+    } catch (failure) {
+      if (mounted.current) {
+        setError(failure)
+        requestAnimationFrame(() => errorRef.current?.focus())
+      }
+    } finally {
+      submitting.current = false
+      if (mounted.current) { setPending(false); setToken(''); setAttempt((value) => value + 1) }
+    }
+  }
+
   return (
     <div className="min-h-screen bg-muted/20">
       <header className="border-b border-border bg-card">
@@ -43,7 +66,7 @@ export default function SignInPage() {
             to="/"
             className={cn(
               buttonVariants({ variant: 'ghost', size: 'sm' }),
-              'flex items-center gap-1.5 text-muted-foreground hover:text-foreground',
+              'flex items-center gap-1.5 text-muted-foreground hover:text-foreground cursor-pointer',
             )}
           >
             <ArrowLeft className="h-4 w-4" />
@@ -175,13 +198,24 @@ export default function SignInPage() {
 
               <Button
                 type="submit"
-                className="w-full flex items-center justify-center gap-2 font-bold shadow-sm"
+                className="w-full flex items-center justify-center gap-2 font-bold shadow-sm cursor-pointer"
                 isLoading={pending}
                 disabled={pending || configMissing || Boolean(siteKey && !token)}
               >
                 <LogIn className="h-4 w-4" />
                 {pending ? 'Đang đăng nhập…' : 'Đăng nhập'}
               </Button>
+
+              <Link to="/forgot-password" className="block text-center text-sm font-semibold text-primary">Quên mật khẩu?</Link>
+              {authConfig.googleClientId && !pending && !configMissing && (!siteKey || token) && (
+                <GoogleButton clientId={authConfig.googleClientId} onCredential={(credential) => void signInWithGoogle(credential)} />
+              )}
+              {authConfig.signupEnabled && <div className="pt-2 text-center text-xs text-muted-foreground">
+                Chưa có tài khoản nhân sự?{' '}
+                <Link to="/sign-up" className="font-semibold text-primary hover:underline">
+                  Đăng ký tài khoản mới
+                </Link>
+              </div>}
             </form>
           </CardContent>
         </Card>
@@ -189,4 +223,3 @@ export default function SignInPage() {
     </div>
   )
 }
-

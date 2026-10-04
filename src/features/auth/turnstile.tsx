@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { ShieldCheck, RefreshCw, AlertCircle } from 'lucide-react'
 
 type TurnstileApi = {
   render: (
@@ -15,6 +16,7 @@ type TurnstileApi = {
   ) => string
   remove: (id: string) => void
 }
+
 declare global {
   interface Window {
     turnstile?: TurnstileApi
@@ -22,6 +24,7 @@ declare global {
 }
 
 let scriptFlight: Promise<TurnstileApi> | undefined
+
 function loadTurnstile() {
   if (window.turnstile) return Promise.resolve(window.turnstile)
   if (!scriptFlight) {
@@ -65,6 +68,7 @@ export function Turnstile({
   const container = useRef<HTMLDivElement>(null)
   const [failed, setFailed] = useState(false)
   const [attempt, setAttempt] = useState(0)
+
   useEffect(() => {
     let cancelled = false
     let widget: string | undefined
@@ -104,20 +108,37 @@ export function Turnstile({
       if (widget !== undefined) api?.remove(widget)
     }
   }, [siteKey, onToken, attempt, action])
+
   return (
-    <div className="verification">
-      <div ref={container} />
+    <div className="verification rounded-xl border border-border/80 bg-muted/10 p-3 space-y-2">
+      <div className="flex items-center justify-between text-xs text-muted-foreground">
+        <span className="flex items-center gap-1.5 font-semibold text-foreground">
+          <ShieldCheck className="h-4 w-4 text-primary" />
+          Cloudflare Turnstile
+        </span>
+        <span className="text-[11px] text-muted-foreground/80">Xác minh bảo mật tự động</span>
+      </div>
+
+      <div ref={container} className="min-h-[65px] flex items-center justify-center" />
+
       {failed && (
-        <div role="alert">
-          Chưa xác minh được bảo mật.
+        <div
+          role="alert"
+          className="flex items-center justify-between gap-2 rounded-lg border border-destructive/20 bg-destructive/10 p-2.5 text-xs text-destructive"
+        >
+          <div className="flex items-center gap-1.5">
+            <AlertCircle className="h-4 w-4 shrink-0" />
+            <span>Chưa xác minh được bảo mật.</span>
+          </div>
           <button
             type="button"
-            className="text-button"
+            className="flex items-center gap-1 font-semibold text-destructive underline hover:opacity-80 cursor-pointer text-button shrink-0"
             onClick={() => {
               setFailed(false)
               setAttempt((value) => value + 1)
             }}
           >
+            <RefreshCw className="h-3 w-3" />
             Thử lại xác minh
           </button>
         </div>
