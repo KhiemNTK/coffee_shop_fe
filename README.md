@@ -1,9 +1,9 @@
 # Coffee Shop Frontend
 
 React + TypeScript SPA, maintained separately from the sibling Nest backend.
-F0 includes a read-only public menu: server-side search, category filter,
-pagination, option prices, loading/error/empty states and retry. No checkout,
-authentication or POS is implemented yet.
+Includes public menu/reservations/takeaway ordering, staff authentication,
+POS, kitchen, invoices, payments/refunds, inventory/procurement and administration.
+Implementation and verification boundaries are recorded in [INTEGRATION.md](INTEGRATION.md).
 
 ## Local Development
 
@@ -54,8 +54,7 @@ checks both app and test code. No second lint tool is installed.
 - `GET /api/v1/menu/public/categories`: envelope `data` contains `{id, name}[]`.
 - `GET /api/v1/menu/public/items`: `data` contains `list`, `totalPages`,
   `totalItems`, `currentPage`. Query: `page`, `itemPerPage`, `keyword`, `categoryId`.
-- The backend's global `DecimalInterceptor` currently emits JSON numbers.
-  The boundary accepts safe numeric amounts or exact decimal strings, and
+- The boundary accepts safe numeric amounts or exact decimal strings, and
   normalizes to strings. Display uses BigInt, preserving received decimal
   digits. Unsafe numeric amounts are rejected, not silently rounded; the client
   cannot recover precision already lost at the server. Option prices are additive.
@@ -63,8 +62,11 @@ checks both app and test code. No second lint tool is installed.
   `src/app/menu/menu.service.ts`, `src/app/menu/dto/`, and response interceptor.
 - Zod validates the used response fields. Failed HTTP or malformed responses
   show a generic error, not raw server data. Requests time out after 10 seconds.
-- Only public menu queries are cached (30 seconds). No private cache is persisted.
-  Authentication, CSRF, single-flight refresh and mutation retry policy belong to F1.
+- Queries have a 30-second freshness window; private query data is cleared on
+  identity changes and is never persisted. Cookie auth uses CSRF and coordinated
+  refresh. Mutations are not automatically retried after timeout.
+- Idempotent operations retain a UUID and payload digest in sessionStorage until
+  a valid success response. They do not persist raw request bodies or passwords.
 
 ## Deployment Boundary
 
@@ -73,8 +75,8 @@ proxy for `/api/v1`; Vite's development proxy is not included in the build.
 `pnpm preview` only previews static assets and does not connect the API.
 Never publish server secrets in `VITE_*` variables.
 
-React Router, Tailwind/shadcn and form libraries are deferred until F1 needs
-multiple routes and authenticated forms. F0 uses native HTML and local CSS.
+React Router provides lazy routes; TanStack Query owns server state. Forms use
+native controls and Zod boundary validation. No extra form/state framework is needed.
 
 Cover image: [Unsplash coffee photo](https://images.unsplash.com/photo-1509042239860-f550ce710b93).
 The cover is decorative; product names, prices and options always come from the API.

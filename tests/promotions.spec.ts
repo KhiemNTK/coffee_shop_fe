@@ -1,6 +1,5 @@
 import { expect, test } from '@playwright/test'
-
-const envelope = (data: unknown) => ({ errors: null, data, message: 'OK' })
+import { envelope } from './helpers.js'
 
 const employee = {
   id: '10000000-0000-4000-8000-000000000001',

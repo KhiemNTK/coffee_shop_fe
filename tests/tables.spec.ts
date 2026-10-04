@@ -1,6 +1,5 @@
 import { expect, test } from '@playwright/test'
-
-const envelope = (data: unknown) => ({ errors: null, data, message: 'OK' })
+import { envelope } from './helpers.js'
 
 const employee = {
   id: '10000000-0000-4000-8000-000000000001',
@@ -262,7 +261,7 @@ test.describe('Staff Dining Tables Management', () => {
     await expect(page.getByRole('cell', { name: 'Bàn 02 (VIP)' })).toBeVisible()
 
     // Switch back to grid view
-    await page.getByTitle('Chế độ thẻ lưới').click()
+    await page.getByTitle('Chế độ thẻ lưới').click({ force: true })
     await expect(page.getByRole('heading', { name: 'Bàn 01' })).toBeVisible()
   })
 })

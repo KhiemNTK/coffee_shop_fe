@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
+import { envelope } from './helpers.js'
 
 const category = { id: '10000000-0000-4000-8000-000000000001', name: 'Cà phê' }
 const item = {
@@ -23,7 +24,6 @@ const item = {
   ],
 }
 const result = { list: [item], totalPages: 1, totalItems: 1, currentPage: 1 }
-const envelope = (data: unknown) => ({ errors: null, data, message: 'OK' })
 
 test('a shrinking catalog does not strand the user on an empty page', async ({
   page,

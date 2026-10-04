@@ -1,4 +1,5 @@
 import { expect, test, type BrowserContext, type Page } from '@playwright/test'
+import { envelope } from './helpers.js'
 
 // Provider fixture exercises widget lifecycle without sending credentials to a third party.
 test.beforeEach(async ({ context }) => {
@@ -37,7 +38,6 @@ const authorization = {
   roleNames: ['WAITER'],
   permissionKeys: ['/menu_read'],
 }
-const envelope = (data: unknown) => ({ errors: null, data, message: 'OK' })
 
 test('Turnstile token expires and is discarded after a failed sign in', async ({
   page,
