@@ -1,12 +1,9 @@
 import { z } from 'zod'
 import { apiGet, apiMutate } from '../../shared/api/client'
 
-export const reservationStatusSchema = z.enum([
-  'PENDING',
-  'ARRIVED',
-  'CANCELLED',
-  'NO_SHOW',
-])
+const reservationDateTimeSchema = z.iso.datetime({ offset: true })
+
+export const reservationStatusSchema = z.enum(['PENDING', 'ARRIVED', 'CANCELLED', 'NO_SHOW'])
 export type ReservationStatus = z.infer<typeof reservationStatusSchema>
 
 export const reservationRequestStatusSchema = z.enum([
@@ -32,21 +29,21 @@ export const reservationEmployeeSchema = z.object({
 export const reservationOrderSessionSchema = z.object({
   id: z.string(),
   sessionStatus: z.string(),
-  createdAt: z.string(),
+  createdAt: reservationDateTimeSchema,
 })
 
 export const reservationSchema = z.object({
-  id: z.number().int(),
+  id: z.number().int().positive(),
   customerName: z.string().nullable().optional(),
   phoneNumber: z.string(),
-  startsAt: z.string(),
-  endsAt: z.string(),
-  guestCount: z.number().int(),
+  startsAt: reservationDateTimeSchema,
+  endsAt: reservationDateTimeSchema,
+  guestCount: z.number().int().min(1).max(50),
   notes: z.string().nullable().optional(),
-  checkedInAt: z.string().nullable().optional(),
-  cancelledAt: z.string().nullable().optional(),
+  checkedInAt: reservationDateTimeSchema.nullish(),
+  cancelledAt: reservationDateTimeSchema.nullish(),
   cancellationReason: z.string().nullable().optional(),
-  noShowAt: z.string().nullable().optional(),
+  noShowAt: reservationDateTimeSchema.nullish(),
   status: reservationStatusSchema,
   tableId: z.string(),
   table: reservationTableSchema.optional(),
@@ -54,10 +51,14 @@ export const reservationSchema = z.object({
   employee: reservationEmployeeSchema.optional(),
   orderSessionId: z.string().nullable().optional(),
   orderSession: reservationOrderSessionSchema.nullable().optional(),
-  createdAt: z.string().optional(),
-  updatedAt: z.string().optional(),
+  createdAt: reservationDateTimeSchema.optional(),
+  updatedAt: reservationDateTimeSchema.optional(),
 })
 export type Reservation = z.infer<typeof reservationSchema>
+const reservationDetailSchema = reservationSchema.extend({
+  updatedAt: reservationDateTimeSchema,
+  table: reservationTableSchema,
+})
 
 export const paginatedReservationsSchema = z.object({
   list: z.array(reservationSchema),
@@ -71,17 +72,17 @@ export const reservationRequestSchema = z.object({
   id: z.string(),
   customerName: z.string(),
   phoneNumber: z.string(),
-  startsAt: z.string(),
-  endsAt: z.string(),
-  guestCount: z.number().int(),
+  startsAt: reservationDateTimeSchema,
+  endsAt: reservationDateTimeSchema,
+  guestCount: z.number().int().min(1).max(50),
   notes: z.string().nullable().optional(),
   status: reservationRequestStatusSchema,
   rejectionReason: z.string().nullable().optional(),
-  cancelledAt: z.string().nullable().optional(),
-  createdAt: z.string(),
-  reviewedAt: z.string().nullable().optional(),
+  cancelledAt: reservationDateTimeSchema.nullish(),
+  createdAt: reservationDateTimeSchema,
+  reviewedAt: reservationDateTimeSchema.nullish(),
   reviewedById: z.string().nullable().optional(),
-  reservationId: z.number().nullable().optional(),
+  reservationId: z.number().int().positive().nullish(),
 })
 export type ReservationRequest = z.infer<typeof reservationRequestSchema>
 
@@ -96,32 +97,32 @@ export type PaginatedReservationRequests = z.infer<typeof paginatedReservationRe
 export const publicBookingResponseSchema = z.object({
   requestId: z.string(),
   status: reservationRequestStatusSchema,
-  accessToken: z.string(),
+  accessToken: z.string().regex(/^[A-Za-z0-9_-]{43}$/),
 })
 export type PublicBookingResponse = z.infer<typeof publicBookingResponseSchema>
 
 export const publicTrackResponseSchema = z.object({
   requestId: z.string(),
   status: reservationRequestStatusSchema,
-  startsAt: z.string(),
-  endsAt: z.string(),
-  guestCount: z.number().int(),
+  startsAt: reservationDateTimeSchema,
+  endsAt: reservationDateTimeSchema,
+  guestCount: z.number().int().min(1).max(50),
   reservationStatus: reservationStatusSchema.nullable().optional(),
 })
 export type PublicTrackResponse = z.infer<typeof publicTrackResponseSchema>
 
 export const checkInResultSchema = z.object({
   reservation: z.object({
-    id: z.number().int(),
-    status: reservationStatusSchema,
-    checkedInAt: z.string().optional(),
+    id: z.number().int().positive(),
+    status: z.literal('ARRIVED'),
+    checkedInAt: reservationDateTimeSchema.optional(),
     orderSessionId: z.string().optional(),
   }),
   orderSession: z.object({
     id: z.string(),
     tableId: z.string(),
     sessionStatus: z.string(),
-    createdAt: z.string(),
+    createdAt: reservationDateTimeSchema,
   }),
 })
 export type CheckInResult = z.infer<typeof checkInResultSchema>
@@ -158,7 +159,7 @@ export async function getReservations(
 export interface GetReservationRequestsQuery {
   page?: number
   itemPerPage?: number
-  status?: ReservationRequestStatus
+  status?: ReservationRequestStatus | 'ALL'
 }
 
 export async function getReservationRequests(
@@ -174,11 +175,12 @@ export async function getReservationRequests(
   return apiGet(`/reservations/requests${qs}`, paginatedReservationRequestsSchema, signal, true)
 }
 
-export async function getReservationById(
-  id: number,
-  signal?: AbortSignal,
-): Promise<Reservation> {
-  return apiGet(`/reservations/${id}`, reservationSchema, signal, true)
+export async function getReservationById(id: number, signal?: AbortSignal) {
+  return apiGet(`/reservations/${id}`, reservationDetailSchema, signal, true)
+}
+
+export function getReservationRequestById(id: string, signal?: AbortSignal) {
+  return apiGet(`/reservations/requests/${id}`, reservationRequestSchema, signal, true)
 }
 
 export interface CreateReservationPayload {
@@ -191,20 +193,19 @@ export interface CreateReservationPayload {
   notes?: string
 }
 
-export async function createReservation(
-  payload: CreateReservationPayload,
-): Promise<Reservation> {
+export async function createReservation(payload: CreateReservationPayload): Promise<Reservation> {
   return apiMutate('/reservations', 'POST', reservationSchema, payload)
 }
 
 export interface UpdateReservationPayload {
-  customerName?: string
+  customerName?: string | null
   phoneNumber?: string
   tableId?: string
   startsAt?: string
   endsAt?: string
   guestCount?: number
-  notes?: string
+  notes?: string | null
+  expectedUpdatedAt?: string
 }
 
 export async function updateReservation(
@@ -214,16 +215,11 @@ export async function updateReservation(
   return apiMutate(`/reservations/${id}`, 'PATCH', reservationSchema, payload)
 }
 
-export async function cancelReservation(
-  id: number,
-  reason: string,
-): Promise<Reservation> {
+export async function cancelReservation(id: number, reason: string): Promise<Reservation> {
   return apiMutate(`/reservations/${id}/cancel`, 'POST', reservationSchema, { reason })
 }
 
-export async function checkInReservation(
-  id: number,
-): Promise<CheckInResult> {
+export async function checkInReservation(id: number): Promise<CheckInResult> {
   return apiMutate(`/reservations/${id}/check-in`, 'POST', checkInResultSchema, {})
 }
 

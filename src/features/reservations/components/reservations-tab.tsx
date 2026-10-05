@@ -11,33 +11,23 @@ import {
   Users,
   XCircle,
 } from 'lucide-react'
-import { type UseMutationResult } from '@tanstack/react-query'
 import {
-  type CheckInResult,
   type Reservation,
   type ReservationStatus,
   type PaginatedReservations,
 } from '../reservations.api'
 import { type DiningTable } from '../../pos/pos.api'
-import { formatDate } from '../../../shared/lib/format'
+import {
+  formatReservationDate as formatDate,
+  formatReservationTime as formatTime,
+} from '../reservation-time'
+import { Pagination } from '../../../shared/ui/pagination'
 import { Badge, Button, Card, CardContent, Input } from '../../../shared/ui'
-
-function formatTime(iso: string) {
-  try {
-    const d = new Date(iso)
-    return d.toLocaleTimeString('vi-VN', {
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false,
-    })
-  } catch {
-    return iso
-  }
-}
 
 interface ReservationsTabProps {
   reservationsData?: PaginatedReservations
   isLoading: boolean
+  hasError: boolean
   tables: DiningTable[]
   dateFilter: 'today' | 'tomorrow' | 'all'
   onDateFilterChange: (val: 'today' | 'tomorrow' | 'all') => void
@@ -53,7 +43,9 @@ interface ReservationsTabProps {
   canUpdate: boolean
   canCancel: boolean
   canCheckIn: boolean
-  checkInMutation: UseMutationResult<CheckInResult, Error, number>
+  canReadTables: boolean
+  canReadPos: boolean
+  onCheckInClick: (res: Reservation) => void
   onCreateClick: () => void
   onEditClick: (res: Reservation) => void
   onCancelClick: (res: Reservation) => void
@@ -62,6 +54,7 @@ interface ReservationsTabProps {
 export function ReservationsTab({
   reservationsData,
   isLoading,
+  hasError,
   tables,
   dateFilter,
   onDateFilterChange,
@@ -77,7 +70,9 @@ export function ReservationsTab({
   canUpdate,
   canCancel,
   canCheckIn,
-  checkInMutation,
+  canReadTables,
+  canReadPos,
+  onCheckInClick,
   onCreateClick,
   onEditClick,
   onCancelClick,
@@ -88,125 +83,128 @@ export function ReservationsTab({
   return (
     <div className="space-y-4">
       {/* Filter Bar */}
-      <Card>
-        <CardContent className="p-4 sm:p-5">
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
-            {/* Date Quick Filter */}
-            <div>
-              <label className="text-xs font-medium text-muted-foreground mb-1 block">
-                Khung thời gian
-              </label>
-              <div className="flex rounded-md border border-input p-0.5 bg-muted/20">
-                <button
-                  type="button"
-                  onClick={() => onDateFilterChange('today')}
-                  className={`flex-1 text-xs py-1.5 px-2 rounded font-medium transition-colors ${
-                    dateFilter === 'today'
-                      ? 'bg-card text-emerald-800 font-bold shadow-xs'
-                      : 'text-muted-foreground hover:text-foreground'
-                  }`}
-                >
-                  Hôm nay
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onDateFilterChange('tomorrow')}
-                  className={`flex-1 text-xs py-1.5 px-2 rounded font-medium transition-colors ${
-                    dateFilter === 'tomorrow'
-                      ? 'bg-card text-emerald-800 font-bold shadow-xs'
-                      : 'text-muted-foreground hover:text-foreground'
-                  }`}
-                >
-                  Ngày mai
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onDateFilterChange('all')}
-                  className={`flex-1 text-xs py-1.5 px-2 rounded font-medium transition-colors ${
-                    dateFilter === 'all'
-                      ? 'bg-card text-emerald-800 font-bold shadow-xs'
-                      : 'text-muted-foreground hover:text-foreground'
-                  }`}
-                >
-                  Tất cả
-                </button>
-              </div>
-            </div>
-
-            {/* Status Filter */}
-            <div>
-              <label className="text-xs font-medium text-muted-foreground mb-1 block">
-                Trạng thái
-              </label>
-              <select
-                aria-label="Lọc theo trạng thái đặt bàn"
-                value={resStatus}
-                onChange={(e) => {
-                  onResStatusChange(e.target.value as ReservationStatus | 'ALL')
-                  onResPageChange(1)
-                }}
-                className="w-full h-9 rounded-md border border-input bg-card px-3 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-700"
+      <section className="border-b border-border py-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+          {/* Date Quick Filter */}
+          <div>
+            <label className="text-xs font-medium text-muted-foreground mb-1 block">
+              Khung thời gian
+            </label>
+            <div className="flex rounded-md border border-input p-0.5 bg-muted/20">
+              <button
+                type="button"
+                aria-pressed={dateFilter === 'today'}
+                onClick={() => onDateFilterChange('today')}
+                className={`flex-1 text-xs py-1.5 px-2 rounded font-medium transition-colors ${
+                  dateFilter === 'today'
+                    ? 'bg-card text-emerald-800 font-bold shadow-xs'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
               >
-                <option value="ALL">Tất cả trạng thái</option>
-                <option value="PENDING">Chờ đón khách (PENDING)</option>
-                <option value="ARRIVED">Đã đón vào bàn (ARRIVED)</option>
-                <option value="CANCELLED">Đã hủy (CANCELLED)</option>
-                <option value="NO_SHOW">Vắng mặt (NO_SHOW)</option>
-              </select>
-            </div>
-
-            {/* Table Filter */}
-            <div>
-              <label className="text-xs font-medium text-muted-foreground mb-1 block">
-                Bàn phục vụ
-              </label>
-              <select
-                aria-label="Lọc theo bàn phục vụ"
-                value={resTableId}
-                onChange={(e) => {
-                  onResTableIdChange(e.target.value)
-                  onResPageChange(1)
-                }}
-                className="w-full h-9 rounded-md border border-input bg-card px-3 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-700"
+                Hôm nay
+              </button>
+              <button
+                type="button"
+                aria-pressed={dateFilter === 'tomorrow'}
+                onClick={() => onDateFilterChange('tomorrow')}
+                className={`flex-1 text-xs py-1.5 px-2 rounded font-medium transition-colors ${
+                  dateFilter === 'tomorrow'
+                    ? 'bg-card text-emerald-800 font-bold shadow-xs'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
               >
-                <option value="ALL">Tất cả các bàn</option>
-                {tables.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.name} ({t.status === 'EMPTY' ? 'Trống' : t.status === 'OCCUPIED' ? 'Đang có khách' : 'Đã đặt'})
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Phone Search */}
-            <div>
-              <label className="text-xs font-medium text-muted-foreground mb-1 block">
-                Số điện thoại khách
-              </label>
-              <div className="relative">
-                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input
-                  type="text"
-                  placeholder="Tìm theo số điện thoại..."
-                  value={resSearchPhone}
-                  onChange={(e) => {
-                    onResSearchPhoneChange(e.target.value)
-                    onResPageChange(1)
-                  }}
-                  className="pl-8 h-9 text-sm"
-                />
-              </div>
+                Ngày mai
+              </button>
+              <button
+                type="button"
+                aria-pressed={dateFilter === 'all'}
+                onClick={() => onDateFilterChange('all')}
+                className={`flex-1 text-xs py-1.5 px-2 rounded font-medium transition-colors ${
+                  dateFilter === 'all'
+                    ? 'bg-card text-emerald-800 font-bold shadow-xs'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                Tất cả
+              </button>
             </div>
           </div>
-        </CardContent>
-      </Card>
+
+          {/* Status Filter */}
+          <div>
+            <label className="text-xs font-medium text-muted-foreground mb-1 block">
+              Trạng thái
+            </label>
+            <select
+              aria-label="Lọc theo trạng thái đặt bàn"
+              value={resStatus}
+              onChange={(e) => {
+                onResStatusChange(e.target.value as ReservationStatus | 'ALL')
+                onResPageChange(1)
+              }}
+              className="w-full h-9 rounded-md border border-input bg-card px-3 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-700"
+            >
+              <option value="ALL">Tất cả trạng thái</option>
+              <option value="PENDING">Chờ đón khách (PENDING)</option>
+              <option value="ARRIVED">Đã đón vào bàn (ARRIVED)</option>
+              <option value="CANCELLED">Đã hủy (CANCELLED)</option>
+              <option value="NO_SHOW">Vắng mặt (NO_SHOW)</option>
+            </select>
+          </div>
+
+          {/* Table Filter */}
+          <div>
+            <label className="text-xs font-medium text-muted-foreground mb-1 block">
+              Bàn phục vụ
+            </label>
+            <select
+              aria-label="Lọc theo bàn phục vụ"
+              disabled={!canReadTables}
+              value={resTableId}
+              onChange={(e) => {
+                onResTableIdChange(e.target.value)
+                onResPageChange(1)
+              }}
+              className="w-full h-9 rounded-md border border-input bg-card px-3 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-700"
+            >
+              <option value="ALL">Tất cả các bàn</option>
+              {tables.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Phone Search */}
+          <div>
+            <label className="text-xs font-medium text-muted-foreground mb-1 block">
+              Số điện thoại khách
+            </label>
+            <div className="relative">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                type="text"
+                aria-label="Số điện thoại khách"
+                maxLength={20}
+                placeholder="Tìm theo số điện thoại..."
+                value={resSearchPhone}
+                onChange={(e) => {
+                  onResSearchPhoneChange(e.target.value)
+                }}
+                className="pl-8 h-9 text-sm"
+              />
+            </div>
+          </div>
+        </div>
+      </section>
 
       {/* Reservations Grid / Cards */}
       {isLoading ? (
         <div className="flex h-48 items-center justify-center text-sm text-muted-foreground">
           Đang tải lịch đặt bàn…
         </div>
-      ) : reservationsList.length === 0 ? (
+      ) : hasError ? null : reservationsList.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center justify-center p-12 text-center">
             <CalendarDays className="h-12 w-12 text-muted-foreground/40 mb-3" />
@@ -236,7 +234,7 @@ export function ReservationsTab({
             return (
               <Card
                 key={res.id}
-                className={`relative overflow-hidden border transition-all shadow-xs hover:shadow-sm ${
+                className={`relative min-w-0 break-words overflow-hidden border transition-all shadow-xs hover:shadow-sm ${
                   isPending
                     ? 'border-emerald-200 bg-card'
                     : isArrived
@@ -247,28 +245,37 @@ export function ReservationsTab({
                 <div className="p-4 sm:p-5 space-y-3">
                   {/* Card Header: Table + Status */}
                   <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    <div className="min-w-0 flex-1">
+                      <span className="text-xs font-semibold uppercase text-muted-foreground">
                         Mã #{res.id}
                       </span>
-                      <h4 className="text-lg font-bold text-foreground flex items-center gap-1.5">
+                      <h4 className="text-lg font-bold text-foreground">
                         {res.table?.name || 'Chưa gán bàn'}
                       </h4>
                     </div>
 
                     <div>
                       {res.status === 'PENDING' && (
-                        <Badge variant="outline" className="bg-amber-50 text-amber-800 border-amber-300">
+                        <Badge
+                          variant="outline"
+                          className="bg-amber-50 text-amber-800 border-amber-300"
+                        >
                           Chờ đón khách
                         </Badge>
                       )}
                       {res.status === 'ARRIVED' && (
-                        <Badge variant="outline" className="bg-emerald-50 text-emerald-800 border-emerald-300">
+                        <Badge
+                          variant="outline"
+                          className="bg-emerald-50 text-emerald-800 border-emerald-300"
+                        >
                           Đã đón vào bàn
                         </Badge>
                       )}
                       {res.status === 'CANCELLED' && (
-                        <Badge variant="outline" className="bg-slate-100 text-slate-700 border-slate-300">
+                        <Badge
+                          variant="outline"
+                          className="bg-slate-100 text-slate-700 border-slate-300"
+                        >
                           Đã hủy
                         </Badge>
                       )}
@@ -281,7 +288,7 @@ export function ReservationsTab({
                   </div>
 
                   {/* Time Window */}
-                  <div className="flex items-center gap-2 text-sm text-foreground bg-muted/40 px-2.5 py-1.5 rounded-md">
+                  <div className="flex flex-wrap items-center gap-2 text-sm text-foreground bg-muted/40 px-2.5 py-1.5 rounded-md">
                     <Clock className="h-4 w-4 text-emerald-700 shrink-0" />
                     <span className="font-semibold">{formatTime(res.startsAt)}</span>
                     <span className="text-muted-foreground">đến</span>
@@ -295,7 +302,7 @@ export function ReservationsTab({
                   <div className="space-y-1 text-sm">
                     <div className="flex items-center justify-between">
                       <span className="text-muted-foreground">Khách hàng:</span>
-                      <span className="font-medium text-foreground">
+                      <span className="min-w-0 break-words text-right font-medium text-foreground">
                         {res.customerName || 'Khách vãng lai'}
                       </span>
                     </div>
@@ -314,9 +321,7 @@ export function ReservationsTab({
                       <span className="text-muted-foreground flex items-center gap-1">
                         <Users className="h-3 w-3" /> Số khách:
                       </span>
-                      <span className="font-medium text-foreground">
-                        {res.guestCount} người
-                      </span>
+                      <span className="font-medium text-foreground">{res.guestCount} người</span>
                     </div>
                     {res.employee && (
                       <div className="flex items-center justify-between text-xs text-muted-foreground pt-1">
@@ -345,8 +350,7 @@ export function ReservationsTab({
                         {canCheckIn && (
                           <Button
                             size="sm"
-                            onClick={() => checkInMutation.mutate(res.id)}
-                            disabled={checkInMutation.isPending}
+                            onClick={() => onCheckInClick(res)}
                             className="flex-1 gap-1.5 bg-emerald-700 hover:bg-emerald-800 text-white font-medium"
                           >
                             <LogIn className="h-4 w-4" />
@@ -361,6 +365,7 @@ export function ReservationsTab({
                             onClick={() => onEditClick(res)}
                             className="px-2.5 text-muted-foreground hover:text-foreground"
                             title="Đổi giờ hoặc bàn"
+                            aria-label="Đổi giờ hoặc bàn"
                           >
                             <Edit2 className="h-4 w-4" />
                           </Button>
@@ -373,6 +378,7 @@ export function ReservationsTab({
                             onClick={() => onCancelClick(res)}
                             className="px-2.5 text-destructive hover:bg-destructive/10"
                             title="Hủy đặt bàn"
+                            aria-label="Hủy đặt bàn"
                           >
                             <XCircle className="h-4 w-4" />
                           </Button>
@@ -380,13 +386,11 @@ export function ReservationsTab({
                       </>
                     )}
 
-                    {isArrived && res.orderSessionId && (
+                    {isArrived && canReadPos && res.orderSessionId && (
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() =>
-                          navigate(`/staff/pos/sessions/${res.orderSessionId}`)
-                        }
+                        onClick={() => navigate(`/staff/pos/sessions/${res.orderSessionId}`)}
                         className="w-full gap-1.5 text-emerald-800 border-emerald-300 hover:bg-emerald-50"
                       >
                         <CheckCircle2 className="h-4 w-4 text-emerald-700" />
@@ -402,30 +406,17 @@ export function ReservationsTab({
       )}
 
       {/* Pagination */}
-      {reservationsData && reservationsData.totalPages > 1 && (
-        <div className="flex items-center justify-between pt-4 border-t border-border">
+      {!hasError && reservationsData && (reservationsData.totalPages > 1 || resPage > 1) && (
+        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border pt-4">
           <span className="text-sm text-muted-foreground">
             Trang {reservationsData.currentPage} / {reservationsData.totalPages} (Tổng{' '}
             {reservationsData.totalItems} lịch đặt)
           </span>
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={resPage <= 1}
-              onClick={() => onResPageChange((p: number) => Math.max(1, p - 1))}
-            >
-              Trang trước
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={resPage >= reservationsData.totalPages}
-              onClick={() => onResPageChange((p: number) => p + 1)}
-            >
-              Trang sau
-            </Button>
-          </div>
+          <Pagination
+            page={resPage}
+            totalPages={reservationsData.totalPages}
+            onPage={onResPageChange}
+          />
         </div>
       )}
     </div>
