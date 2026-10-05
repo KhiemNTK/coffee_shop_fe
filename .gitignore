@@ -30,4 +30,4 @@ playwright-report/
 test-results/
 .runtime/
 .agents/
-docs/
+docs/*
