@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 
-export function PaymentQr({ value }: { value: string }) {
+export function PaymentQr({ value, label = 'Mã QR thanh toán' }: { value: string; label?: string }) {
   const canvas = useRef<HTMLCanvasElement>(null)
   const [failedValue, setFailedValue] = useState<string | null>(null)
   useEffect(() => {
@@ -14,6 +14,6 @@ export function PaymentQr({ value }: { value: string }) {
     return () => { cancelled = true }
   }, [value])
   return failedValue === value
-    ? <p role="alert" className="text-sm text-destructive">Không tạo được mã QR. Vui lòng mở liên kết thanh toán.</p>
-    : <canvas ref={canvas} width={220} height={220} role="img" aria-label="Mã QR thanh toán" className="mx-auto h-[220px] w-[220px] max-w-full" />
+    ? <p role="alert" className="text-sm text-destructive">Không tạo được mã QR. Vui lòng dùng liên kết.</p>
+    : <canvas ref={canvas} width={220} height={220} role="img" aria-label={label} className="mx-auto h-55 w-55 max-w-full" />
 }

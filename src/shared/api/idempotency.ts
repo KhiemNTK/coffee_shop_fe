@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { apiMutate } from './client'
+import { ApiError, apiMutate } from './client'
 
 export const pendingOperationPrefix = 'coffee-shop:pending:'
 
@@ -9,31 +9,39 @@ export function clearPrivatePendingOperations() {
   }
 }
 
+async function pendingStorageKey(path: string, payload: Record<string, unknown>, authenticated: boolean) {
+  const request = { ...payload }
+  delete request.idempotencyKey
+  delete request.clientRequestId
+  delete request.turnstileToken
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(request)))
+  const fingerprint = Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('')
+  return `${pendingOperationPrefix}${authenticated ? 'private' : 'public'}:${path}:${fingerprint}`
+}
+
+export async function findPendingOperationKey(path: string, payload: Record<string, unknown>, authenticated = true) {
+  return sessionStorage.getItem(await pendingStorageKey(path, payload, authenticated))
+}
+
 // Store only a payload digest and key; uncertain writes survive a modal close or reload.
 export async function apiIdempotentMutate<T>(
   path: string,
   schema: z.ZodType<T>,
   payload: Record<string, unknown>,
-  { keyField = 'idempotencyKey', authenticated = true, signal }: {
-    keyField?: 'idempotencyKey' | 'clientRequestId'; authenticated?: boolean; signal?: AbortSignal
+  { keyField = 'idempotencyKey', authenticated = true, signal, timeoutMs }: {
+    keyField?: 'idempotencyKey' | 'clientRequestId'; authenticated?: boolean; signal?: AbortSignal; timeoutMs?: number
   } = {},
 ): Promise<T> {
   const { [keyField]: suppliedKey, ...request } = payload
-  if (typeof suppliedKey === 'string' && suppliedKey) {
-    return apiMutate(path, 'POST', schema, payload, signal, authenticated)
+  const storageKey = await pendingStorageKey(path, request, authenticated)
+  const pendingKey = sessionStorage.getItem(storageKey)
+  if (pendingKey && suppliedKey && pendingKey !== suppliedKey) {
+    throw new ApiError(409, 'CLIENT_PENDING_OPERATION', undefined,
+      'Có lần gửi cùng nội dung chưa được xác nhận. Quay lại xem đơn để khôi phục lần gửi đó.')
   }
-  const fingerprintRequest = { ...request }
-  delete fingerprintRequest.turnstileToken
-  const digest = await crypto.subtle.digest(
-    'SHA-256', new TextEncoder().encode(JSON.stringify(fingerprintRequest)),
-  )
-  const fingerprint = Array.from(new Uint8Array(digest), (byte) =>
-    byte.toString(16).padStart(2, '0'),
-  ).join('')
-  const storageKey = `${pendingOperationPrefix}${authenticated ? 'private' : 'public'}:${path}:${fingerprint}`
-  const key = sessionStorage.getItem(storageKey) ?? crypto.randomUUID()
+  const key = pendingKey ?? (typeof suppliedKey === 'string' && suppliedKey ? suppliedKey : crypto.randomUUID())
   sessionStorage.setItem(storageKey, key)
-  const result = await apiMutate(path, 'POST', schema, { ...request, [keyField]: key }, signal, authenticated)
+  const result = await apiMutate(path, 'POST', schema, { ...request, [keyField]: key }, signal, authenticated, timeoutMs)
   if (sessionStorage.getItem(storageKey) === key) sessionStorage.removeItem(storageKey)
   return result
 }

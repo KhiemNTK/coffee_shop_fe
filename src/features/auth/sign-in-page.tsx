@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Coffee, Eye, EyeOff, LogIn } from 'lucide-react'
 import { authCommand, ApiError, errorMessage } from '../../shared/api/client'
 import { announceSessionChange, clearIdentity } from '../../app/query-client'
@@ -17,6 +17,8 @@ const siteKey =
 
 export default function SignInPage() {
   const navigate = useNavigate()
+  const location = useLocation()
+  const unlinkUncertain = (location.state as { googleUnlinkUncertain?: unknown } | null)?.googleUnlinkUncertain === true
   const [pending, setPending] = useState(false)
   const [visible, setVisible] = useState(false)
   const [error, setError] = useState<unknown>()
@@ -44,6 +46,7 @@ export default function SignInPage() {
       announceSessionChange()
       if (mounted.current) navigate('/staff', { replace: true })
     } catch (failure) {
+      clearIdentity()
       if (mounted.current) {
         setError(failure)
         requestAnimationFrame(() => errorRef.current?.focus())
@@ -88,6 +91,9 @@ export default function SignInPage() {
           </CardHeader>
 
           <CardContent>
+            {unlinkUncertain && <p role="alert" className="mb-4 text-sm text-destructive">
+              Chưa xác nhận được hủy liên kết Google. Đăng nhập lại để kiểm tra tài khoản.
+            </p>}
             <form
               className="space-y-4"
               onSubmit={async (event) => {

@@ -48,6 +48,7 @@ async function http(
   method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE',
   signal: AbortSignal,
   body?: unknown,
+  timeoutMs = 10_000,
 ) {
   const headers = new Headers({ Accept: 'application/json' })
   if (method !== 'GET') {
@@ -59,7 +60,7 @@ async function http(
     method,
     headers,
     credentials: 'include',
-    signal: AbortSignal.any([signal, AbortSignal.timeout(10_000)]),
+    signal: AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]),
     body: body === undefined ? undefined : JSON.stringify(body),
   })
   if (!response.ok) {
@@ -112,6 +113,7 @@ async function request<T>(
   signal: AbortSignal | undefined,
   authenticated: boolean,
   body?: unknown,
+  timeoutMs = 10_000,
 ): Promise<T> {
   const sessionSignal = sessionRequests.signal
   const activeSignal = signal ?? new AbortController().signal
@@ -122,7 +124,7 @@ async function request<T>(
   let response: Response
   try {
     try {
-      response = await http(path, method, combined, body)
+      response = await http(path, method, combined, body, timeoutMs)
     } catch (error) {
       if (
         !authenticated ||
@@ -138,7 +140,7 @@ async function request<T>(
         throw refreshError
       }
       combined.throwIfAborted()
-      response = await http(path, method, combined, body)
+      response = await http(path, method, combined, body, timeoutMs)
     }
   } catch (error) {
     if (authenticated && error instanceof ApiError && error.status === 401)
@@ -177,26 +179,50 @@ export function apiMutate<T>(
   body?: unknown,
   signal?: AbortSignal,
   authenticated = true,
+  timeoutMs = 10_000,
 ): Promise<T> {
-  return request(path, method, schema, signal, authenticated, body)
+  return request(path, method, schema, signal, authenticated, body, timeoutMs)
 }
 
 // No automatic retries for auth commands, including timeout and 401.
 export async function authCommand(
-  path: '/auth/sign-in' | '/auth/sign-up' | '/auth/google' | '/auth/logout',
+  path:
+    | '/auth/sign-in'
+    | '/auth/sign-up'
+    | '/auth/google'
+    | '/auth/logout'
+    | '/auth/google/link'
+    | '/auth/google/unlink',
   body: unknown,
+  schema: z.ZodType = z.unknown(),
 ) {
+  const accountMutation = path === '/auth/google/link' || path === '/auth/google/unlink'
+  const observedCsrf = csrfToken()
   return withSessionLock(async () => {
+    // Another tab may have changed the shared cookies while this command waited.
+    if (accountMutation && observedCsrf !== csrfToken()) throw new ApiError(401)
     resetSessionRequests()
     const response = await http(path, 'POST', sessionRequests.signal, body)
     // Validate the success envelope, but discard token data rather than caching it.
-    z.object({ errors: z.null() }).parse(await response.json())
+    const result = z.object({ errors: z.null(), data: schema })
+      .safeParse(await response.json().catch(() => null))
+    if (!result.success) {
+      throw new ApiError(502, 'CLIENT_RESPONSE_INVALID', response.headers.get('x-request-id') ?? undefined)
+    }
   })
 }
 
 export function errorMessage(error: unknown) {
   if (!(error instanceof ApiError))
     return 'Không thể kết nối. Vui lòng thử lại.'
+  if (error.code === 'CLIENT_RESPONSE_INVALID')
+    return 'Phản hồi không hợp lệ. Kiểm tra trạng thái giao dịch trước khi gửi lại.'
+  if (error.code === 'INVENTORY_STOCKTAKE_COUNTS_CHANGED')
+    return 'Số đếm đã thay đổi sau khi đối soát. Tải lại phiếu và xác nhận số đếm mới.'
+  if (error.code === 'INVENTORY_STOCKTAKE_SNAPSHOT_STALE')
+    return 'Tồn kho đã đổi sau snapshot. Hủy phiếu nháp, tạo phiếu kiểm kê mới rồi đếm lại.'
+  if (error.code === 'INVENTORY_INSUFFICIENT_STOCK')
+    return 'Không đủ nguyên liệu để bắt đầu chế biến. Kiểm tra tồn kho và bổ sung trước khi thử lại.'
   if (error.status === 401)
     return 'Thông tin đăng nhập không đúng hoặc phiên đã hết hạn.'
   if (error.status === 403)

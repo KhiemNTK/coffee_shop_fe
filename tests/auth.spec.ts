@@ -16,7 +16,10 @@ test.beforeEach(async ({ context }) => {
         verify.onclick = () => options.callback('captcha-fixture');
         const expire = document.createElement('button'); expire.type = 'button'; expire.textContent = 'Expire fixture';
         expire.onclick = () => options['expired-callback']();
-        element.append(verify, expire); return id;
+        const timeout = document.createElement('button'); timeout.type = 'button'; timeout.textContent = 'Timeout fixture';
+        timeout.onclick = () => options['timeout-callback']();
+        element.style.width = '150px'; element.style.height = '140px';
+        element.append(verify, expire, timeout); return id;
       },
       remove(id) { document.querySelector('[data-widget="' + id + '"]')?.replaceChildren(); }
     };`,
@@ -82,20 +85,31 @@ test('blocked Turnstile script fails closed and can be retried', async ({
   ).toBeEnabled()
 })
 
+test('Turnstile timeout clears a previous token and permits a fresh widget', async ({ page }) => {
+  await page.goto('/sign-in')
+  const submit = page.getByRole('button', { name: 'Đăng nhập', exact: true })
+  await fillLogin(page)
+  await expect(submit).toBeEnabled()
+  await page.getByRole('button', { name: 'Timeout fixture' }).click()
+  await expect(submit).toBeDisabled()
+  await expect(page.getByRole('alert')).toContainText('Chưa xác minh được bảo mật')
+  await page.getByRole('button', { name: 'Thử lại xác minh' }).click()
+  await page.getByRole('button', { name: 'Verify fixture' }).click()
+  await expect(submit).toBeEnabled()
+})
+
 test('late private response cannot repopulate the cache after logout', async ({
   page,
   context,
 }) => {
   await identity(context)
   await cookie(context)
-  let reads = 0
   let released = false
   let release: () => void = () => {}
   const delayed = new Promise<void>((resolve) => {
     release = resolve
   })
   await context.route('**/api/v1/menu/items?*', async (route) => {
-    reads++
     const old = !released
     if (old) await delayed
     await route.fulfill({
@@ -120,8 +134,9 @@ test('late private response cannot repopulate the cache after logout', async ({
   await context.route('**/api/v1/auth/sign-in', (route) =>
     route.fulfill({ json: envelope({}) }),
   )
+  const pendingRead = page.waitForRequest(request => request.method() === 'GET' && new URL(request.url()).pathname === '/api/v1/menu/items')
   await page.goto('/staff/menu')
-  await expect.poll(() => reads).toBeGreaterThan(0)
+  await pendingRead
   await page.getByRole('button', { name: 'Đăng xuất', exact: true }).click()
   await expect(page).toHaveURL(/\/sign-in$/)
   released = true

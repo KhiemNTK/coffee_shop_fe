@@ -36,7 +36,7 @@ export function TabsList({
   return (
     <div
       className={cn(
-        'inline-flex h-10 items-center justify-center rounded-lg bg-[#f0f4f1] p-1 text-[#5c7064]',
+        'inline-flex min-h-10 max-w-full flex-wrap items-center justify-start gap-y-1 rounded-lg bg-[#f0f4f1] p-1 text-[#5c7064]',
         className,
       )}
       role="tablist"

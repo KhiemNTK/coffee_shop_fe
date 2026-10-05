@@ -11,11 +11,13 @@ export interface DialogProps {
   children: React.ReactNode
   className?: string
   label?: string
+  showCloseButton?: boolean
 }
 
 export function Dialog({
   open, onClose, onOpenChange, maxWidth = 'md', children, className,
   label = 'Hộp thoại',
+  showCloseButton = true,
 }: DialogProps) {
   const dialogRef = useRef<HTMLDialogElement>(null)
   const headingId = useId()
@@ -59,7 +61,7 @@ export function Dialog({
         width, className,
       )}
     >
-      <button
+      {showCloseButton && <button
         type="button"
         onClick={handleClose}
         className="absolute right-3 top-3 rounded-md p-2 text-muted-foreground hover:bg-muted focus-visible:ring-2 focus-visible:ring-primary"
@@ -67,7 +69,7 @@ export function Dialog({
         title="Đóng"
       >
         <X size={18} aria-hidden="true" />
-      </button>
+      </button>}
       {children}
     </dialog>,
     document.body,

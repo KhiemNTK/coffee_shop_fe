@@ -145,6 +145,8 @@ export function StaffLayout() {
   const permissions = session.data.authorization.permissionKeys
 
   const navItems = [
+    { to: '/staff/reconciliation', end: false, label: 'Đối soát & Khiếu nại', icon: Receipt,
+      visible: permissions.some(key => ['/payment-reconciliation_read', '/bank-reconciliation_read', '/reports_read'].includes(key)) },
     { to: '/staff', end: true, label: 'Tài khoản', icon: UserRound, visible: true },
     {
       to: '/staff/reservations',
@@ -263,7 +265,7 @@ export function StaffLayout() {
       label: 'Máy in & Lệnh in',
       icon: Printer,
       visible: permissions.some((k) =>
-        ['/print-devices_read', '/print-jobs_read'].includes(k),
+        ['/print-devices_read', '/print-jobs_read', '/receipts_reprint'].includes(k),
       ),
     },
   ].filter((item) => item.visible)

@@ -4,7 +4,7 @@ import { resetSessionRequests, sessionEvents } from '../shared/api/client'
 export const queryClient = new QueryClient({
   defaultOptions: {
     queries: { retry: false, staleTime: 30_000 },
-    mutations: { retry: false },
+    mutations: { retry: false, networkMode: 'always' },
   },
 })
 
