@@ -65,6 +65,7 @@ export const TrackOrderResponseSchema = z.object({
     .optional(),
   isPaid: z.boolean(),
   orderItems: z.array(TrackOrderItemSchema),
+  telegram: z.object({ enabled: z.boolean(), subscribed: z.boolean() }).optional(),
 })
 
 export const CancelOrderResponseSchema = z.object({
@@ -73,8 +74,8 @@ export const CancelOrderResponseSchema = z.object({
 })
 
 export const TelegramLinkResponseSchema = z.object({
-  url: z.string(),
-  expiresAt: z.string(),
+  url: z.string().regex(/^https:\/\/t\.me\/[A-Za-z0-9_]{5,32}\?start=[A-Za-z0-9_-]{43}$/),
+  expiresAt: z.iso.datetime(),
 })
 
 export const PendingOrderSchema = z.object({

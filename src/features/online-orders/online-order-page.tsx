@@ -37,6 +37,7 @@ export default function OnlineOrderPage() {
     requestId: string
     accessToken: string
   } | null>(() => getStoredOrder())
+  const [storageWarning, setStorageWarning] = useState(false)
 
   // Tab: 'menu' | 'track' | 'lookup'
   const [view, setView] = useState<'menu' | 'track' | 'lookup'>(() =>
@@ -44,13 +45,15 @@ export default function OnlineOrderPage() {
   )
 
   function handleOrderCreated(order: { requestId: string; accessToken: string }) {
-    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(order))
     setActiveOrder(order)
     setView('track')
+    try { sessionStorage.setItem(STORAGE_KEY, JSON.stringify(order)); setStorageWarning(false) }
+    catch { setStorageWarning(true) }
   }
 
   function handleClearActiveOrder() {
-    sessionStorage.removeItem(STORAGE_KEY)
+    try { sessionStorage.removeItem(STORAGE_KEY) }
+    catch { setStorageWarning(true) }
     setActiveOrder(null)
     setView('menu')
   }
@@ -115,6 +118,7 @@ export default function OnlineOrderPage() {
 
       {/* Main Views */}
       <main className="max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-6 flex-1">
+        {storageWarning && <p role="alert" className="mb-4 text-sm text-destructive">Đơn đã gửi nhưng chưa lưu được thông tin theo dõi. Giữ trang này mở để theo dõi đơn.</p>}
         {view === 'menu' && (
           <TakeawayMenuView onOrderCreated={handleOrderCreated} />
         )}

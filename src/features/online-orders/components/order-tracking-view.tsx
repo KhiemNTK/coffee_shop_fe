@@ -8,16 +8,15 @@ import {
   CheckCircle2,
   Clock,
   Copy,
-  ExternalLink,
   RefreshCw,
 } from 'lucide-react'
 import {
   trackOnlineOrder,
   cancelOnlineOrder,
-  getTelegramLink,
 } from '../online-orders.api'
 import { formatPrice } from '../../menu/menu.api'
 import { errorMessage } from '../../../shared/api/client'
+import { TelegramOrderLink } from './telegram-order-link'
 import {
   Badge,
   Button,
@@ -177,17 +176,6 @@ export function OrderTrackingView({
     onSuccess: () => {
       setCancelModalOpen(false)
       void trackQuery.refetch()
-    },
-    onError: (err) => {
-      setActionError(errorMessage(err))
-    },
-  })
-
-  const telegramMutation = useMutation({
-    mutationFn: () =>
-      getTelegramLink(orderAuth.requestId, orderAuth.accessToken),
-    onSuccess: (data) => {
-      window.open(data.url, '_blank', 'noopener,noreferrer')
     },
     onError: (err) => {
       setActionError(errorMessage(err))
@@ -425,17 +413,10 @@ export function OrderTrackingView({
               </div>
             )}
 
-            {order.status !== 'CANCELLED' && order.status !== 'REJECTED' && (
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => telegramMutation.mutate()}
-                disabled={telegramMutation.isPending}
-                className="w-full text-[#0088cc] border-[#0088cc]/30 hover:bg-[#0088cc]/10 hover:text-[#0088cc] font-semibold gap-2"
-              >
-                <ExternalLink className="h-4 w-4" />
-                Nhận cập nhật tiến độ qua Telegram Bot
-              </Button>
+            {order.telegram?.enabled &&
+              (order.status === 'PENDING' || order.status === 'ACCEPTED') &&
+              order.fulfillmentStatus !== 'COLLECTED' && (
+              <TelegramOrderLink key={orderAuth.requestId} {...orderAuth} subscribed={order.telegram.subscribed} />
             )}
 
             {(order.status === 'PENDING' || order.status === 'ACCEPTED') &&

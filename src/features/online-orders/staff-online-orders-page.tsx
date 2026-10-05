@@ -26,6 +26,7 @@ import {
   TabsTrigger,
 } from '../../shared/ui'
 import { StaffPendingOrdersTab } from './components/staff-pending-orders-tab'
+import { PickupCollectionPanel } from './components/pickup-panels'
 import { StaffFulfillmentOrdersTab } from './components/staff-fulfillment-orders-tab'
 import {
   RejectOrderDialog,
@@ -137,6 +138,7 @@ export default function StaffOnlineOrdersPage() {
 
   return (
     <div className="space-y-6">
+      {authorization.permissionKeys.includes('/orders_items_handoff') && <PickupCollectionPanel />}
       {/* Page Header */}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
