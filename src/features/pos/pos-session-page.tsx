@@ -1,5 +1,10 @@
 import { useState } from 'react'
-import { useParams, useNavigate, useOutletContext, Link } from 'react-router-dom'
+import {
+  useParams,
+  useNavigate,
+  useOutletContext,
+  Link,
+} from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   AlertCircle,
@@ -36,17 +41,22 @@ import { PosOrderItemsList } from './components/pos-order-items-list'
 import { PosDraftItemsList } from './components/pos-draft-items-list'
 import { PosItemOptionsDialog } from './components/pos-item-options-dialog'
 import { PosTransferDialog } from './components/pos-transfer-dialog'
+import { PosSessionActions } from './components/pos-session-actions'
 import { posKeys } from './pos.keys'
 import type { Session } from '../auth/session'
+import { Pagination } from '../../shared/ui/pagination'
+import { CancelSessionAction } from './components/cancel-session-action'
 
 export default function PosSessionPage() {
   const { sessionId } = useParams<{ sessionId: string }>()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
-  const { employee } = useOutletContext<Session>()
+  const { employee, authorization } = useOutletContext<Session>()
+  const can = (key: string) => authorization.permissionKeys.includes(key)
 
   const [keyword, setKeyword] = useState('')
   const [selectedCategoryId, setSelectedCategoryId] = useState('')
+  const [menuPage, setMenuPage] = useState(1)
   const [draftItems, setDraftItems] = useState<DraftItem[]>([])
 
   // Modal chọn tùy chọn món (options / size / topping)
@@ -74,9 +84,16 @@ export default function PosSessionPage() {
   })
 
   const menuQuery = useQuery({
-    queryKey: ['public-menu', 'items', { keyword, categoryId: selectedCategoryId, page: 1 }],
+    queryKey: [
+      'public-menu',
+      'items',
+      { keyword, categoryId: selectedCategoryId, page: menuPage },
+    ],
     queryFn: ({ signal }) =>
-      getMenu({ keyword, categoryId: selectedCategoryId, page: 1 }, signal),
+      getMenu(
+        { keyword, categoryId: selectedCategoryId, page: menuPage },
+        signal,
+      ),
   })
 
   const tablesQuery = useQuery({
@@ -86,9 +103,23 @@ export default function PosSessionPage() {
   })
 
   const recommendationsQuery = useQuery({
-    queryKey: ['recommendations', 'pos', sessionId],
+    queryKey: [
+      'private',
+      employee.id,
+      'recommendations',
+      'pos',
+      sessionId,
+      [
+        ...new Set(
+          sessionQuery.data?.orderItems
+            .filter((item) => item.serveStatus !== 'CANCELLED')
+            .map((item) => item.menuItem.id),
+        ),
+      ].sort(),
+    ],
     queryFn: ({ signal }) => getPosRecommendations(sessionId!, signal),
-    enabled: Boolean(sessionId) && (sessionQuery.data?.orderItems.length ?? 0) > 0,
+    enabled:
+      Boolean(sessionId) && (sessionQuery.data?.orderItems.length ?? 0) > 0,
     staleTime: 60_000,
   })
 
@@ -101,14 +132,19 @@ export default function PosSessionPage() {
         menuItemId: item.menuItem.id,
         quantity: item.quantity,
         note: item.note.trim() || undefined,
-        optionIds: item.selectedOptionIds.length > 0 ? item.selectedOptionIds : undefined,
+        optionIds:
+          item.selectedOptionIds.length > 0
+            ? item.selectedOptionIds
+            : undefined,
       }))
       return addOrderItems(sessionId!, payload)
     },
     onSuccess: () => {
       setDraftItems([])
       setActionSuccess('Đã gửi món vào bếp thành công')
-      void queryClient.invalidateQueries({ queryKey: posKeys.session(employee.id, sessionId) })
+      void queryClient.invalidateQueries({
+        queryKey: posKeys.session(employee.id, sessionId),
+      })
     },
     onError: (err) => {
       setActionError(errorMessage(err))
@@ -116,14 +152,26 @@ export default function PosSessionPage() {
   })
 
   const cancelItemMutation = useMutation({
-    mutationFn: async ({ itemId, reason }: { itemId: string; reason: string }) => {
+    mutationFn: async ({
+      itemId,
+      reason,
+    }: {
+      itemId: string
+      reason: string
+    }) => {
       setActionError(null)
       setActionSuccess(null)
       return cancelOrderItem(itemId, reason)
     },
     onSuccess: () => {
       setActionSuccess('Đã hủy món thành công')
-      void queryClient.invalidateQueries({ queryKey: posKeys.session(employee.id, sessionId) })
+    },
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: ['private', employee.id, 'inventory-waste'] })
+      void queryClient.invalidateQueries({
+        queryKey: posKeys.session(employee.id, sessionId),
+      })
+      void queryClient.invalidateQueries({ queryKey: ['kitchen', 'tickets'] })
     },
     onError: (err) => {
       setActionError(errorMessage(err))
@@ -143,9 +191,15 @@ export default function PosSessionPage() {
     onSuccess: () => {
       setShowTransferModal(false)
       setActionSuccess('Đã chuyển bàn thành công')
-      void queryClient.invalidateQueries({ queryKey: posKeys.session(employee.id, sessionId) })
-      void queryClient.invalidateQueries({ queryKey: posKeys.tables(employee.id) })
-      void queryClient.invalidateQueries({ queryKey: posKeys.sessions(employee.id) })
+      void queryClient.invalidateQueries({
+        queryKey: posKeys.session(employee.id, sessionId),
+      })
+      void queryClient.invalidateQueries({
+        queryKey: posKeys.tables(employee.id),
+      })
+      void queryClient.invalidateQueries({
+        queryKey: posKeys.sessions(employee.id),
+      })
     },
     onError: (err) => {
       setActionError(errorMessage(err))
@@ -155,8 +209,13 @@ export default function PosSessionPage() {
   if (!sessionId) {
     return (
       <main className="mx-auto my-12 max-w-md rounded-lg border border-destructive/20 bg-destructive/5 p-6 text-center">
-        <p className="font-semibold text-destructive">Không tìm thấy mã phiên phục vụ.</p>
-        <Link to="/staff/pos" className={cn(buttonVariants({ variant: 'outline' }), 'mt-4')}>
+        <p className="font-semibold text-destructive">
+          Không tìm thấy mã phiên phục vụ.
+        </p>
+        <Link
+          to="/staff/pos"
+          className={cn(buttonVariants({ variant: 'outline' }), 'mt-4')}
+        >
           Về sơ đồ bàn
         </Link>
       </main>
@@ -165,7 +224,10 @@ export default function PosSessionPage() {
 
   if (sessionQuery.isPending) {
     return (
-      <main className="flex min-h-[300px] items-center justify-center p-8 text-muted-foreground" role="status">
+      <main
+        className="flex min-h-[300px] items-center justify-center p-8 text-muted-foreground"
+        role="status"
+      >
         <p className="animate-pulse">Đang tải chi tiết đơn hàng…</p>
       </main>
     )
@@ -174,7 +236,9 @@ export default function PosSessionPage() {
   if (sessionQuery.isError) {
     return (
       <main className="mx-auto my-12 max-w-md rounded-lg border border-destructive/20 bg-destructive/5 p-6 text-center">
-        <p className="font-semibold text-destructive" role="alert">{errorMessage(sessionQuery.error)}</p>
+        <p className="font-semibold text-destructive" role="alert">
+          {errorMessage(sessionQuery.error)}
+        </p>
         <div className="mt-4 flex justify-center gap-3">
           <Button
             onClick={() => void sessionQuery.refetch()}
@@ -182,7 +246,10 @@ export default function PosSessionPage() {
           >
             Thử lại
           </Button>
-          <Link to="/staff/pos" className={buttonVariants({ variant: 'outline' })}>
+          <Link
+            to="/staff/pos"
+            className={buttonVariants({ variant: 'outline' })}
+          >
             Về sơ đồ bàn
           </Link>
         </div>
@@ -196,7 +263,8 @@ export default function PosSessionPage() {
 
   // Tính tổng tiền các món chưa thanh toán
   const unpaidItems = session.orderItems.filter(
-    (item) => !item.isPaid && item.serveStatus !== 'CANCELLED',
+    (item) =>
+      !item.isPaid && !item.invoiceId && item.serveStatus !== 'CANCELLED',
   )
   const existingUnpaidTotal = unpaidItems.reduce(
     (sum, item) => sum + Number(item.priceAtTime) * item.quantity,
@@ -275,37 +343,72 @@ export default function PosSessionPage() {
           </Button>
           <div>
             <h1 className="text-2xl font-bold tracking-tight text-foreground">
-              {session.table ? `Bàn: ${session.table.name}` : `Đơn mang đi #${session.id.slice(0, 8)}`}
+              {session.table
+                ? `Bàn: ${session.table.name}`
+                : `Đơn mang đi #${session.id.slice(0, 8)}`}
             </h1>
             <span className="text-xs text-muted-foreground">
-              Nhân viên: {session.employee.fullName} • {session.guestCount ? `${session.guestCount} khách` : 'Mang đi'}
+              Nhân viên: {session.employee.fullName} •{' '}
+              {session.guestCount ? `${session.guestCount} khách` : 'Mang đi'}
             </span>
           </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          {session.table && !isCompleted && !isCancelled && (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => setShowTransferModal(true)}
-              className="flex items-center gap-1.5 cursor-pointer"
-            >
-              <RefreshCw className="h-4 w-4" /> Chuyển bàn
-            </Button>
-          )}
+          {session.orderItems.some((item) => !item.isPaid && item.invoiceId) &&
+            can('/invoices_read') && (
+              <Link
+                to="/staff/invoices"
+                className={buttonVariants({ variant: 'outline', size: 'sm' })}
+              >
+                Hóa đơn đang chờ
+              </Link>
+            )}
+          <PosSessionActions
+            session={session}
+            disabled={
+              draftItems.length > 0 ||
+              addItemsMutation.isPending ||
+              transferMutation.isPending
+            }
+          />
+          <CancelSessionAction
+            session={session}
+            disabled={
+              draftItems.length > 0 ||
+              addItemsMutation.isPending ||
+              transferMutation.isPending
+            }
+          />
+          {session.table &&
+            can('/orders_tables_transfer') &&
+            !isCompleted &&
+            !isCancelled && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setShowTransferModal(true)}
+                className="flex items-center gap-1.5 cursor-pointer"
+              >
+                <RefreshCw className="h-4 w-4" /> Chuyển bàn
+              </Button>
+            )}
 
-          {!isCompleted && !isCancelled && existingUnpaidTotal > 0 && (
-            <Button
-              type="button"
-              size="default"
-              onClick={() => setShowCheckoutModal(true)}
-              className="flex items-center gap-1.5 shadow-sm cursor-pointer"
-            >
-              <DollarSign className="h-4 w-4" /> Thanh toán ({formatPrice(String(existingUnpaidTotal))})
-            </Button>
-          )}
+          {can('/invoices_create') &&
+            !isCompleted &&
+            !isCancelled &&
+            existingUnpaidTotal > 0 && (
+              <Button
+                type="button"
+                size="default"
+                onClick={() => setShowCheckoutModal(true)}
+                className="flex items-center gap-1.5 shadow-sm cursor-pointer"
+              >
+                <DollarSign className="h-4 w-4" /> Thanh toán (
+                {formatPrice(String(existingUnpaidTotal))})
+              </Button>
+            )}
         </div>
       </div>
 
@@ -356,15 +459,33 @@ export default function PosSessionPage() {
         {/* Cột trái: Danh mục & Thực đơn gọi món */}
         <PosMenuCatalog
           keyword={keyword}
-          onKeywordChange={setKeyword}
+          onKeywordChange={(value) => {
+            setKeyword(value)
+            setMenuPage(1)
+          }}
           selectedCategoryId={selectedCategoryId}
-          onSelectCategory={setSelectedCategoryId}
+          onSelectCategory={(value) => {
+            setSelectedCategoryId(value)
+            setMenuPage(1)
+          }}
           categories={categoriesQuery.data}
           menuItems={menuQuery.data?.list}
           recommendations={recommendationsQuery.data}
           isLoadingMenu={menuQuery.isPending}
           onSelectItem={handleSelectItem}
-          disabled={isCompleted || isCancelled}
+          disabled={!can('/orders_items_create') || isCompleted || isCancelled}
+          pagination={
+            menuQuery.data && (
+              <Pagination
+                page={menuPage}
+                totalPages={menuQuery.data.totalPages}
+                onPage={setMenuPage}
+                disabled={menuQuery.isFetching}
+              />
+            )
+          }
+          error={menuQuery.error && errorMessage(menuQuery.error)}
+          onRetry={() => void menuQuery.refetch()}
         />
 
         {/* Cột phải: Đơn hàng (Món đã đặt + Giỏ hàng tạm + Tổng tiền) */}
@@ -377,7 +498,10 @@ export default function PosSessionPage() {
             {/* Danh sách món đã gửi trước đó */}
             <PosOrderItemsList
               orderItems={session.orderItems}
-              onCancelItem={(itemId, reason) => cancelItemMutation.mutate({ itemId, reason })}
+              canCancel={can('/orders_items_cancel')}
+              onCancelItem={(itemId, reason) =>
+                cancelItemMutation.mutate({ itemId, reason })
+              }
               isCancelling={cancelItemMutation.isPending}
             />
 
@@ -401,17 +525,20 @@ export default function PosSessionPage() {
                 </span>
               </div>
 
-              {!isCompleted && !isCancelled && existingUnpaidTotal > 0 && (
-                <Button
-                  type="button"
-                  size="lg"
-                  onClick={() => setShowCheckoutModal(true)}
-                  className="w-full flex items-center justify-center gap-2 font-bold shadow-sm cursor-pointer"
-                >
-                  <DollarSign className="h-5 w-5" />
-                  Thanh toán hóa đơn
-                </Button>
-              )}
+              {can('/invoices_create') &&
+                !isCompleted &&
+                !isCancelled &&
+                existingUnpaidTotal > 0 && (
+                  <Button
+                    type="button"
+                    size="lg"
+                    onClick={() => setShowCheckoutModal(true)}
+                    className="w-full flex items-center justify-center gap-2 font-bold shadow-sm cursor-pointer"
+                  >
+                    <DollarSign className="h-5 w-5" />
+                    Thanh toán hóa đơn
+                  </Button>
+                )}
             </div>
           </CardContent>
         </Card>
@@ -439,12 +566,19 @@ export default function PosSessionPage() {
       {showCheckoutModal && (
         <CheckoutModal
           sessionId={session.id}
+          items={unpaidItems}
           totalAmount={String(existingUnpaidTotal)}
           onClose={() => setShowCheckoutModal(false)}
           onCompleted={() => {
-            void queryClient.invalidateQueries({ queryKey: ['pos', 'session', sessionId] })
-            void queryClient.invalidateQueries({ queryKey: posKeys.tables(employee.id) })
-            void queryClient.invalidateQueries({ queryKey: posKeys.sessions(employee.id) })
+            void queryClient.invalidateQueries({
+              queryKey: posKeys.session(employee.id, sessionId),
+            })
+            void queryClient.invalidateQueries({
+              queryKey: posKeys.tables(employee.id),
+            })
+            void queryClient.invalidateQueries({
+              queryKey: posKeys.sessions(employee.id),
+            })
           }}
         />
       )}

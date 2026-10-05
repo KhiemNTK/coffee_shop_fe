@@ -1,28 +1,26 @@
-import { useEffect, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { useOutletContext } from 'react-router-dom'
+import type { Session } from '../auth/session'
+import { PaymentGatewayPanel } from '../invoices/components/payment-gateway-panel'
 import {
   AlertCircle,
   CheckCircle2,
   CreditCard,
   DollarSign,
-  ExternalLink,
   QrCode,
-  RefreshCw,
-  Smartphone,
 } from 'lucide-react'
-import { errorMessage } from '../../shared/api/client'
+import { ApiError, errorMessage } from '../../shared/api/client'
 import { formatPrice } from '../menu/menu.api'
-import { checkoutInvoice, type Invoice } from './pos.api'
 import {
-  createUnpaidInvoice,
-  createPaymentAttempt,
-  getInvoiceById,
-  getInvoices,
-  getPaymentAttempt,
-  reconcilePaymentAttempt,
-  type PaymentAttempt,
-  type PaymentProvider,
-} from '../invoices/invoices.api'
+  checkoutInvoice,
+  quoteInvoice,
+  type Invoice,
+  type SessionItem,
+} from './pos.api'
+import { getActivePromotions } from '../promotions/promotions.api'
+import { OrderOptions } from '../../shared/ui/order-options'
+import { createUnpaidInvoice, getInvoices } from '../invoices/invoices.api'
 import {
   Dialog,
   DialogHeader,
@@ -34,57 +32,74 @@ import { Button } from '../../shared/ui/button'
 import { Input } from '../../shared/ui/input'
 import { Badge } from '../../shared/ui/badge'
 import { cn } from '../../shared/ui/utils'
-import { PaymentQr } from '../../shared/ui/payment-qr'
 
 export function CheckoutModal({
   sessionId,
   totalAmount,
+  items = [],
   onClose,
   onCompleted,
 }: {
   sessionId: string
   totalAmount: string
+  items?: SessionItem[]
   onClose: () => void
   onCompleted: (invoice: Invoice) => void
 }) {
-  const numericTotal = Number(totalAmount) || 0
+  const [billableItems] = useState(items)
+  const [selectedIds, setSelectedIds] = useState(() =>
+    items.map((item) => item.id),
+  )
+  const [promotionId, setPromotionId] = useState('')
+  const { employee, authorization } = useOutletContext<Session>()
+  const customInvoice =
+    Boolean(promotionId) || selectedIds.length !== billableItems.length
+  const quote = useQuery({
+    queryKey: ['pos-quote', employee.id, sessionId, selectedIds, promotionId],
+    queryFn: () =>
+      quoteInvoice({
+        orderSessionId: sessionId,
+        orderItemIds: selectedIds,
+        promotionId: promotionId || null,
+      }),
+    enabled: customInvoice && selectedIds.length > 0,
+    retry: false,
+    staleTime: 0,
+  })
+  const promotions = useQuery({
+    queryKey: ['checkout-promotions', employee.id],
+    queryFn: ({ signal }) => getActivePromotions({}, signal),
+    enabled: authorization.permissionKeys.includes('/promotions_read'),
+    retry: false,
+  })
+  const payableTotal = customInvoice
+    ? (quote.data?.totalAmount ?? '0')
+    : totalAmount
+  const quoteReady =
+    (!billableItems.length || selectedIds.length > 0) &&
+    (!customInvoice || (quote.isSuccess && !quote.isFetching))
+  const numericTotal = Number(payableTotal) || 0
   const [method, setMethod] = useState<'CASH' | 'CARD' | 'DIGITAL'>('CASH')
   const [tendered, setTendered] = useState(totalAmount)
   const [pending, setPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [invoice, setInvoice] = useState<Invoice | null>(null)
 
-  // Digital payments state (MoMo & VNPay)
-  const [digitalProvider, setDigitalProvider] = useState<PaymentProvider>('MOMO')
-  const [digitalAttempt, setDigitalAttempt] = useState<PaymentAttempt | null>(null)
+  const canDigital = [
+    '/invoices_read',
+    '/invoices_create',
+    '/payment-attempts_create',
+    '/payment-attempts_read',
+  ].every((key) => authorization.permissionKeys.includes(key))
   const [activeInvoiceId, setActiveInvoiceId] = useState<string | null>(null)
-  const [isReconciling, setIsReconciling] = useState(false)
+  const [submittedDirect, setSubmittedDirect] = useState<
+    Parameters<typeof checkoutInvoice>[0] | null
+  >(null)
+  const flight = useRef(false)
+  const [digitalUncertain, setDigitalUncertain] = useState(false)
   const completed = useRef(false)
-  const invoiceQuery = useQuery({
-    queryKey: ['private', 'checkout', sessionId, activeInvoiceId],
-    queryFn: ({ signal }) => getInvoiceById(activeInvoiceId!, signal),
-    enabled: Boolean(activeInvoiceId) && !invoice,
-    staleTime: 0,
-    refetchInterval: (query) => {
-      const status = query.state.data?.paymentStatus
-      if (status && status !== 'UNPAID') return false
-      if (digitalAttempt && Date.now() > Date.parse(digitalAttempt.expiresAt) + 30_000) return false
-      return 3000
-    },
-  })
-  const attemptQuery = useQuery({
-    queryKey: ['private', 'payment-attempt', digitalAttempt?.id],
-    queryFn: ({ signal }) => getPaymentAttempt(digitalAttempt!.id, signal),
-    enabled: Boolean(digitalAttempt) && !invoice,
-    refetchInterval: (query) => query.state.data?.status === 'PENDING' ? 4000 : false,
-    staleTime: 0,
-  })
-  const currentAttempt = attemptQuery.data ?? digitalAttempt
-  const pollError = invoiceQuery.error ?? attemptQuery.error
-
   const numericTendered = Number(tendered) || 0
   const change = Math.max(0, numericTendered - numericTotal)
-
   const quickDenominations = [
     numericTotal,
     Math.ceil(numericTotal / 50000) * 50000,
@@ -92,92 +107,99 @@ export function CheckoutModal({
     500000,
   ].filter((val, idx, arr) => val >= numericTotal && arr.indexOf(val) === idx)
 
-  useEffect(() => {
-    const paid = invoiceQuery.data
-    if (paid?.paymentStatus === 'PAID' && !completed.current) {
-      completed.current = true
-      setInvoice(paid)
-      onCompleted(paid)
-    }
-  }, [invoiceQuery.data, onCompleted])
-
-  // Handle direct cash or card checkout
   async function handleDirectCheckout(payMethod: 'CASH' | 'CARD') {
-    if (payMethod === 'CASH' && numericTendered < numericTotal) {
+    if (flight.current || (!submittedDirect && !quoteReady)) return
+    if (
+      !submittedDirect &&
+      payMethod === 'CASH' &&
+      numericTendered < numericTotal
+    ) {
       setError('Tiền khách đưa không đủ thanh toán')
       return
     }
+    const payload = submittedDirect ?? {
+      orderSessionId: sessionId,
+      paymentMethod: payMethod,
+      orderItemIds: billableItems.length ? selectedIds : undefined,
+      promotionId: promotionId || null,
+      amountTendered: payMethod === 'CASH' ? tendered.trim() : payableTotal,
+      closeSessionAfterPayment: true,
+    }
+    flight.current = true
+    setSubmittedDirect(payload)
     setError(null)
     setPending(true)
     try {
-      const result = await checkoutInvoice({
-        orderSessionId: sessionId,
-        paymentMethod: payMethod,
-        amountTendered: payMethod === 'CASH' ? tendered.trim() : totalAmount,
-        closeSessionAfterPayment: true,
-      })
+      const result = await checkoutInvoice(payload)
       setInvoice(result)
       completed.current = true
       onCompleted(result)
     } catch (err) {
       setError(errorMessage(err))
+      if (
+        err instanceof ApiError &&
+        err.status >= 400 &&
+        err.status < 500 &&
+        err.status !== 408 &&
+        err.status !== 429
+      )
+        setSubmittedDirect(null)
+    } finally {
+      flight.current = false
       setPending(false)
     }
   }
 
-  // Handle initiating digital payment (MoMo / VNPay)
-  async function handleStartDigitalPayment() {
+  async function handlePrepareDigitalPayment() {
+    if (flight.current || !canDigital || (!digitalUncertain && !quoteReady))
+      return
+    flight.current = true
     setError(null)
     setPending(true)
     try {
-      const existing = activeInvoiceId ? null : await getInvoices({
-        orderSessionId: sessionId, paymentStatus: 'UNPAID', itemPerPage: 1,
+      const existing = await getInvoices({
+        orderSessionId: sessionId,
+        paymentStatus: 'UNPAID',
+        itemPerPage: 100,
       })
-      const unpaidInv = activeInvoiceId
-        ? await getInvoiceById(activeInvoiceId)
-        : existing?.list[0] ?? await createUnpaidInvoice(sessionId)
-      if (unpaidInv.paymentStatus !== 'UNPAID') {
-        await invoiceQuery.refetch()
-        return
-      }
-      setActiveInvoiceId(unpaidInv.id)
-
-      // 2. Create payment attempt
-      const attempt = await createPaymentAttempt(unpaidInv.id, {
-        provider: digitalProvider,
-        closeSessionAfterPayment: true,
-      })
-      setDigitalAttempt(attempt)
+      const matching = billableItems.length
+        ? existing.list.find(
+            (candidate) =>
+              (candidate.promotionId ?? null) === (promotionId || null) &&
+              candidate.orderItems.length === selectedIds.length &&
+              candidate.orderItems.every((item) =>
+                selectedIds.includes(item.id),
+              ),
+          )
+        : existing.list[0]
+      if (!matching) setDigitalUncertain(true)
+      const unpaid =
+        matching ??
+        (await createUnpaidInvoice(sessionId, {
+          orderItemIds: billableItems.length ? selectedIds : undefined,
+          promotionId: promotionId || null,
+        }))
+      setDigitalUncertain(false)
+      if (unpaid.paymentStatus === 'PAID') {
+        setInvoice(unpaid)
+        completed.current = true
+        onCompleted(unpaid)
+      } else if (unpaid.paymentStatus === 'UNPAID')
+        setActiveInvoiceId(unpaid.id)
+      else setError('Hóa đơn không còn chờ thanh toán. Vui lòng kiểm tra lại.')
     } catch (err) {
       setError(errorMessage(err))
+      if (
+        err instanceof ApiError &&
+        err.status >= 400 &&
+        err.status < 500 &&
+        err.status !== 408 &&
+        err.status !== 429
+      )
+        setDigitalUncertain(false)
     } finally {
+      flight.current = false
       setPending(false)
-    }
-  }
-
-  // Manual reconciliation check
-  async function handleManualReconcile() {
-    if (!digitalAttempt) return
-    setIsReconciling(true)
-    setError(null)
-    try {
-      const reconciled = await reconcilePaymentAttempt(digitalAttempt.id)
-      setDigitalAttempt(reconciled)
-      await attemptQuery.refetch()
-      if (activeInvoiceId) {
-        const inv = await getInvoiceById(activeInvoiceId)
-        if (inv.paymentStatus === 'PAID') {
-          setInvoice(inv)
-          completed.current = true
-          onCompleted(inv)
-        } else {
-          setError('Hệ thống chưa ghi nhận tiền vào tài khoản. Vui lòng thử lại sau giây lát.')
-        }
-      }
-    } catch (err) {
-      setError(errorMessage(err))
-    } finally {
-      setIsReconciling(false)
     }
   }
 
@@ -185,7 +207,8 @@ export function CheckoutModal({
     <Dialog
       open
       onOpenChange={(open) => {
-        if (!open && !pending) onClose()
+        if (!open && !flight.current && !submittedDirect && !digitalUncertain)
+          onClose()
       }}
       maxWidth={invoice ? 'sm' : 'md'}
     >
@@ -198,7 +221,8 @@ export function CheckoutModal({
             Thanh toán thành công!
           </DialogTitle>
           <DialogDescription className="mt-1 text-center text-sm text-muted-foreground">
-            Hóa đơn số: <strong className="text-foreground">{invoice.invoiceNumber}</strong>
+            Hóa đơn số:{' '}
+            <strong className="text-foreground">{invoice.invoiceNumber}</strong>
           </DialogDescription>
 
           <div className="my-5 rounded-lg border border-border bg-muted/40 p-4 text-left text-sm space-y-2.5">
@@ -214,26 +238,37 @@ export function CheckoutModal({
             </div>
             <div className="flex justify-between text-muted-foreground">
               <span>Tổng tiền thanh toán:</span>
-              <strong className="text-foreground">{formatPrice(invoice.totalAmount)}</strong>
+              <strong className="text-foreground">
+                {formatPrice(invoice.totalAmount)}
+              </strong>
             </div>
             {invoice.paymentMethod === 'CASH' && (
               <>
                 <div className="flex justify-between text-muted-foreground">
                   <span>Tiền khách đưa:</span>
                   <span className="font-medium text-foreground">
-                    {invoice.amountTendered ? formatPrice(invoice.amountTendered) : '0 ₫'}
+                    {invoice.amountTendered
+                      ? formatPrice(invoice.amountTendered)
+                      : '0 ₫'}
                   </span>
                 </div>
                 <div className="flex justify-between border-t border-dashed border-border pt-2.5 text-base font-bold text-primary">
                   <span>Tiền thừa:</span>
-                  <span>{invoice.changeAmount ? formatPrice(invoice.changeAmount) : '0 ₫'}</span>
+                  <span>
+                    {invoice.changeAmount
+                      ? formatPrice(invoice.changeAmount)
+                      : '0 ₫'}
+                  </span>
                 </div>
               </>
             )}
           </div>
 
           <DialogFooter>
-            <Button className="w-full cursor-pointer font-bold" onClick={onClose}>
+            <Button
+              className="w-full cursor-pointer font-bold"
+              onClick={onClose}
+            >
               Hoàn tất & Đóng
             </Button>
           </DialogFooter>
@@ -242,27 +277,116 @@ export function CheckoutModal({
         <div>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-lg font-bold text-foreground">
-              <DollarSign className="h-5 w-5 text-primary" /> Thanh toán đơn hàng
+              <DollarSign className="h-5 w-5 text-primary" /> Thanh toán đơn
+              hàng
             </DialogTitle>
             <DialogDescription>
               Chọn phương thức thanh toán phù hợp với nhu cầu của khách hàng.
             </DialogDescription>
           </DialogHeader>
 
-          {(error || pollError) && (
+          {error && (
             <div
               className="mt-3 flex items-center gap-2 rounded-md bg-destructive/10 p-3 text-sm text-destructive"
               role="alert"
             >
               <AlertCircle className="h-4 w-4 shrink-0" />
-              <span>{error || errorMessage(pollError)}</span>
+              <span>{error}</span>
             </div>
+          )}
+
+          {billableItems.length > 0 && (
+            <fieldset
+              disabled={
+                pending ||
+                Boolean(activeInvoiceId) ||
+                Boolean(submittedDirect) ||
+                digitalUncertain
+              }
+              className="mt-4 space-y-2"
+            >
+              <legend className="text-sm font-medium">Món trong hóa đơn</legend>
+              <div className="max-h-48 overflow-y-auto divide-y">
+                {billableItems.map((item) => (
+                  <label
+                    key={item.id}
+                    className="flex items-start gap-2 py-2 text-sm"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.includes(item.id)}
+                      onChange={(event) =>
+                        setSelectedIds((ids) =>
+                          event.target.checked
+                            ? [...ids, item.id]
+                            : ids.filter((id) => id !== item.id),
+                        )
+                      }
+                    />
+                    <span className="min-w-0 flex-1 break-words">
+                      {item.quantity} × {item.menuItem.name}
+                      <OrderOptions options={item.selectedOptions} />
+                    </span>
+                  </label>
+                ))}
+              </div>
+              {authorization.permissionKeys.includes('/promotions_read') && (
+                <label className="block text-sm">
+                  Khuyến mãi
+                  <select
+                    aria-label="Khuyến mãi"
+                    className="mt-1 w-full rounded-md border bg-background p-2"
+                    value={promotionId}
+                    disabled={!promotions.isSuccess}
+                    onChange={(event) => setPromotionId(event.target.value)}
+                  >
+                    <option value="">Không áp dụng</option>
+                    {promotions.data?.list.map((promotion) => (
+                      <option key={promotion.id} value={promotion.id}>
+                        {promotion.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
+              {promotions.isError && (
+                <p role="alert" className="text-sm text-destructive">
+                  {errorMessage(promotions.error)}{' '}
+                  <button
+                    type="button"
+                    onClick={() => void promotions.refetch()}
+                  >
+                    Thử lại
+                  </button>
+                </p>
+              )}
+              {customInvoice && quote.isFetching && (
+                <p role="status" className="text-sm">
+                  Đang lấy báo giá…
+                </p>
+              )}
+              {quote.isError && (
+                <p role="alert" className="text-sm text-destructive">
+                  {errorMessage(quote.error)}{' '}
+                  <button type="button" onClick={() => void quote.refetch()}>
+                    Thử lại báo giá
+                  </button>
+                </p>
+              )}
+              {customInvoice && quote.data && (
+                <p className="text-sm">
+                  Giảm giá: {formatPrice(quote.data.discountAmount)}
+                </p>
+              )}
+            </fieldset>
           )}
 
           {/* Tổng tiền cần thanh toán */}
           <div className="mt-4 flex items-center justify-between rounded-xl bg-primary/10 px-4 py-3 text-primary">
             <span className="text-sm font-semibold">Tổng tiền thanh toán:</span>
-            <span className="text-2xl font-extrabold tracking-tight">{formatPrice(totalAmount)}</span>
+            <span className="text-xl font-bold">
+              {quoteReady ? formatPrice(payableTotal) : '—'}
+            </span>
           </div>
 
           {/* Bộ chọn phương thức thanh toán */}
@@ -271,9 +395,13 @@ export function CheckoutModal({
               type="button"
               onClick={() => {
                 setMethod('CASH')
-                setDigitalAttempt(null)
               }}
-              disabled={pending || Boolean(digitalAttempt)}
+              disabled={
+                pending ||
+                Boolean(activeInvoiceId) ||
+                Boolean(submittedDirect) ||
+                digitalUncertain
+              }
               className={cn(
                 'flex flex-col items-center justify-center gap-1.5 rounded-xl border p-3 text-xs font-bold transition-all cursor-pointer',
                 method === 'CASH'
@@ -289,9 +417,13 @@ export function CheckoutModal({
               type="button"
               onClick={() => {
                 setMethod('CARD')
-                setDigitalAttempt(null)
               }}
-              disabled={pending || Boolean(digitalAttempt)}
+              disabled={
+                pending ||
+                Boolean(activeInvoiceId) ||
+                Boolean(submittedDirect) ||
+                digitalUncertain
+              }
               className={cn(
                 'flex flex-col items-center justify-center gap-1.5 rounded-xl border p-3 text-xs font-bold transition-all cursor-pointer',
                 method === 'CARD'
@@ -306,6 +438,12 @@ export function CheckoutModal({
             <button
               type="button"
               onClick={() => setMethod('DIGITAL')}
+              disabled={
+                !canDigital ||
+                pending ||
+                Boolean(submittedDirect) ||
+                digitalUncertain
+              }
               className={cn(
                 'flex flex-col items-center justify-center gap-1.5 rounded-xl border p-3 text-xs font-bold transition-all cursor-pointer',
                 method === 'DIGITAL'
@@ -334,6 +472,7 @@ export function CheckoutModal({
                   min={numericTotal}
                   step="1000"
                   value={tendered}
+                  disabled={pending || Boolean(submittedDirect)}
                   onChange={(e) => setTendered(e.target.value)}
                   className="text-lg font-bold"
                   required
@@ -347,6 +486,7 @@ export function CheckoutModal({
                     key={val}
                     type="button"
                     onClick={() => setTendered(String(val))}
+                    disabled={pending || Boolean(submittedDirect)}
                     className={cn(
                       'rounded-md border px-3 py-1.5 text-xs font-semibold transition-colors cursor-pointer',
                       Number(tendered) === val
@@ -360,7 +500,9 @@ export function CheckoutModal({
               </div>
 
               <div className="flex items-center justify-between border-t border-border pt-3">
-                <span className="text-sm text-muted-foreground">Tiền thừa trả khách:</span>
+                <span className="text-sm text-muted-foreground">
+                  Tiền thừa trả khách:
+                </span>
                 <span
                   className={cn(
                     'text-lg font-bold',
@@ -381,111 +523,35 @@ export function CheckoutModal({
                 Quẹt thẻ thanh toán trên thiết bị POS ngân hàng
               </p>
               <p className="text-xs text-muted-foreground">
-                Sau khi máy POS ngân hàng in biên lai thành công, bấm &quot;Xác nhận đã thanh toán&quot; để chốt đơn.
+                Sau khi máy POS ngân hàng in biên lai thành công, bấm &quot;Xác
+                nhận đã thanh toán&quot; để chốt đơn.
               </p>
             </div>
           )}
 
-          {/* Nội dung Tab 3: Chuyển khoản QR (MoMo & VNPay) */}
           {method === 'DIGITAL' && (
             <div className="mt-4 space-y-4">
-              {!digitalAttempt ? (
-                <div className="space-y-3">
-                  <span className="block text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                    Chọn cổng thanh toán điện tử
-                  </span>
-                  <div className="grid grid-cols-2 gap-3">
-                    <button
-                      type="button"
-                      onClick={() => setDigitalProvider('MOMO')}
-                      className={cn(
-                        'flex items-center gap-2 rounded-xl border p-3 text-xs font-bold transition-all cursor-pointer',
-                        digitalProvider === 'MOMO'
-                          ? 'border-[#a50064] bg-[#a50064]/10 text-[#a50064] ring-1 ring-[#a50064]'
-                          : 'border-border bg-card hover:bg-muted',
-                      )}
-                    >
-                      <Smartphone className="h-5 w-5" />
-                      MoMo QR Code
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => setDigitalProvider('VNPAY')}
-                      className={cn(
-                        'flex items-center gap-2 rounded-xl border p-3 text-xs font-bold transition-all cursor-pointer',
-                        digitalProvider === 'VNPAY'
-                          ? 'border-[#005baa] bg-[#005baa]/10 text-[#005baa] ring-1 ring-[#005baa]'
-                          : 'border-border bg-card hover:bg-muted',
-                      )}
-                    >
-                      <QrCode className="h-5 w-5" />
-                      VNPay Gateway
-                    </button>
-                  </div>
-
-                  <Button
-                    type="button"
-                    onClick={() => void handleStartDigitalPayment()}
-                    isLoading={pending}
-                    className="w-full mt-2 cursor-pointer font-bold"
-                  >
-                    Tạo mã thanh toán ({digitalProvider})
-                  </Button>
-                </div>
+              {activeInvoiceId ? (
+                <PaymentGatewayPanel
+                  invoiceId={activeInvoiceId}
+                  onPaid={(paid) => {
+                    if (completed.current) return
+                    completed.current = true
+                    setInvoice(paid)
+                    onCompleted(paid)
+                  }}
+                />
               ) : (
-                <div className="text-center space-y-3 py-2">
-                  <div className="flex items-center justify-center gap-2 text-xs font-bold text-amber-600">
-                    <span className="relative flex h-2.5 w-2.5">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500"></span>
-                    </span>
-                    {currentAttempt?.status === 'PENDING'
-                      ? 'Đang chờ xác nhận thanh toán…'
-                      : currentAttempt?.status === 'REQUIRES_REVIEW'
-                        ? 'Giao dịch cần quản lý đối soát.'
-                        : currentAttempt?.status === 'SUCCEEDED'
-                          ? 'Đang kiểm tra hóa đơn…'
-                          : 'Phiên thanh toán đã kết thúc. Kiểm tra trạng thái trước khi tạo phiên mới.'}
-                  </div>
-
-                  {digitalAttempt.paymentUrl && (
-                    <div className="my-2 inline-block rounded-2xl border-2 border-primary/20 bg-white p-3 shadow-md">
-                      {currentAttempt?.status === 'PENDING' && <PaymentQr value={digitalAttempt.paymentUrl} />}
-                    </div>
-                  )}
-
-                  <div className="flex flex-col gap-2 sm:flex-row sm:justify-center">
-                    {(currentAttempt?.status === 'FAILED' || currentAttempt?.status === 'EXPIRED') && (
-                      <Button type="button" variant="outline" size="sm" onClick={() => {
-                        setDigitalAttempt(null)
-                        setError(null)
-                      }}>Tạo phiên mới</Button>
-                    )}
-                    {digitalAttempt.paymentUrl && (
-                      <a
-                        href={digitalAttempt.paymentUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-border bg-card px-3 py-2 text-xs font-semibold text-foreground hover:bg-muted"
-                      >
-                        <ExternalLink className="h-3.5 w-3.5" />
-                        Mở liên kết thanh toán {digitalAttempt.provider}
-                      </a>
-                    )}
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => void handleManualReconcile()}
-                      isLoading={isReconciling}
-                      className="cursor-pointer gap-1.5 text-xs"
-                    >
-                      <RefreshCw className="h-3.5 w-3.5" />
-                      Kiểm tra / Đối soát ngay
-                    </Button>
-                  </div>
-                </div>
+                <Button
+                  type="button"
+                  onClick={() => void handlePrepareDigitalPayment()}
+                  isLoading={pending}
+                  disabled={!quoteReady && !digitalUncertain}
+                  className="w-full"
+                >
+                  <QrCode size={16} aria-hidden="true" />
+                  Kiểm tra hóa đơn trước khi tạo QR
+                </Button>
               )}
             </div>
           )}
@@ -495,7 +561,7 @@ export function CheckoutModal({
               type="button"
               variant="outline"
               onClick={onClose}
-              disabled={pending}
+              disabled={pending || Boolean(submittedDirect) || digitalUncertain}
               className="flex-1 cursor-pointer"
             >
               Hủy
@@ -506,10 +572,16 @@ export function CheckoutModal({
                 type="button"
                 onClick={() => void handleDirectCheckout('CASH')}
                 isLoading={pending}
-                disabled={pending || numericTendered < numericTotal}
+                disabled={
+                  pending ||
+                  (!submittedDirect &&
+                    (!quoteReady || numericTendered < numericTotal))
+                }
                 className="flex-2 cursor-pointer font-bold"
               >
-                Xác nhận thanh toán tiền mặt
+                {submittedDirect
+                  ? 'Kiểm tra lại thanh toán tiền mặt'
+                  : 'Xác nhận thanh toán tiền mặt'}
               </Button>
             )}
 
@@ -518,10 +590,12 @@ export function CheckoutModal({
                 type="button"
                 onClick={() => void handleDirectCheckout('CARD')}
                 isLoading={pending}
-                disabled={pending}
+                disabled={pending || (!submittedDirect && !quoteReady)}
                 className="flex-2 cursor-pointer font-bold"
               >
-                Xác nhận quẹt thẻ thành công
+                {submittedDirect
+                  ? 'Kiểm tra lại thanh toán thẻ'
+                  : 'Xác nhận quẹt thẻ thành công'}
               </Button>
             )}
           </DialogFooter>

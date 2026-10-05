@@ -1,15 +1,17 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
+import { OrderOptions } from '../../../shared/ui/order-options'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import { useOutletContext } from 'react-router-dom'
 import type { Session } from '../../auth/session'
 import { RefundsPanel } from './refunds-panel'
+import { PaymentGatewayPanel } from './payment-gateway-panel'
+import { PickupCodePanel } from '../../online-orders/components/pickup-panels'
 import {
   AlertCircle,
   Ban,
   CheckCircle2,
   Coins,
   CreditCard,
-  ExternalLink,
   QrCode,
   Receipt,
   RefreshCw,
@@ -18,16 +20,14 @@ import {
   getInvoiceById,
   voidInvoice,
   updateInvoicePayment,
-  createPaymentAttempt,
   getInvoicePaymentAttempts,
-  reconcilePaymentAttempt,
-  type PaymentProvider,
+  type UpdateInvoicePaymentPayload,
 } from '../invoices.api'
 import { formatPrice } from '../../menu/menu.api'
 import { formatLineAmount } from '../../../shared/lib/format'
-import { errorMessage } from '../../../shared/api/client'
+import { ApiError, errorMessage } from '../../../shared/api/client'
 import { Button, Dialog, Input, cn } from '../../../shared/ui'
-import { AttemptStatusBadge, PaymentStatusBadge } from './invoice-badges'
+import { PaymentStatusBadge } from './invoice-badges'
 
 interface InvoiceDetailDialogProps {
   invoiceId: string
@@ -42,14 +42,17 @@ export function InvoiceDetailDialog({
 }: InvoiceDetailDialogProps) {
   const { employee, authorization } = useOutletContext<Session>()
   const can = (key: string) => authorization.permissionKeys.includes(key)
-  const [activeTab, setActiveTab] = useState<'items' | 'gateway' | 'pay_manual'>('items')
+  const [activeTab, setActiveTab] = useState<
+    'items' | 'gateway' | 'pay_manual'
+  >('items')
 
-  // Create payment attempt form state
-  const [provider, setProvider] = useState<PaymentProvider>('VNPAY')
   const [manualMethod, setManualMethod] = useState<'CASH' | 'CARD'>('CASH')
   const [amountTendered, setAmountTendered] = useState('')
   const [actionError, setActionError] = useState<string | null>(null)
   const [voidConfirmOpen, setVoidConfirmOpen] = useState(false)
+  const [submittedManual, setSubmittedManual] =
+    useState<UpdateInvoicePaymentPayload | null>(null)
+  const manualFlight = useRef(false)
 
   // Fetch invoice detail
   const invoiceQuery = useQuery({
@@ -62,59 +65,33 @@ export function InvoiceDetailDialog({
     queryKey: ['private', employee.id, 'invoice-attempts', invoiceId],
     enabled: can('/payment-attempts_read'),
     queryFn: ({ signal }) => getInvoicePaymentAttempts(invoiceId, signal),
-    refetchInterval: (query) => {
-      // Auto-poll if there is a pending attempt
-      const hasPending = query.state.data?.list.some((a) => a.status === 'PENDING')
-      return hasPending ? 4000 : false
-    },
   })
 
   // Mutations
-  const createAttemptMutation = useMutation({
-    mutationFn: () =>
-      createPaymentAttempt(invoiceId, {
-        provider,
-        locale: 'vn',
-        closeSessionAfterPayment: true,
-      }),
-    onSuccess: () => {
-      setActionError(null)
-      void attemptsQuery.refetch()
-    },
-    onError: (err) => {
-      setActionError(errorMessage(err))
-    },
-  })
-
-  const reconcileMutation = useMutation({
-    mutationFn: (attemptId: string) => reconcilePaymentAttempt(attemptId),
-    onSuccess: () => {
-      setActionError(null)
-      void attemptsQuery.refetch()
-      void invoiceQuery.refetch()
-      onUpdated()
-    },
-    onError: (err) => {
-      setActionError(errorMessage(err))
-    },
-  })
-
   const updatePaymentMutation = useMutation({
-    mutationFn: () =>
-      updateInvoicePayment(invoiceId, {
-        paymentStatus: 'PAID',
-        paymentMethod: manualMethod,
-        amountTendered: amountTendered.trim() || undefined,
-        closeSessionAfterPayment: true,
-      }),
+    mutationFn: (payload: UpdateInvoicePaymentPayload) =>
+      updateInvoicePayment(invoiceId, payload),
     onSuccess: () => {
       setActionError(null)
-      void invoiceQuery.refetch()
+      setSubmittedManual(null)
       onUpdated()
       setActiveTab('items')
     },
     onError: (err) => {
       setActionError(errorMessage(err))
+      if (
+        err instanceof ApiError &&
+        err.status >= 400 &&
+        err.status < 500 &&
+        err.status !== 408 &&
+        err.status !== 429
+      )
+        setSubmittedManual(null)
+    },
+    onSettled: () => {
+      manualFlight.current = false
+      void invoiceQuery.refetch()
+      if (can('/payment-attempts_read')) void attemptsQuery.refetch()
     },
   })
 
@@ -131,9 +108,51 @@ export function InvoiceDetailDialog({
   })
 
   const inv = invoiceQuery.data
+  const unresolvedOnline =
+    attemptsQuery.data?.list.some(
+      (attempt) =>
+        attempt.status === 'PENDING' || attempt.status === 'REQUIRES_REVIEW',
+    ) ?? false
+  const paymentLocked =
+    (updatePaymentMutation.isPending || Boolean(submittedManual)) &&
+    inv?.paymentStatus !== 'PAID'
+  const manualBlocked =
+    unresolvedOnline ||
+    (can('/payment-attempts_read') &&
+      (attemptsQuery.isPending || attemptsQuery.isError))
+  function confirmManualPayment() {
+    if (
+      manualFlight.current ||
+      manualBlocked ||
+      inv?.paymentStatus !== 'UNPAID' ||
+      !can('/invoices_update')
+    )
+      return
+    const payload: UpdateInvoicePaymentPayload = submittedManual ?? {
+      paymentStatus: 'PAID',
+      paymentMethod: manualMethod,
+      amountTendered: amountTendered.trim() || undefined,
+      closeSessionAfterPayment: true,
+    }
+    manualFlight.current = true
+    setSubmittedManual(payload)
+    updatePaymentMutation.mutate(payload)
+  }
 
   return (
-    <Dialog open onClose={onClose} maxWidth="lg" label="Chi tiết hóa đơn">
+    <Dialog
+      open
+      onClose={() => {
+        if (
+          !manualFlight.current &&
+          (!submittedManual || inv?.paymentStatus === 'PAID')
+        )
+          onClose()
+      }}
+      showCloseButton={!paymentLocked}
+      maxWidth="lg"
+      label="Chi tiết hóa đơn"
+    >
       <div className="flex flex-col max-h-[90vh]">
         {/* Modal Header */}
         <div className="p-5 pr-10 border-b border-border flex items-center justify-between bg-stone-50/50">
@@ -149,18 +168,25 @@ export function InvoiceDetailDialog({
                 {inv && <PaymentStatusBadge status={inv.paymentStatus} />}
               </div>
               <p className="text-xs text-muted-foreground">
-                Bàn: <strong>{inv?.orderSession?.table?.name ?? 'Mang đi'}</strong> • Thu ngân:{' '}
-                {inv?.employee?.fullName ?? 'Hệ thống'}
+                Bàn:{' '}
+                <strong>{inv?.orderSession?.table?.name ?? 'Mang đi'}</strong> •
+                Thu ngân: {inv?.employee?.fullName ?? 'Hệ thống'}
               </p>
             </div>
           </div>
-
         </div>
+
+        {inv?.paymentStatus === 'PAID' &&
+          inv.orderSession &&
+          !inv.orderSession.tableId && (
+            <PickupCodePanel invoiceId={invoiceId} />
+          )}
 
         {/* Modal Navigation Tabs */}
         <div className="flex flex-wrap border-b border-border px-5 bg-card">
           <button
             type="button"
+            disabled={paymentLocked}
             onClick={() => setActiveTab('items')}
             className={cn(
               'px-4 py-2.5 text-xs font-semibold border-b-2 transition-colors',
@@ -171,44 +197,61 @@ export function InvoiceDetailDialog({
           >
             Chi tiết món ({inv?.orderItems.length ?? 0})
           </button>
-          {inv?.paymentStatus === 'UNPAID' && (can('/invoices_update') || can('/payment-attempts_create') || can('/payment-attempts_read')) && (
-            <>
-              <button
-                type="button"
-                onClick={() => setActiveTab('gateway')}
-                className={cn(
-                  'px-4 py-2.5 text-xs font-semibold border-b-2 transition-colors flex items-center gap-1.5',
-                  activeTab === 'gateway'
-                    ? 'border-brand-800 text-brand-900'
-                    : 'border-transparent text-muted-foreground hover:text-foreground',
+          {inv?.paymentStatus === 'UNPAID' &&
+            (can('/invoices_update') || can('/payment-attempts_read')) && (
+              <>
+                {can('/payment-attempts_read') && (
+                  <button
+                    type="button"
+                    disabled={paymentLocked}
+                    onClick={() => setActiveTab('gateway')}
+                    className={cn(
+                      'px-4 py-2.5 text-xs font-semibold border-b-2 transition-colors flex items-center gap-1.5',
+                      activeTab === 'gateway'
+                        ? 'border-brand-800 text-brand-900'
+                        : 'border-transparent text-muted-foreground hover:text-foreground',
+                    )}
+                  >
+                    <QrCode className="h-3.5 w-3.5" />
+                    Cổng thanh toán (VNPay / MoMo)
+                  </button>
                 )}
-              >
-                <QrCode className="h-3.5 w-3.5" />
-                Cổng thanh toán (VNPay / MoMo)
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveTab('pay_manual')}
-                className={cn(
-                  'px-4 py-2.5 text-xs font-semibold border-b-2 transition-colors flex items-center gap-1.5',
-                  activeTab === 'pay_manual'
-                    ? 'border-brand-800 text-brand-900'
-                    : 'border-transparent text-muted-foreground hover:text-foreground',
+                {can('/invoices_update') && (
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('pay_manual')}
+                    className={cn(
+                      'px-4 py-2.5 text-xs font-semibold border-b-2 transition-colors flex items-center gap-1.5',
+                      activeTab === 'pay_manual'
+                        ? 'border-brand-800 text-brand-900'
+                        : 'border-transparent text-muted-foreground hover:text-foreground',
+                    )}
+                  >
+                    <CheckCircle2 className="h-3.5 w-3.5" />
+                    Xác nhận tiền mặt / Thẻ
+                  </button>
                 )}
-              >
-                <CheckCircle2 className="h-3.5 w-3.5" />
-                Xác nhận tiền mặt / Thẻ
-              </button>
-            </>
-          )}
+              </>
+            )}
         </div>
 
         {/* Modal Body */}
         <div className="p-5 overflow-y-auto space-y-6 flex-1">
-          {invoiceQuery.isError && <p role="alert" className="text-sm text-destructive">{errorMessage(invoiceQuery.error)}</p>}
-          {attemptsQuery.isError && <p role="alert" className="text-sm text-destructive">{errorMessage(attemptsQuery.error)}</p>}
+          {invoiceQuery.isError && (
+            <p role="alert" className="text-sm text-destructive">
+              {errorMessage(invoiceQuery.error)}
+            </p>
+          )}
+          {attemptsQuery.isError && (
+            <p role="alert" className="text-sm text-destructive">
+              {errorMessage(attemptsQuery.error)}
+            </p>
+          )}
           {actionError && (
-            <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-xl text-xs text-destructive flex items-center gap-2">
+            <div
+              role="alert"
+              className="p-3 bg-destructive/10 border border-destructive/20 rounded-xl text-xs text-destructive flex items-center gap-2"
+            >
               <AlertCircle className="h-4 w-4 shrink-0" />
               <span>{actionError}</span>
             </div>
@@ -239,6 +282,7 @@ export function InvoiceDetailDialog({
                       <tr key={it.id}>
                         <td className="py-2.5 px-3 font-semibold text-foreground">
                           {it.menuItem?.name ?? 'Món'}
+                          <OrderOptions options={it.selectedOptions} />
                           {it.note && (
                             <p className="text-[11px] text-muted-foreground font-normal italic">
                               Ghi chú: {it.note}
@@ -298,148 +342,39 @@ export function InvoiceDetailDialog({
             </div>
           )}
 
-          {/* Tab 2: Online Payment Gateway (VNPay / MoMo) */}
           {inv && activeTab === 'gateway' && (
-            <div className="space-y-6">
-              {/* Form to create attempt */}
-              <div className="p-4 border border-brand-200 bg-brand-50/50 rounded-xl space-y-3">
-                <h4 className="text-sm font-bold text-brand-900">
-                  Tạo phiên thanh toán trực tuyến
-                </h4>
-                <p className="text-xs text-muted-foreground">
-                  Số tiền thanh toán:{' '}
-                  <strong className="text-brand-800 text-sm">
-                    {formatPrice(String(inv.totalAmount))}
-                  </strong>
-                </p>
-
-                <div className="grid grid-cols-2 gap-3 pt-1">
-                  <button
-                    type="button"
-                    onClick={() => setProvider('VNPAY')}
-                    className={cn(
-                      'p-3 rounded-lg border text-xs font-semibold flex items-center justify-center gap-2 transition-all',
-                      provider === 'VNPAY'
-                        ? 'border-brand-700 bg-white text-brand-900 shadow-xs ring-1 ring-brand-700'
-                        : 'border-border bg-card text-muted-foreground hover:bg-stone-50',
-                    )}
-                  >
-                    <CreditCard className="h-4 w-4 text-[#0066cc]" />
-                    Cổng VNPay (QR / Thẻ ATM)
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setProvider('MOMO')}
-                    className={cn(
-                      'p-3 rounded-lg border text-xs font-semibold flex items-center justify-center gap-2 transition-all',
-                      provider === 'MOMO'
-                        ? 'border-brand-700 bg-white text-brand-900 shadow-xs ring-1 ring-brand-700'
-                        : 'border-border bg-card text-muted-foreground hover:bg-stone-50',
-                    )}
-                  >
-                    <QrCode className="h-4 w-4 text-[#d82d8b]" />
-                    Ví MoMo (QR Code)
-                  </button>
-                </div>
-
-                <Button
-                  type="button"
-                  className="w-full mt-2 font-bold"
-                  onClick={() => createAttemptMutation.mutate()}
-                  isLoading={createAttemptMutation.isPending}
-                  disabled={!can('/payment-attempts_create') || inv.paymentStatus !== 'UNPAID'}
-                >
-                  Tạo mã thanh toán {provider} & Mở cổng
-                </Button>
-              </div>
-
-              {/* History of attempts */}
-              <div className="space-y-3">
-                <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                  Lịch sử các phiên thanh toán ({attemptsQuery.data?.list.length ?? 0})
-                </h4>
-
-                {attemptsQuery.isLoading && (
-                  <p className="text-xs text-muted-foreground animate-pulse">
-                    Đang tải danh sách phiên…
-                  </p>
-                )}
-
-                {attemptsQuery.data?.list.map((attempt) => (
-                  <div
-                    key={attempt.id}
-                    className="p-3.5 border border-border rounded-xl bg-stone-50 flex items-center justify-between gap-3 text-xs"
-                  >
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <strong className="text-brand-900">{attempt.provider}</strong>
-                        <span className="font-mono text-muted-foreground">
-                          {attempt.merchantReference}
-                        </span>
-                        <AttemptStatusBadge status={attempt.status} />
-                      </div>
-                      <p className="text-[11px] text-muted-foreground mt-0.5">
-                        Tạo lúc:{' '}
-                        {new Date(attempt.createdAt).toLocaleTimeString([], {
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        })}{' '}
-                        • Hết hạn:{' '}
-                        {new Date(attempt.expiresAt).toLocaleTimeString([], {
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        })}
-                      </p>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      {attempt.paymentUrl && attempt.status === 'PENDING' && (
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() =>
-                            window.open(attempt.paymentUrl!, '_blank', 'noopener,noreferrer')
-                          }
-                          className="h-7 text-xs gap-1"
-                        >
-                          <ExternalLink className="h-3 w-3" /> Mở thanh toán
-                        </Button>
-                      )}
-                      {attempt.status === 'PENDING' && can('/payment-reconciliation_manage') && (
-                        <Button
-                          type="button"
-                          size="sm"
-                          onClick={() => reconcileMutation.mutate(attempt.id)}
-                          isLoading={
-                            reconcileMutation.isPending &&
-                            reconcileMutation.variables === attempt.id
-                          }
-                          className="h-7 text-xs bg-emerald-700 hover:bg-emerald-800 text-white gap-1"
-                        >
-                          <CheckCircle2 className="h-3 w-3" /> Đối soát kết quả
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
+            <PaymentGatewayPanel invoiceId={invoiceId} />
           )}
 
-          {inv && <RefundsPanel attempts={attemptsQuery.data?.list ?? []} onUpdated={() => {
-            void invoiceQuery.refetch()
-            onUpdated()
-          }} />}
+          {inv && (
+            <RefundsPanel
+              attempts={attemptsQuery.data?.list ?? []}
+              onUpdated={() => {
+                void invoiceQuery.refetch()
+                onUpdated()
+              }}
+            />
+          )}
 
           {/* Tab 3: Pay manual (Cash or Card) */}
-          {inv && activeTab === 'pay_manual' && (
+          {inv?.paymentStatus === 'UNPAID' && activeTab === 'pay_manual' && (
             <div className="space-y-4 max-w-md mx-auto py-2">
               <div className="p-4 bg-stone-50 border border-stone-200 rounded-xl space-y-3">
                 <h4 className="text-sm font-bold text-foreground">
                   Thu tiền trực tiếp tại quầy
                 </h4>
+                {manualBlocked && (
+                  <p role="status" className="text-sm">
+                    Cần kiểm tra hoặc đối soát phiên online trước khi thu tiền
+                    trực tiếp.
+                  </p>
+                )}
+                {submittedManual && !updatePaymentMutation.isPending && (
+                  <p role="status" className="text-sm">
+                    Chưa xác nhận được lần thu tiền. Kiểm tra lại cùng số tiền
+                    và phương thức.
+                  </p>
+                )}
 
                 <div>
                   <label className="text-xs font-semibold text-muted-foreground block mb-1">
@@ -450,6 +385,7 @@ export function InvoiceDetailDialog({
                       type="button"
                       size="sm"
                       variant={manualMethod === 'CASH' ? 'default' : 'outline'}
+                      disabled={paymentLocked || manualBlocked}
                       onClick={() => setManualMethod('CASH')}
                       className="text-xs gap-1.5"
                     >
@@ -459,6 +395,7 @@ export function InvoiceDetailDialog({
                       type="button"
                       size="sm"
                       variant={manualMethod === 'CARD' ? 'default' : 'outline'}
+                      disabled={paymentLocked || manualBlocked}
                       onClick={() => setManualMethod('CARD')}
                       className="text-xs gap-1.5"
                     >
@@ -469,32 +406,44 @@ export function InvoiceDetailDialog({
 
                 {manualMethod === 'CASH' && (
                   <div>
-                    <label className="text-xs font-semibold text-muted-foreground block mb-1">
+                    <label
+                      htmlFor="invoice-amount-tendered"
+                      className="text-xs font-semibold text-muted-foreground block mb-1"
+                    >
                       Số tiền khách đưa (VND)
                     </label>
                     <Input
+                      id="invoice-amount-tendered"
+                      disabled={paymentLocked || manualBlocked}
                       type="number"
                       placeholder={`VD: ${inv.totalAmount}`}
                       value={amountTendered}
                       onChange={(e) => setAmountTendered(e.target.value)}
                     />
-                    {amountTendered && Number(amountTendered) >= Number(inv.totalAmount) && (
-                      <p className="text-xs text-emerald-800 font-semibold mt-1">
-                        Tiền thối lại:{' '}
-                        {formatPrice(String(Number(amountTendered) - Number(inv.totalAmount)))}
-                      </p>
-                    )}
+                    {amountTendered &&
+                      Number(amountTendered) >= Number(inv.totalAmount) && (
+                        <p className="text-xs text-emerald-800 font-semibold mt-1">
+                          Tiền thối lại:{' '}
+                          {formatPrice(
+                            String(
+                              Number(amountTendered) - Number(inv.totalAmount),
+                            ),
+                          )}
+                        </p>
+                      )}
                   </div>
                 )}
 
                 <Button
                   type="button"
                   className="w-full font-bold mt-2"
-                  onClick={() => updatePaymentMutation.mutate()}
+                  onClick={confirmManualPayment}
                   isLoading={updatePaymentMutation.isPending}
-                  disabled={!can('/invoices_update')}
+                  disabled={!can('/invoices_update') || manualBlocked}
                 >
-                  Xác nhận đã thanh toán ({formatPrice(String(inv.totalAmount))})
+                  {submittedManual
+                    ? 'Kiểm tra lại lần thu tiền'
+                    : `Xác nhận đã thanh toán (${formatPrice(String(inv.totalAmount))})`}
                 </Button>
               </div>
             </div>
@@ -509,6 +458,7 @@ export function InvoiceDetailDialog({
                 type="button"
                 variant="destructive"
                 size="sm"
+                disabled={paymentLocked || manualBlocked}
                 onClick={() => setVoidConfirmOpen(true)}
                 className="gap-1.5 text-xs font-semibold"
               >
@@ -517,18 +467,31 @@ export function InvoiceDetailDialog({
             )}
           </div>
 
-          <Button type="button" variant="outline" size="sm" onClick={onClose}>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={paymentLocked}
+            onClick={onClose}
+          >
             Đóng
           </Button>
         </div>
       </div>
 
       {/* Confirmation Dialog to void invoice */}
-      <Dialog open={voidConfirmOpen} onClose={() => setVoidConfirmOpen(false)} maxWidth="sm">
+      <Dialog
+        open={voidConfirmOpen}
+        onClose={() => setVoidConfirmOpen(false)}
+        maxWidth="sm"
+      >
         <div className="p-6 space-y-4">
-          <h3 className="text-lg font-bold text-destructive">Xác nhận hủy hóa đơn?</h3>
+          <h3 className="text-lg font-bold text-destructive">
+            Xác nhận hủy hóa đơn?
+          </h3>
           <p className="text-sm text-muted-foreground">
-            Hóa đơn #{inv?.invoiceNumber} chưa được thanh toán sẽ chuyển sang trạng thái ĐÃ HỦY. Hành động này không thể hoàn tác.
+            Hóa đơn #{inv?.invoiceNumber} chưa được thanh toán sẽ chuyển sang
+            trạng thái ĐÃ HỦY. Hành động này không thể hoàn tác.
           </p>
           <div className="flex items-center justify-end gap-2.5 pt-2">
             <Button

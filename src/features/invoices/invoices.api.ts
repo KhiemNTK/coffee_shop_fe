@@ -2,12 +2,14 @@ import { z } from 'zod'
 import { apiGet, apiMutate } from '../../shared/api/client'
 import { apiIdempotentMutate } from '../../shared/api/idempotency'
 import { moneySchema } from '../menu/menu.api'
+import { selectedOptionsSchema } from '../../shared/api/order-options'
 
 export const invoiceItemSchema = z.object({
   id: z.string(),
   quantity: z.number().int().positive(),
   priceAtTime: moneySchema,
   note: z.string().nullable().optional(),
+  selectedOptions: selectedOptionsSchema,
   menuItem: z
     .object({
       id: z.string(),
@@ -38,6 +40,7 @@ export const invoiceSchema = z.object({
   createdAt: z.string(),
   updatedAt: z.string(),
   orderSessionId: z.string(),
+  promotionId: z.string().nullable().optional(),
   orderSession: z
     .object({
       id: z.string(),
@@ -96,7 +99,14 @@ export const paymentAttemptSchema = z.object({
   ]),
   providerCreatedAt: z.string(),
   expiresAt: z.string(),
-  paymentUrl: z.string().nullable().optional(),
+  paymentUrl: z
+    .url()
+    .refine((value) => {
+      const url = new URL(value)
+      return url.protocol === 'https:' && !url.username && !url.password
+    }, 'Unsafe payment URL')
+    .nullable()
+    .optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
 })
@@ -110,11 +120,27 @@ export const paymentAttemptsResponseSchema = z.object({
 export type PaymentStatus = z.infer<typeof invoiceSchema>['paymentStatus']
 export type PaymentMethod = z.infer<typeof invoiceSchema>['paymentMethod']
 export type PaymentProvider = z.infer<typeof paymentAttemptSchema>['provider']
-export type PaymentAttemptStatus = z.infer<typeof paymentAttemptSchema>['status']
+export type PaymentAttemptStatus = z.infer<
+  typeof paymentAttemptSchema
+>['status']
 export type InvoiceItem = z.infer<typeof invoiceItemSchema>
 export type Invoice = z.infer<typeof invoiceSchema>
 export type InvoicesResponse = z.infer<typeof invoicesResponseSchema>
 export type PaymentAttempt = z.infer<typeof paymentAttemptSchema>
+
+export function getPaymentProviders(signal: AbortSignal) {
+  return apiGet(
+    '/payments/providers',
+    z.array(
+      z.object({
+        provider: z.enum(['VNPAY', 'MOMO']),
+        configured: z.boolean(),
+      }),
+    ),
+    signal,
+    true,
+  )
+}
 
 export interface InvoicesFilters {
   page?: number
@@ -149,25 +175,37 @@ export async function getInvoices(
 ): Promise<InvoicesResponse> {
   const params = new URLSearchParams()
   if (filters.page) params.set('page', String(filters.page))
-  if (filters.itemPerPage) params.set('itemPerPage', String(filters.itemPerPage))
+  if (filters.itemPerPage)
+    params.set('itemPerPage', String(filters.itemPerPage))
   if (filters.paymentStatus) params.set('paymentStatus', filters.paymentStatus)
   if (filters.paymentMethod) params.set('paymentMethod', filters.paymentMethod)
   if (filters.createdFrom) params.set('createdFrom', filters.createdFrom)
   if (filters.createdTo) params.set('createdTo', filters.createdTo)
-  if (filters.orderSessionId) params.set('orderSessionId', filters.orderSessionId)
+  if (filters.orderSessionId)
+    params.set('orderSessionId', filters.orderSessionId)
   if (filters.employeeId) params.set('employeeId', filters.employeeId)
   if (filters.shiftId) params.set('shiftId', filters.shiftId)
 
   const query = params.toString()
   const path = query ? `/invoices?${query}` : '/invoices'
-  return apiGet(path, invoicesResponseSchema, signal ?? new AbortController().signal, true)
+  return apiGet(
+    path,
+    invoicesResponseSchema,
+    signal ?? new AbortController().signal,
+    true,
+  )
 }
 
 export async function getInvoiceById(
   id: string,
   signal?: AbortSignal,
 ): Promise<Invoice> {
-  return apiGet(`/invoices/${id}`, invoiceSchema, signal ?? new AbortController().signal, true)
+  return apiGet(
+    `/invoices/${id}`,
+    invoiceSchema,
+    signal ?? new AbortController().signal,
+    true,
+  )
 }
 
 export async function voidInvoice(id: string): Promise<Invoice> {
@@ -189,6 +227,7 @@ export async function createPaymentAttempt(
     `/invoices/${invoiceId}/payment-attempts`,
     paymentAttemptSchema,
     { ...payload },
+    { timeoutMs: payload.provider === 'MOMO' ? 35_000 : 10_000 },
   )
 }
 
@@ -212,6 +251,9 @@ export async function reconcilePaymentAttempt(
     'POST',
     paymentAttemptSchema,
     {},
+    undefined,
+    true,
+    35_000,
   )
 }
 
@@ -221,11 +263,10 @@ export function getPaymentAttempt(id: string, signal?: AbortSignal) {
 
 export async function createUnpaidInvoice(
   orderSessionId: string,
+  options: { orderItemIds?: string[]; promotionId?: string | null } = {},
 ): Promise<Invoice> {
-  return apiMutate(
-    '/invoices',
-    'POST',
-    invoiceSchema,
-    { orderSessionId },
-  )
+  return apiMutate('/invoices', 'POST', invoiceSchema, {
+    orderSessionId,
+    ...options,
+  })
 }

@@ -4,17 +4,20 @@ import { Button } from '../../../shared/ui/button'
 import { cn } from '../../../shared/ui/utils'
 import { formatLineAmount } from '../../../shared/lib/format'
 import type { SessionItem } from '../pos.api'
+import { OrderOptions } from '../../../shared/ui/order-options'
 
 interface PosOrderItemsListProps {
   orderItems: SessionItem[]
   onCancelItem: (itemId: string, reason: string) => void
   isCancelling?: boolean
+  canCancel: boolean
 }
 
 export function PosOrderItemsList({
   orderItems,
   onCancelItem,
   isCancelling = false,
+  canCancel,
 }: PosOrderItemsListProps) {
   return (
     <div className="space-y-2">
@@ -30,6 +33,8 @@ export function PosOrderItemsList({
         <div className="mt-2 space-y-2 max-h-[300px] overflow-y-auto pr-1">
           {orderItems.map((item) => {
             const isCancelable =
+              canCancel &&
+              !item.invoiceId &&
               !item.isPaid &&
               item.serveStatus !== 'SERVED' &&
               item.serveStatus !== 'CANCELLED'
@@ -49,7 +54,8 @@ export function PosOrderItemsList({
                     <span
                       className={cn(
                         'text-sm font-semibold text-foreground',
-                        item.serveStatus === 'CANCELLED' && 'line-through text-muted-foreground',
+                        item.serveStatus === 'CANCELLED' &&
+                          'line-through text-muted-foreground',
                       )}
                     >
                       {item.quantity}x {item.menuItem.name}
@@ -67,6 +73,7 @@ export function PosOrderItemsList({
                       {item.serveStatus}
                     </Badge>
                   </div>
+                  <OrderOptions options={item.selectedOptions} />
                   {item.note && (
                     <small className="block text-xs text-muted-foreground">
                       {item.note}
@@ -85,7 +92,8 @@ export function PosOrderItemsList({
                     title="Hủy món"
                     disabled={isCancelling}
                     onClick={() => {
-                      const reason = window.prompt('Nhập lý do hủy món:') || 'Khách đổi ý'
+                      const reason = window.prompt('Nhập lý do hủy món:')
+                      if (reason === null || !reason.trim()) return
                       onCancelItem(item.id, reason)
                     }}
                     className="h-8 w-8 text-destructive hover:bg-destructive/10 shrink-0 cursor-pointer"

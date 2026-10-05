@@ -37,6 +37,7 @@ import {
 } from '../../shared/ui/dialog'
 import { cn } from '../../shared/ui/utils'
 import { posKeys } from './pos.keys'
+import { TakeawayHandoffQueue } from './components/takeaway-handoff-queue'
 
 export default function PosTablesPage() {
   const { employee, authorization } = useOutletContext<Session>()
@@ -73,7 +74,9 @@ export default function PosTablesPage() {
       return openOrderSession(tableId, tableId ? guestCount : undefined)
     },
     onSuccess: (session) => {
-      void queryClient.invalidateQueries({ queryKey: posKeys.tables(employee.id) })
+      void queryClient.invalidateQueries({
+        queryKey: posKeys.tables(employee.id),
+      })
       void queryClient.invalidateQueries({
         queryKey: posKeys.sessions(employee.id),
       })
@@ -84,9 +87,16 @@ export default function PosTablesPage() {
     },
   })
 
-  if (tablesQuery.isPending || sessionsQuery.isPending || shiftQuery.isPending) {
+  if (
+    tablesQuery.isPending ||
+    sessionsQuery.isPending ||
+    shiftQuery.isPending
+  ) {
     return (
-      <main className="flex min-h-[300px] items-center justify-center p-8 text-muted-foreground" role="status">
+      <main
+        className="flex min-h-[300px] items-center justify-center p-8 text-muted-foreground"
+        role="status"
+      >
         <p className="animate-pulse">Đang tải sơ đồ bàn…</p>
       </main>
     )
@@ -95,7 +105,9 @@ export default function PosTablesPage() {
   if (tablesQuery.isError) {
     return (
       <main className="mx-auto my-12 max-w-md rounded-lg border border-destructive/20 bg-destructive/5 p-6 text-center">
-        <p className="text-destructive font-semibold" role="alert">{errorMessage(tablesQuery.error)}</p>
+        <p className="text-destructive font-semibold" role="alert">
+          {errorMessage(tablesQuery.error)}
+        </p>
         <Button
           onClick={() => void tablesQuery.refetch()}
           disabled={tablesQuery.isFetching}
@@ -129,7 +141,9 @@ export default function PosTablesPage() {
       return
     }
     if (!canCreateSession) {
-      setActionError('Bạn không có quyền mở phiên bàn mới (/orders_sessions_create).')
+      setActionError(
+        'Bạn không có quyền mở phiên bàn mới (/orders_sessions_create).',
+      )
       return
     }
     setOpeningTableId(table.id)
@@ -139,8 +153,12 @@ export default function PosTablesPage() {
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <p className="text-xs font-bold uppercase tracking-wider text-primary">BÁN HÀNG</p>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">Sơ đồ bàn & Bán lẻ (POS)</h1>
+          <p className="text-xs font-bold uppercase tracking-wider text-primary">
+            BÁN HÀNG
+          </p>
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">
+            Sơ đồ bàn & Bán lẻ (POS)
+          </h1>
         </div>
 
         {canCreateSession && (
@@ -164,7 +182,8 @@ export default function PosTablesPage() {
           <div className="flex items-center gap-2.5">
             <AlertCircle className="h-5 w-5 shrink-0 text-amber-600" />
             <span className="text-sm">
-              <strong>Lưu ý:</strong> Bạn chưa mở ca thu ngân. Vui lòng mở ca trước khi chốt hóa đơn.
+              <strong>Lưu ý:</strong> Bạn chưa mở ca thu ngân. Vui lòng mở ca
+              trước khi chốt hóa đơn.
             </span>
           </div>
           <Link
@@ -231,12 +250,18 @@ export default function PosTablesPage() {
         <DialogHeader>
           <DialogTitle>Mở bàn phục vụ</DialogTitle>
           <DialogDescription>
-            Bàn: <strong className="text-foreground">{tables.find((t) => t.id === openingTableId)?.name}</strong>
+            Bàn:{' '}
+            <strong className="text-foreground">
+              {tables.find((t) => t.id === openingTableId)?.name}
+            </strong>
           </DialogDescription>
         </DialogHeader>
 
         <div className="mt-4 space-y-2">
-          <label htmlFor="guestCountInput" className="block text-sm font-semibold text-foreground">
+          <label
+            htmlFor="guestCountInput"
+            className="block text-sm font-semibold text-foreground"
+          >
             Số lượng khách
           </label>
           <Input
@@ -245,7 +270,9 @@ export default function PosTablesPage() {
             min="1"
             max="50"
             value={guestCount}
-            onChange={(e) => setGuestCount(Math.max(1, Number(e.target.value) || 1))}
+            onChange={(e) =>
+              setGuestCount(Math.max(1, Number(e.target.value) || 1))
+            }
           />
         </div>
 
@@ -276,7 +303,8 @@ export default function PosTablesPage() {
       {/* Lưới sơ đồ bàn */}
       <div>
         <h2 className="mb-4 flex items-center gap-2 text-lg font-bold text-foreground">
-          <UtensilsCrossed className="h-5 w-5 text-primary" /> Danh sách bàn tại quán
+          <UtensilsCrossed className="h-5 w-5 text-primary" /> Danh sách bàn tại
+          quán
         </h2>
 
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
@@ -295,8 +323,13 @@ export default function PosTablesPage() {
                 )}
               >
                 <div className="flex items-start justify-between gap-1">
-                  <span className="text-base font-bold text-foreground">{table.name}</span>
-                  <Badge variant={isOccupied ? 'warning' : 'success'} className="text-[11px]">
+                  <span className="text-base font-bold text-foreground">
+                    {table.name}
+                  </span>
+                  <Badge
+                    variant={isOccupied ? 'warning' : 'success'}
+                    className="text-[11px]"
+                  >
                     {isOccupied ? 'Có khách' : 'Trống'}
                   </Badge>
                 </div>
@@ -324,12 +357,14 @@ export default function PosTablesPage() {
         </div>
       </div>
 
+      <TakeawayHandoffQueue />
       {/* Danh sách đơn mang đi (Takeaway) */}
       {takeawaySessions.length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base font-bold text-foreground">
-              <ShoppingBag className="h-4 w-4 text-primary" /> Đơn mang đi đang phục vụ ({takeawaySessions.length})
+              <ShoppingBag className="h-4 w-4 text-primary" /> Đơn mang đi đang
+              phục vụ ({takeawaySessions.length})
             </CardTitle>
             <CardDescription>
               Các phiên gọi món mang đi chưa thanh toán
@@ -348,7 +383,8 @@ export default function PosTablesPage() {
                       Đơn mang đi #{session.id.slice(0, 8)}
                     </div>
                     <div className="text-xs text-muted-foreground">
-                      {session._count.orderItems} món • {session.employee?.fullName ?? 'Nhân viên'}
+                      {session._count.orderItems} món •{' '}
+                      {session.employee?.fullName ?? 'Nhân viên'}
                     </div>
                   </div>
                   <span className="text-xs font-semibold text-primary">

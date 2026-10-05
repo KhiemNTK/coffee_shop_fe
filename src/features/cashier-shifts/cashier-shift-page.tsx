@@ -28,20 +28,49 @@ export default function CashierShiftPage() {
   const { employee, authorization } = useOutletContext<Session>()
 
   // Permissions
+  const canReadCurrent = authorization.permissionKeys.includes(
+    '/cashier-shifts_current',
+  )
   const canOpen = authorization.permissionKeys.includes('/cashier-shifts_open')
-  const canClose = authorization.permissionKeys.includes('/cashier-shifts_close')
-  const canTransact = authorization.permissionKeys.includes('/cashier-shifts_transactions-create')
-  const canReadShifts = authorization.permissionKeys.includes('/cashier-shifts_read')
-  const canReviewExpenses = authorization.permissionKeys.includes('/cashier-shifts_expenses-review')
-  const canCreateHandover = authorization.permissionKeys.includes('/cash-handovers_create')
-  const canReadHandovers = authorization.permissionKeys.includes('/cash-handovers_read')
-  const canReviewHandover = authorization.permissionKeys.includes('/cash-handovers_review')
-  const canSettleHandover = authorization.permissionKeys.includes('/cash-handovers_settle')
+  const canClose = authorization.permissionKeys.includes(
+    '/cashier-shifts_close',
+  )
+  const canTransact = authorization.permissionKeys.includes(
+    '/cashier-shifts_transactions-create',
+  )
+  const canReadShifts = authorization.permissionKeys.includes(
+    '/cashier-shifts_read',
+  )
+  const canReviewExpenses = authorization.permissionKeys.includes(
+    '/cashier-shifts_expenses-review',
+  )
+  const canCreateHandover = authorization.permissionKeys.includes(
+    '/cash-handovers_create',
+  )
+  const canReadHandovers = authorization.permissionKeys.includes(
+    '/cash-handovers_read',
+  )
+  const canReviewHandover = authorization.permissionKeys.includes(
+    '/cash-handovers_review',
+  )
+  const canSettleHandover = authorization.permissionKeys.includes(
+    '/cash-handovers_settle',
+  )
   const canReadFunds = authorization.permissionKeys.includes('/funds_read')
-  const canManageFunds = authorization.permissionKeys.includes('/funds_manage')
+  const canManageFunds =
+    canReadFunds && authorization.permissionKeys.includes('/funds_manage')
 
   // Tabs state
-  const [activeTab, setActiveTab] = useState<MainTab>('current')
+  const [activeTab, setActiveTab] = useState<MainTab>(() => {
+    const tab = new URLSearchParams(window.location.search).get('tab')
+    if (tab === 'expenses' && canReviewExpenses) return 'expenses'
+    if (tab === 'handovers' && canReadHandovers) return 'handovers'
+    if (canReadCurrent) return 'current'
+    if (canReadShifts) return 'history'
+    if (canReadHandovers || canCreateHandover) return 'handovers'
+    if (canReviewExpenses) return 'expenses'
+    return 'funds'
+  })
 
   // Stable timestamp for pure renders
   const [nowTimestamp] = useState(() => Date.now())
@@ -56,7 +85,8 @@ export default function CashierShiftPage() {
   }
 
   // Coordinated global modal states
-  const [isCreateHandoverModalOpen, setIsCreateHandoverModalOpen] = useState(false)
+  const [isCreateHandoverModalOpen, setIsCreateHandoverModalOpen] =
+    useState(false)
   const [createHandoverShiftId, setCreateHandoverShiftId] = useState('')
   const [isCreateFundModalOpen, setIsCreateFundModalOpen] = useState(false)
 
@@ -64,6 +94,7 @@ export default function CashierShiftPage() {
   const currentShiftQuery = useQuery({
     queryKey: ['private', employee.id, 'cashier-shift', 'current'],
     queryFn: ({ signal }) => getCurrentShift(signal),
+    enabled: canReadCurrent,
   })
 
   return (
@@ -80,7 +111,8 @@ export default function CashierShiftPage() {
                 Quản lý Ca & Quỹ tiền mặt
               </h1>
               <p className="text-sm text-muted-foreground mt-0.5">
-                Vận hành két thu ngân, lập biên bản bàn giao, duyệt phiếu chi và kiểm soát số dư két an toàn
+                Vận hành két thu ngân, lập biên bản bàn giao, duyệt phiếu chi và
+                kiểm soát số dư két an toàn
               </p>
             </div>
           </div>
@@ -145,21 +177,23 @@ export default function CashierShiftPage() {
 
       {/* TABS NAVIGATION */}
       <div className="flex items-center gap-2 border-b border-border overflow-x-auto pb-px">
-        <button
-          onClick={() => setActiveTab('current')}
-          className={cn(
-            'flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap',
-            activeTab === 'current'
-              ? 'border-primary text-primary'
-              : 'border-transparent text-muted-foreground hover:text-foreground',
-          )}
-        >
-          <Lock className="w-4 h-4" />
-          Ca làm việc của tôi
-          {currentShiftQuery.data?.status === 'OPEN' && (
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-          )}
-        </button>
+        {canReadCurrent && (
+          <button
+            onClick={() => setActiveTab('current')}
+            className={cn(
+              'flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap',
+              activeTab === 'current'
+                ? 'border-primary text-primary'
+                : 'border-transparent text-muted-foreground hover:text-foreground',
+            )}
+          >
+            <Lock className="w-4 h-4" />
+            Ca làm việc của tôi
+            {currentShiftQuery.data?.status === 'OPEN' && (
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+            )}
+          </button>
+        )}
 
         {(canReadHandovers || canCreateHandover) && (
           <button
@@ -191,7 +225,7 @@ export default function CashierShiftPage() {
           </button>
         )}
 
-        {(canReadFunds || canManageFunds) && (
+        {canReadFunds && (
           <button
             onClick={() => setActiveTab('funds')}
             className={cn(
@@ -223,10 +257,10 @@ export default function CashierShiftPage() {
       </div>
 
       {/* ACTIVE TAB CONTENT */}
-      {activeTab === 'current' && (
+      {activeTab === 'current' && canReadCurrent && (
         <CurrentShiftTab
           employeeId={employee.id}
-          canOpen={canOpen}
+          canOpen={canOpen && canReadFunds}
           canClose={canClose}
           canTransact={canTransact}
           canCreateHandover={canCreateHandover}
@@ -281,7 +315,7 @@ export default function CashierShiftPage() {
         />
       )}
 
-      {activeTab === 'funds' && (canReadFunds || canManageFunds) && (
+      {activeTab === 'funds' && canReadFunds && (
         <FundsTab
           canManageFunds={canManageFunds}
           isCreateModalOpen={isCreateFundModalOpen}

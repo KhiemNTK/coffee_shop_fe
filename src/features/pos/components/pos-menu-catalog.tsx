@@ -1,4 +1,6 @@
 import { Coffee, Search } from 'lucide-react'
+import type { ReactNode } from 'react'
+import { Button } from '../../../shared/ui/button'
 import { Card, CardContent } from '../../../shared/ui/card'
 import { Input } from '../../../shared/ui/input'
 import { formatPrice, type MenuItem } from '../../menu/menu.api'
@@ -20,6 +22,9 @@ interface PosMenuCatalogProps {
   isLoadingMenu: boolean
   onSelectItem: (item: MenuItem) => void
   disabled?: boolean
+  pagination?: ReactNode
+  error?: string | null
+  onRetry?: () => void
 }
 
 export function PosMenuCatalog({
@@ -33,6 +38,9 @@ export function PosMenuCatalog({
   isLoadingMenu,
   onSelectItem,
   disabled = false,
+  pagination,
+  error,
+  onRetry,
 }: PosMenuCatalogProps) {
   return (
     <Card className="lg:col-span-7 p-5">
@@ -76,8 +84,18 @@ export function PosMenuCatalog({
         />
 
         {/* Lưới món ăn */}
-        {isLoadingMenu ? (
-          <p className="py-8 text-center text-sm text-muted-foreground animate-pulse" role="status">
+        {error ? (
+          <div role="alert">
+            <p>{error}</p>
+            <Button variant="outline" onClick={onRetry}>
+              Thử lại
+            </Button>
+          </div>
+        ) : isLoadingMenu ? (
+          <p
+            className="py-8 text-center text-sm text-muted-foreground animate-pulse"
+            role="status"
+          >
             Đang tải món…
           </p>
         ) : menuItems?.length === 0 ? (
@@ -104,6 +122,7 @@ export function PosMenuCatalog({
             ))}
           </div>
         )}
+        {pagination}
       </CardContent>
     </Card>
   )

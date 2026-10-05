@@ -399,18 +399,18 @@ test.describe('Cash & Shifts Management Feature (Slice 1)', () => {
 
   test('TC-CS-07: Records bank deposit for approved handover', async ({ page }) => {
     await page.goto('/staff/shifts')
-    await page.getByRole('button', { name: /Bàn giao két & Nộp tiền/i }).click({ force: true })
+    await page.getByRole('button', { name: /Bàn giao két & Nộp tiền/i }).click()
     await expect(page.getByText('Nguyễn Thu Ngân')).toBeVisible()
 
     // Click Nộp tiền
-    await page.getByRole('button', { name: 'Nộp tiền', exact: true }).click({ force: true })
+    await page.getByRole('button', { name: 'Nộp tiền', exact: true }).click()
     const dialog = page.getByRole('dialog')
     await expect(dialog).toBeVisible()
     await expect(dialog.getByText(/Biên bản Nộp tiền/i)).toBeVisible()
 
     await dialog.getByPlaceholder('Ví dụ: VCB-20261002-889922').fill('VCB-20261002-998811')
     await dialog.getByPlaceholder('Ví dụ: Biên lai nộp tiền quầy giao dịch số 0928...').fill('UNC-001293')
-    await dialog.getByRole('button', { name: 'Xác nhận nộp tiền' }).click({ force: true })
+    await dialog.getByRole('button', { name: 'Xác nhận nộp tiền' }).click()
 
     await expect(page.getByText(/thành công!/)).toBeVisible()
   })

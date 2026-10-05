@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { apiGet, apiMutate, ApiError } from '../../shared/api/client'
 import { apiIdempotentMutate } from '../../shared/api/idempotency'
 import { moneySchema } from '../menu/menu.api'
+import { signedMoneySchema } from '../../shared/api/money'
 
 // --- Funds Schemas ---
 
@@ -43,7 +44,7 @@ export const shiftReconciliationSchema = z.object({
   totalSales: moneySchema.optional(),
   actualEndingCash: moneySchema.optional(),
   reportedEndingCash: moneySchema.nullable().optional(),
-  difference: moneySchema.nullable().optional(),
+  difference: signedMoneySchema.nullable().optional(),
 })
 
 export const cashierShiftSchema = z.object({
@@ -52,7 +53,8 @@ export const cashierShiftSchema = z.object({
   closedAt: z.string().nullable().optional(),
   startingCash: moneySchema,
   expectedStartingCash: moneySchema.optional(),
-  openingDifference: moneySchema.optional(),
+  openingDifference: signedMoneySchema.optional(),
+  difference: signedMoneySchema.nullable().optional(),
   reportedEndingCash: moneySchema.nullable().optional(),
   actualEndingCash: moneySchema.nullable().optional(),
   closingNote: z.string().nullable().optional(),
@@ -95,10 +97,7 @@ export const cashHandoverStatusSchema = z.enum([
 ])
 export type CashHandoverStatus = z.infer<typeof cashHandoverStatusSchema>
 
-export const cashHandoverSettlementStatusSchema = z.enum([
-  'PENDING',
-  'SETTLED',
-])
+export const cashHandoverSettlementStatusSchema = z.enum(['PENDING', 'SETTLED'])
 export type CashHandoverSettlementStatus = z.infer<
   typeof cashHandoverSettlementStatusSchema
 >
@@ -111,7 +110,7 @@ export const cashHandoverSchema = z.object({
   requestedById: z.string(),
   expectedCash: moneySchema,
   countedCash: moneySchema,
-  varianceAmount: moneySchema,
+  varianceAmount: signedMoneySchema,
   retainedCash: moneySchema,
   transferAmount: moneySchema,
   status: cashHandoverStatusSchema,
@@ -282,11 +281,15 @@ export async function closeCashierShift(
   closingNote?: string,
   idempotencyKey?: string,
 ): Promise<CashierShift> {
-  return apiIdempotentMutate('/cashier-shifts/current/close', cashierShiftSchema, {
-    reportedEndingCash,
-    closingNote: closingNote?.trim() || undefined,
-    idempotencyKey,
-  })
+  return apiIdempotentMutate(
+    '/cashier-shifts/current/close',
+    cashierShiftSchema,
+    {
+      reportedEndingCash,
+      closingNote: closingNote?.trim() || undefined,
+      idempotencyKey,
+    },
+  )
 }
 
 export async function addCashMovement(
@@ -294,15 +297,11 @@ export async function addCashMovement(
   amount: string,
   description: string,
 ): Promise<unknown> {
-  return apiIdempotentMutate(
-    '/cashier-shifts/current/transactions',
-    z.any(),
-    {
-      type,
-      amount,
-      description,
-    },
-  )
+  return apiIdempotentMutate('/cashier-shifts/current/transactions', z.any(), {
+    type,
+    amount,
+    description,
+  })
 }
 
 // --- API Functions: Shifts History ---
@@ -336,6 +335,9 @@ export async function getCashierShifts(
 }
 
 // --- API Functions: Funds Management ---
+export function getCashierShift(id: string, signal?: AbortSignal) {
+  return apiGet(`/cashier-shifts/${id}`, cashierShiftSchema, signal, true)
+}
 
 export interface GetFundsParams {
   page?: number
@@ -392,8 +394,14 @@ export async function updateFund(
   return apiMutate(`/funds/${id}`, 'PATCH', fundSchema, payload)
 }
 
-export async function deleteFund(id: string): Promise<{ success: boolean; id: string }> {
-  return apiMutate(`/funds/${id}`, 'DELETE', z.object({ success: z.boolean(), id: z.string() }))
+export async function deleteFund(
+  id: string,
+): Promise<{ success: boolean; id: string }> {
+  return apiMutate(
+    `/funds/${id}`,
+    'DELETE',
+    z.object({ success: z.boolean(), id: z.string() }),
+  )
 }
 
 // --- API Functions: Cash Handovers ---
@@ -415,7 +423,8 @@ export async function getAllCashHandovers(
   if (params.page) q.set('page', String(params.page))
   if (params.itemPerPage) q.set('itemPerPage', String(params.itemPerPage))
   if (params.status) q.set('status', params.status)
-  if (params.settlementStatus) q.set('settlementStatus', params.settlementStatus)
+  if (params.settlementStatus)
+    q.set('settlementStatus', params.settlementStatus)
   if (params.shiftId) q.set('shiftId', params.shiftId)
   if (params.requestedById) q.set('requestedById', params.requestedById)
 
@@ -480,9 +489,14 @@ export async function approveCashHandover(
   id: string,
   note?: string,
 ): Promise<CashHandover> {
-  return apiMutate(`/cash-handovers/${id}/approve`, 'POST', cashHandoverSchema, {
-    note: note?.trim() || undefined,
-  })
+  return apiMutate(
+    `/cash-handovers/${id}/approve`,
+    'POST',
+    cashHandoverSchema,
+    {
+      note: note?.trim() || undefined,
+    },
+  )
 }
 
 export async function rejectCashHandover(
@@ -520,7 +534,12 @@ export async function registerBankDeposit(
 }
 
 export async function cancelCashHandover(id: string): Promise<CashHandover> {
-  return apiMutate(`/cash-handovers/${id}/cancel`, 'POST', cashHandoverSchema, {})
+  return apiMutate(
+    `/cash-handovers/${id}/cancel`,
+    'POST',
+    cashHandoverSchema,
+    {},
+  )
 }
 
 // --- API Functions: Cash Expense Requests ---
