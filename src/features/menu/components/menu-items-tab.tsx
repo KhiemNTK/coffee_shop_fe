@@ -1,6 +1,8 @@
 import { Boxes, ChefHat, Pencil, Search, Sliders, Trash2 } from 'lucide-react'
 import { type UseQueryResult, type UseMutationResult } from '@tanstack/react-query'
-import { type AdminCategory, type AdminMenuItem, type AdminMenuItemsResponse, type ItemStockStatusResponse } from '../menu.admin.api'
+import { type AdminMenuItem, type AdminMenuItemsResponse } from '../menu.admin.api'
+import { CatalogPicker, type CatalogSelection } from './catalog-picker'
+import { Pagination } from '../../../shared/ui/pagination'
 import { formatPrice } from '../menu.api'
 import { errorMessage } from '../../../shared/api/client'
 import { Card, CardContent, CardHeader, CardTitle } from '../../../shared/ui/card'
@@ -10,12 +12,11 @@ import { Badge } from '../../../shared/ui/badge'
 
 interface MenuItemsTabProps {
   itemsQuery: UseQueryResult<AdminMenuItemsResponse, Error>
-  categoriesList: AdminCategory[]
-  stockStatusList: ItemStockStatusResponse['list']
+  employeeId: string
   keyword: string
   onKeywordChange: (val: string) => void
-  categoryFilter: string
-  onCategoryFilterChange: (val: string) => void
+  categoryFilter: CatalogSelection
+  onCategoryFilterChange: (val: CatalogSelection) => void
   availabilityFilter: 'ALL' | 'ACTIVE' | 'INACTIVE'
   onAvailabilityFilterChange: (val: 'ALL' | 'ACTIVE' | 'INACTIVE') => void
   page: number
@@ -31,8 +32,7 @@ interface MenuItemsTabProps {
 
 export function MenuItemsTab({
   itemsQuery,
-  categoriesList,
-  stockStatusList,
+  employeeId,
   keyword,
   onKeywordChange,
   categoryFilter,
@@ -54,11 +54,13 @@ export function MenuItemsTab({
       {/* Filters Bar */}
       <Card>
         <CardContent className="p-4">
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
+          <div className="grid grid-cols-1 items-start gap-3 sm:grid-cols-4">
             <div className="relative sm:col-span-2">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 placeholder="Tìm kiếm theo tên món..."
+                aria-label="Tìm tên món"
+                maxLength={120}
                 value={keyword}
                 onChange={(e) => {
                   onKeywordChange(e.target.value)
@@ -69,22 +71,9 @@ export function MenuItemsTab({
             </div>
 
             <div>
-              <select
-                className="w-full rounded-md border border-input bg-card px-3 py-2 text-sm shadow-xs focus:outline-hidden focus:ring-1 focus:ring-ring"
-                value={categoryFilter}
-                onChange={(e) => {
-                  onCategoryFilterChange(e.target.value)
-                  onPageChange(1)
-                }}
-                aria-label="Lọc theo danh mục"
-              >
-                <option value="">Tất cả danh mục</option>
-                {categoriesList.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
+              <CatalogPicker employeeId={employeeId} resource="category" label="Lọc theo danh mục"
+                selected={categoryFilter} emptyLabel="Tất cả danh mục"
+                onChange={value => { onCategoryFilterChange(value); onPageChange(1) }} />
             </div>
 
             <div>
@@ -109,7 +98,7 @@ export function MenuItemsTab({
       {/* Items Table */}
       {itemsQuery.isError ? (
         <Card className="border-destructive/20 bg-destructive/5 p-6 text-center">
-          <p className="font-semibold text-destructive">{errorMessage(itemsQuery.error)}</p>
+          <p role="alert" className="font-semibold text-destructive">{errorMessage(itemsQuery.error)}</p>
           <Button
             variant="outline"
             onClick={() => void itemsQuery.refetch()}
@@ -126,12 +115,12 @@ export function MenuItemsTab({
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-3">
             <CardTitle className="text-base font-bold text-foreground">
-              Danh sách món ({itemsQuery.data.totalItems})
+              Món theo bộ lọc ({itemsQuery.data.totalItems})
             </CardTitle>
           </CardHeader>
           <CardContent className="p-0">
             <div className="w-full max-w-full overflow-x-auto">
-              <table className="w-full text-left text-sm">
+              <table className="w-full min-w-[720px] text-left text-sm">
                 <thead className="border-y border-border bg-muted/40 text-xs font-bold uppercase tracking-wider text-muted-foreground">
                   <tr>
                     <th className="px-4 py-3">Món</th>
@@ -139,13 +128,11 @@ export function MenuItemsTab({
                     <th className="px-4 py-3">Quầy pha chế</th>
                     <th className="px-4 py-3 text-right">Đơn giá</th>
                     <th className="px-4 py-3 text-center">Trạng thái bán</th>
-                    <th className="px-4 py-3 text-center">Tồn nguyên liệu</th>
                     <th className="px-4 py-3 text-right">Thao tác</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
                   {itemsQuery.data.list.map((item) => {
-                    const stockInfo = stockStatusList.find((s) => s.id === item.id)
                     return (
                       <tr key={item.id} className="hover:bg-muted/30 transition-colors">
                         <td className="px-4 py-3.5 font-semibold text-foreground">
@@ -199,30 +186,6 @@ export function MenuItemsTab({
                             <Badge variant={item.isAvailable ? 'success' : 'secondary'}>
                               {item.isAvailable ? 'Đang bán' : 'Ngừng bán'}
                             </Badge>
-                          )}
-                        </td>
-
-                        <td className="px-4 py-3.5 text-center">
-                          {stockInfo ? (
-                            stockInfo.stockStatus === 'OK' ? (
-                              <Badge variant="outline" className="border-emerald-500/30 text-emerald-600 bg-emerald-500/5 text-xs">
-                                Đủ nguyên liệu
-                              </Badge>
-                            ) : stockInfo.stockStatus === 'LOW' ? (
-                              <Badge variant="outline" className="border-amber-500/40 text-amber-600 bg-amber-500/10 text-xs">
-                                Sắp hết ({stockInfo.atRiskIngredients.length})
-                              </Badge>
-                            ) : stockInfo.stockStatus === 'INSUFFICIENT' ? (
-                              <Badge variant="destructive" className="text-xs">
-                                Thiếu kho ({stockInfo.atRiskIngredients.length})
-                              </Badge>
-                            ) : (
-                              <Badge variant="secondary" className="text-xs text-muted-foreground">
-                                Chưa lập công thức
-                              </Badge>
-                            )
-                          ) : (
-                            <span className="text-xs text-muted-foreground">—</span>
                           )}
                         </td>
 
@@ -289,33 +252,9 @@ export function MenuItemsTab({
             )}
 
             {/* Pagination */}
-            {itemsQuery.data.totalPages > 1 && (
-              <div className="flex items-center justify-between border-t border-border px-4 py-3">
-                <p className="text-xs text-muted-foreground">
-                  Trang {itemsQuery.data.currentPage} / {itemsQuery.data.totalPages}
-                </p>
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => onPageChange((p: number) => Math.max(1, p - 1))}
-                    disabled={page <= 1}
-                  >
-                    Trước
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() =>
-                      onPageChange((p: number) => Math.min(itemsQuery.data.totalPages, p + 1))
-                    }
-                    disabled={page >= itemsQuery.data.totalPages}
-                  >
-                    Sau
-                  </Button>
-                </div>
-              </div>
-            )}
+            {(itemsQuery.data.totalPages > 1 || page > 1) && <Pagination page={page} totalPages={itemsQuery.data.totalPages}
+              disabled={itemsQuery.isFetching} onPage={onPageChange} />}
+            {page > Math.max(1, itemsQuery.data.totalPages) && <Button variant="outline" onClick={() => onPageChange(1)}>Về trang đầu</Button>}
           </CardContent>
         </Card>
       )}

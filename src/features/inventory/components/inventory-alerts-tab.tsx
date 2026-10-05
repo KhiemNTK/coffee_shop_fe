@@ -1,5 +1,6 @@
 import { ArrowDownToLine, CheckCircle2, RefreshCw } from 'lucide-react'
 import { type ReorderAlertRow, type ReorderAlertsResponse } from '../inventory.api'
+import { formatQuantity } from '../quantity'
 import { Badge, Button, Card, CardContent } from '../../../shared/ui'
 
 interface InventoryAlertsTabProps {
@@ -63,13 +64,13 @@ export function InventoryAlertsTab({
                         {alert.unitName}
                       </td>
                       <td className="py-3.5 px-4 text-right font-bold text-destructive">
-                        {Number(alert.stock).toLocaleString('vi-VN')} {alert.unitName}
+                        {formatQuantity(alert.stock)} {alert.unitName}
                       </td>
                       <td className="py-3.5 px-4 text-right text-xs text-muted-foreground">
-                        {Number(alert.reorderPoint).toLocaleString('vi-VN')}
+                        {formatQuantity(alert.reorderPoint)}
                       </td>
                       <td className="py-3.5 px-4 text-right font-bold text-amber-700">
-                        +{Number(alert.shortageQuantity).toLocaleString('vi-VN')} {alert.unitName}
+                        +{formatQuantity(alert.shortageQuantity)} {alert.unitName}
                       </td>
                       <td className="py-3.5 px-4 sm:px-6 text-center">
                         <Button

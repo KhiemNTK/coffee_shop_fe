@@ -1,300 +1,100 @@
-import { useState } from 'react'
-import { useMutation } from '@tanstack/react-query'
-import { type AdminCategory, type AdminMenuItem, createMenuItem, updateMenuItem, deleteMenuItem } from '../menu.admin.api'
-import { errorMessage } from '../../../shared/api/client'
-import { Button } from '../../../shared/ui/button'
-import { Input } from '../../../shared/ui/input'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '../../../shared/ui/dialog'
+import { useId, useRef, useState } from 'react'
+import { useMutation, useQuery } from '@tanstack/react-query'
+import { type AdminMenuItem, type AdminMenuItemDetail, createMenuItem, getAdminItem, updateMenuItem, deleteMenuItem } from '../menu.admin.api'
+import { ApiError, errorMessage } from '../../../shared/api/client'
+import { Button, Input, Dialog, DialogFooter, DialogHeader, DialogTitle } from '../../../shared/ui'
+import { CatalogPicker, type CatalogSelection } from './catalog-picker'
 
-export function CreateMenuItemModal({
-  categories,
-  stations,
-  onClose,
-  onSuccess,
-}: {
-  categories: AdminCategory[]
-  stations: Array<{ id: string; name: string }>
-  onClose: () => void
-  onSuccess: () => void
-}) {
-  const [name, setName] = useState('')
-  const [price, setPrice] = useState('')
-  const [categoryId, setCategoryId] = useState(categories[0]?.id ?? '')
-  const [kitchenStationId, setKitchenStationId] = useState<string>('')
-  const [error, setError] = useState<string | null>(null)
+type ItemModalProps = { employeeId: string; canReadStations: boolean; onClose: () => void; onSuccess: () => void; onSettled: () => void }
 
-  const mutation = useMutation({
-    mutationFn: () =>
-      createMenuItem({
-        name: name.trim(),
-        price: price.trim(),
-        categoryId,
-        kitchenStationId: kitchenStationId || null,
-      }),
-    onSuccess,
-    onError: (err) => setError(errorMessage(err)),
-  })
-
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    if (!name.trim()) return setError('Vui lòng nhập tên món')
-    if (!price.trim() || isNaN(Number(price))) return setError('Giá món không hợp lệ')
-    if (!categoryId) return setError('Vui lòng chọn danh mục món')
-    setError(null)
-    mutation.mutate()
-  }
-
-  return (
-    <Dialog open onOpenChange={onClose}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Tạo món mới</DialogTitle>
-          <DialogDescription>Thêm món ăn hoặc thức uống mới vào thực đơn.</DialogDescription>
-        </DialogHeader>
-
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {error && <p className="text-xs text-destructive">{error}</p>}
-
-          <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-foreground">Tên món *</label>
-            <Input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="VD: Cà phê Muối Cốt dừa"
-              required
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-foreground">Đơn giá (VNĐ) *</label>
-              <Input
-                type="number"
-                value={price}
-                onChange={(e) => setPrice(e.target.value)}
-                placeholder="VD: 35000"
-                min="0"
-                step="1000"
-                required
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-foreground">Danh mục *</label>
-              <select
-                className="w-full rounded-md border border-input bg-card px-3 py-2 text-sm shadow-xs focus:outline-hidden focus:ring-1 focus:ring-ring"
-                value={categoryId}
-                onChange={(e) => setCategoryId(e.target.value)}
-                required
-              >
-                {categories.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-foreground">Quầy chế biến phụ trách</label>
-            <select
-              className="w-full rounded-md border border-input bg-card px-3 py-2 text-sm shadow-xs focus:outline-hidden focus:ring-1 focus:ring-ring"
-              value={kitchenStationId}
-              onChange={(e) => setKitchenStationId(e.target.value)}
-            >
-              <option value="">Không gán quầy cụ thể</option>
-              {stations.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={onClose}>
-              Hủy
-            </Button>
-            <Button type="submit" disabled={mutation.isPending}>
-              {mutation.isPending ? 'Đang tạo...' : 'Tạo món'}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
-  )
+export function CreateMenuItemModal(props: ItemModalProps) {
+  return <MenuItemEditor {...props} />
 }
 
-export function EditMenuItemModal({
-  item,
-  categories,
-  stations,
-  onClose,
-  onSuccess,
-}: {
-  item: AdminMenuItem
-  categories: AdminCategory[]
-  stations: Array<{ id: string; name: string }>
-  onClose: () => void
-  onSuccess: () => void
-}) {
-  const [name, setName] = useState(item.name)
-  const [price, setPrice] = useState(String(item.price))
-  const [categoryId, setCategoryId] = useState(item.categoryId)
-  const [kitchenStationId, setKitchenStationId] = useState<string>(item.kitchenStationId ?? '')
-  const [error, setError] = useState<string | null>(null)
-
-  const mutation = useMutation({
-    mutationFn: () =>
-      updateMenuItem(item.id, {
-        name: name.trim(),
-        price: price.trim(),
-        categoryId,
-        kitchenStationId: kitchenStationId || null,
-      }),
-    onSuccess,
-    onError: (err) => setError(errorMessage(err)),
+export function EditMenuItemModal(props: ItemModalProps & { item: AdminMenuItem }) {
+  const query = useQuery({
+    queryKey: ['private', props.employeeId, 'admin-menu-detail', props.item.id],
+    queryFn: ({ signal }) => getAdminItem(props.item.id, signal),
+    staleTime: 0, refetchOnWindowFocus: false, refetchOnReconnect: false,
   })
-
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    if (!name.trim()) return setError('Vui lòng nhập tên món')
-    if (!price.trim() || isNaN(Number(price))) return setError('Giá món không hợp lệ')
-    setError(null)
-    mutation.mutate()
-  }
-
-  return (
-    <Dialog open onOpenChange={onClose}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Cập nhật thông tin món</DialogTitle>
-          <DialogDescription>Chỉnh sửa tên, giá và danh mục của món ăn.</DialogDescription>
-        </DialogHeader>
-
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {error && <p className="text-xs text-destructive">{error}</p>}
-
-          <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-foreground">Tên món *</label>
-            <Input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="VD: Cà phê Muối"
-              required
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-foreground">Đơn giá (VNĐ) *</label>
-              <Input
-                type="number"
-                value={price}
-                onChange={(e) => setPrice(e.target.value)}
-                min="0"
-                step="1000"
-                required
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-foreground">Danh mục *</label>
-              <select
-                className="w-full rounded-md border border-input bg-card px-3 py-2 text-sm shadow-xs focus:outline-hidden focus:ring-1 focus:ring-ring"
-                value={categoryId}
-                onChange={(e) => setCategoryId(e.target.value)}
-                required
-              >
-                {categories.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-foreground">Quầy chế biến phụ trách</label>
-            <select
-              className="w-full rounded-md border border-input bg-card px-3 py-2 text-sm shadow-xs focus:outline-hidden focus:ring-1 focus:ring-ring"
-              value={kitchenStationId}
-              onChange={(e) => setKitchenStationId(e.target.value)}
-            >
-              <option value="">Không gán quầy cụ thể</option>
-              {stations.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={onClose}>
-              Hủy
-            </Button>
-            <Button type="submit" disabled={mutation.isPending}>
-              {mutation.isPending ? 'Đang lưu...' : 'Lưu thay đổi'}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
-  )
+  if (!query.isSuccess || query.isFetching) return <Dialog open onClose={props.onClose}>
+    <h2 className="pr-8 text-lg font-semibold">Cập nhật thông tin món</h2>
+    {query.isFetching ? <p role="status">Đang tải món…</p> : <><p role="alert">{errorMessage(query.error)}</p>
+      <Button variant="outline" onClick={() => void query.refetch()}>Tải lại món</Button></>}
+  </Dialog>
+  return <MenuItemEditor {...props} initial={query.data} onReload={() => void query.refetch()} />
 }
 
-export function DeleteMenuItemModal({
-  item,
-  onClose,
-  onSuccess,
-}: {
-  item: AdminMenuItem
-  onClose: () => void
-  onSuccess: () => void
-}) {
-  const [error, setError] = useState<string | null>(null)
-
+function MenuItemEditor({ initial, onReload, ...props }: ItemModalProps & { initial?: AdminMenuItemDetail; onReload?: () => void }) {
+  const id = useId()
+  const [name, setName] = useState(initial?.name ?? '')
+  const [price, setPrice] = useState(initial?.price ?? '')
+  const [category, setCategory] = useState<CatalogSelection>(initial?.category ?? null)
+  const [station, setStation] = useState<CatalogSelection>(initial?.kitchenStationId
+    ? { id: initial.kitchenStationId, name: initial.kitchenStation?.name ?? initial.kitchenStationId } : null)
+  const [validation, setValidation] = useState('')
+  const [uncertain, setUncertain] = useState(false)
+  const errorRef = useRef<HTMLParagraphElement>(null)
   const mutation = useMutation({
-    mutationFn: () => deleteMenuItem(item.id),
-    onSuccess,
-    onError: (err) => setError(errorMessage(err)),
+    mutationFn: (payload: Parameters<typeof createMenuItem>[0] | Parameters<typeof updateMenuItem>[1]) => initial
+      ? updateMenuItem(initial.id, payload)
+      : createMenuItem(payload as Parameters<typeof createMenuItem>[0]),
+    onSuccess: props.onSuccess, onSettled: props.onSettled,
+    onError: error => setUncertain(!(error instanceof ApiError) || error.status >= 500),
   })
+  return <Dialog open onClose={() => { if (!mutation.isPending) props.onClose() }}>
+    <DialogHeader><DialogTitle>{initial ? 'Cập nhật thông tin món' : 'Tạo món mới'}</DialogTitle></DialogHeader>
+    <form className="space-y-4" onSubmit={event => {
+      event.preventDefault()
+      if (mutation.isPending || uncertain) return
+      if (!name.trim() || !/^(0|[1-9]\d{0,14})(\.\d{1,2})?$/.test(price.trim()) || !category) {
+        setValidation('Kiểm tra tên món, danh mục và giá không âm, tối đa 2 chữ số thập phân.')
+        requestAnimationFrame(() => errorRef.current?.focus()); return
+      }
+      setValidation('')
+      if (!initial) {
+        mutation.mutate({ name: name.trim(), price: price.trim(), categoryId: category.id,
+          ...(props.canReadStations ? { kitchenStationId: station?.id ?? null } : {}) })
+        return
+      }
+      const changes: Parameters<typeof updateMenuItem>[1] = {
+        ...(name.trim() !== initial.name ? { name: name.trim() } : {}),
+        ...(price.trim() !== initial.price ? { price: price.trim() } : {}),
+        ...(category.id !== initial.categoryId ? { categoryId: category.id } : {}),
+        ...(props.canReadStations && (station?.id ?? null) !== initial.kitchenStationId ? { kitchenStationId: station?.id ?? null } : {}),
+      }
+      if (Object.keys(changes).length) mutation.mutate(changes)
+      else props.onClose()
+    }}>
+      {validation && <p ref={errorRef} tabIndex={-1} role="alert" className="text-sm text-destructive">{validation}</p>}
+      <fieldset disabled={mutation.isPending || uncertain} className="space-y-4">
+        <div className="space-y-1"><label htmlFor={`${id}-name`} className="text-sm font-medium">Tên món</label>
+          <Input id={`${id}-name`} value={name} onChange={event => setName(event.target.value)} required maxLength={160} /></div>
+        <div className="space-y-1"><label htmlFor={`${id}-price`} className="text-sm font-medium">Đơn giá (VNĐ)</label>
+          <Input id={`${id}-price`} type="text" inputMode="decimal" value={price} onChange={event => setPrice(event.target.value)} required maxLength={18} /></div>
+        <CatalogPicker employeeId={props.employeeId} resource="category" label="Danh mục món" selected={category}
+          onChange={setCategory} required emptyLabel="Chọn danh mục" />
+        {props.canReadStations ? <CatalogPicker employeeId={props.employeeId} resource="station" label="Quầy chế biến phụ trách"
+          selected={station} onChange={setStation} emptyLabel="Không gán quầy cụ thể" />
+          : initial?.kitchenStation && <p className="text-sm">Quầy chế biến: {initial.kitchenStation.name}</p>}
+      </fieldset>
+      {mutation.error && <p role="alert" className="text-sm text-destructive">{errorMessage(mutation.error)}</p>}
+      {uncertain && <p role="alert" className="text-sm">Chưa xác định kết quả lưu món.</p>}
+      <DialogFooter><Button type="button" variant="outline" disabled={mutation.isPending} onClick={props.onClose}>Đóng</Button>
+        {uncertain ? onReload && <Button type="button" onClick={onReload}>Đọc lại món</Button>
+          : <Button type="submit" disabled={mutation.isPending || !category}>{mutation.isPending ? 'Đang lưu…' : initial ? 'Lưu thay đổi' : 'Tạo món'}</Button>}
+      </DialogFooter>
+    </form>
+  </Dialog>
+}
 
-  return (
-    <Dialog open onOpenChange={onClose}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle className="text-destructive">Xác nhận xóa món</DialogTitle>
-          <DialogDescription>
-            Bạn có chắc chắn muốn xóa món <span className="font-bold text-foreground">"{item.name}"</span> khỏi thực đơn? Thao tác này sẽ ẩn món khỏi danh sách bán.
-          </DialogDescription>
-        </DialogHeader>
-
-        {error && <p className="text-xs text-destructive">{error}</p>}
-
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
-            Hủy
-          </Button>
-          <Button
-            variant="destructive"
-            onClick={() => mutation.mutate()}
-            disabled={mutation.isPending}
-          >
-            {mutation.isPending ? 'Đang xóa...' : 'Xóa món'}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  )
+export function DeleteMenuItemModal({ item, onClose, onSuccess }: { item: AdminMenuItem; onClose: () => void; onSuccess: () => void }) {
+  const mutation = useMutation({ mutationFn: () => deleteMenuItem(item.id), onSuccess })
+  return <Dialog open onClose={() => { if (!mutation.isPending) onClose() }}>
+    <DialogHeader><DialogTitle>Xác nhận xóa món</DialogTitle></DialogHeader>
+    <p className="break-words">Xóa món “{item.name}” khỏi thực đơn?</p>
+    {mutation.error && <p role="alert" className="text-sm text-destructive">{errorMessage(mutation.error)}</p>}
+    <DialogFooter><Button variant="outline" disabled={mutation.isPending} onClick={onClose}>Hủy</Button>
+      <Button variant="destructive" onClick={() => { if (!mutation.isPending) mutation.mutate() }} disabled={mutation.isPending}>Xóa món</Button></DialogFooter>
+  </Dialog>
 }

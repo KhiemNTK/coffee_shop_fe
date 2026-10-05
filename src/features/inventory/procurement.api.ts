@@ -4,8 +4,7 @@ import { apiIdempotentMutate } from '../../shared/api/idempotency'
 import { paginatedResponseSchema } from '../../shared/api/types'
 import { moneySchema } from '../menu/menu.api'
 
-const quantitySchema = z.union([z.string(), z.number().finite().transform(String)])
-  .pipe(z.string().regex(/^-?\d{1,14}(\.\d{1,4})?$/))
+import { quantitySchema } from './quantity'
 const statusSchema = z.enum(['DRAFT', 'POSTED', 'CANCELLED'])
 export const supplierSchema = z.object({
   id: z.string(), code: z.string(), name: z.string(),
@@ -26,7 +25,7 @@ export const receiptDetailSchema = receiptSchema.extend({
 })
 export const stocktakeSchema = z.object({
   id: z.string(), stocktakeNumber: z.string(), status: statusSchema,
-  note: z.string().nullish(), createdAt: z.string(),
+  note: z.string().nullish(), createdAt: z.string(), cancellationReason: z.string().nullish(),
 })
 export const stocktakeDetailSchema = stocktakeSchema.extend({
   items: z.array(z.object({
@@ -38,8 +37,9 @@ export const stocktakeDetailSchema = stocktakeSchema.extend({
 export type Supplier = z.infer<typeof supplierSchema>
 export type ReceiptDetail = z.infer<typeof receiptDetailSchema>
 export type StocktakeDetail = z.infer<typeof stocktakeDetailSchema>
+export type StocktakeCountInput = { inventoryItemId: string; countedQuantity: string }
 export type SupplierInput = { code: string; name: string; contactName?: string | null; phoneNumber?: string | null; email?: string | null; address?: string | null; taxCode?: string | null; notes?: string | null }
-export type ReceiptInput = { supplierId: string; note?: string; items: { inventoryItemId: string; quantity: string; unitPrice: string }[] }
+export type ReceiptInput = { supplierId: string; note?: string | null; items: { inventoryItemId: string; quantity: string; unitPrice: string }[] }
 
 export function getSuppliers(page: number, keyword: string, signal?: AbortSignal) {
   const params = new URLSearchParams({ page: String(page) })
@@ -72,11 +72,12 @@ export function getStocktake(id: string, signal?: AbortSignal) {
 export function createStocktake(inventoryItemIds: string[], note?: string) {
   return apiIdempotentMutate('/inventory/stocktakes', stocktakeDetailSchema, { inventoryItemIds: [...inventoryItemIds].sort(), note })
 }
-export function saveCounts(id: string, items: { inventoryItemId: string; countedQuantity: string }[]) {
+export function saveCounts(id: string, items: StocktakeCountInput[]) {
   return apiMutate(`/inventory/stocktakes/${id}/counts`, 'PUT', stocktakeDetailSchema, { items })
 }
-export function postDocument(kind: 'purchase-receipts' | 'stocktakes', id: string) {
-  return apiIdempotentMutate(`/inventory/${kind}/${id}/post`, z.object({ id: z.string(), status: z.literal('POSTED') }), {})
+export function postDocument(kind: 'purchase-receipts' | 'stocktakes', id: string, expectedCounts?: StocktakeCountInput[]) {
+  return apiIdempotentMutate(`/inventory/${kind}/${id}/post`, z.object({ id: z.string(), status: z.literal('POSTED') }),
+    kind === 'stocktakes' && expectedCounts ? { expectedCounts: [...expectedCounts].sort((a, b) => a.inventoryItemId.localeCompare(b.inventoryItemId)) } : {})
 }
 export function cancelDocument(kind: 'purchase-receipts' | 'stocktakes', id: string, reason: string) {
   return apiMutate(`/inventory/${kind}/${id}/cancel`, 'POST', z.object({ id: z.string(), status: z.literal('CANCELLED') }), { reason })

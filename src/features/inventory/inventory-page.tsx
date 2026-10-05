@@ -1,13 +1,14 @@
 import { useState } from 'react'
+import { useOutletContext } from 'react-router-dom'
+import type { Session } from '../auth/session'
+import {
+  InventoryBulkTab,
+  InventoryWasteTab,
+} from './components/inventory-operations'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { ProcurementTab } from './components/procurement-tab'
-import {
-  AlertTriangle,
-  Boxes,
-  History,
-  Plus,
-  RefreshCw,
-} from 'lucide-react'
+import { InventoryTaxonomy } from './components/inventory-taxonomy'
+import { AlertTriangle, Boxes, History, Plus, RefreshCw } from 'lucide-react'
 import {
   getInventoryItems,
   getReorderAlerts,
@@ -33,9 +34,18 @@ import {
 
 export default function InventoryPage() {
   const queryClient = useQueryClient()
+  const { authorization } = useOutletContext<Session>()
 
   // Tab: 'items' | 'alerts' | 'transactions'
-  const [activeTab, setActiveTab] = useState<'items' | 'alerts' | 'transactions' | 'procurement'>('items')
+  const [activeTab, setActiveTab] = useState<
+    | 'items'
+    | 'alerts'
+    | 'transactions'
+    | 'procurement'
+    | 'waste'
+    | 'bulk'
+    | 'taxonomy'
+  >('items')
 
   // Search & Filter state
   const [keyword, setKeyword] = useState('')
@@ -46,7 +56,9 @@ export default function InventoryPage() {
 
   // Dialog states
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
-  const [importItem, setImportItem] = useState<InventoryItem | ReorderAlertRow | null>(null)
+  const [importItem, setImportItem] = useState<
+    InventoryItem | ReorderAlertRow | null
+  >(null)
   const [exportItem, setExportItem] = useState<InventoryItem | null>(null)
   const [editItem, setEditItem] = useState<InventoryItem | null>(null)
   const [deleteItem, setDeleteItem] = useState<InventoryItem | null>(null)
@@ -65,7 +77,13 @@ export default function InventoryPage() {
   const itemsQuery = useQuery({
     queryKey: [
       'inventory-items',
-      { page, keyword, categoryId: selectedCategoryId, unitId: selectedUnitId, lowStockOnly },
+      {
+        page,
+        keyword,
+        categoryId: selectedCategoryId,
+        unitId: selectedUnitId,
+        lowStockOnly,
+      },
     ],
     queryFn: ({ signal }) =>
       getInventoryItems(
@@ -88,7 +106,8 @@ export default function InventoryPage() {
 
   const transactionsQuery = useQuery({
     queryKey: ['inventory-transactions'],
-    queryFn: ({ signal }) => getInventoryTransactions({ itemPerPage: 20 }, signal),
+    queryFn: ({ signal }) =>
+      getInventoryTransactions({ itemPerPage: 20 }, signal),
     enabled: activeTab === 'transactions',
   })
 
@@ -98,7 +117,9 @@ export default function InventoryPage() {
     onSuccess: () => {
       setDeleteItem(null)
       void queryClient.invalidateQueries({ queryKey: ['inventory-items'] })
-      void queryClient.invalidateQueries({ queryKey: ['inventory-reorder-alerts'] })
+      void queryClient.invalidateQueries({
+        queryKey: ['inventory-reorder-alerts'],
+      })
     },
   })
 
@@ -117,7 +138,8 @@ export default function InventoryPage() {
               Quản lý Kho & Nguyên vật liệu
             </h1>
             <p className="text-xs sm:text-sm text-muted-foreground">
-              Theo dõi tồn kho, định mức an toàn, nhập xuất nguyên liệu pha chế và cảnh báo thiếu hàng
+              Theo dõi tồn kho, định mức an toàn, nhập xuất nguyên liệu pha chế
+              và cảnh báo thiếu hàng
             </p>
           </div>
         </div>
@@ -135,7 +157,12 @@ export default function InventoryPage() {
             disabled={itemsQuery.isFetching}
             className="gap-1.5 text-xs font-semibold"
           >
-            <RefreshCw className={cn('h-3.5 w-3.5', itemsQuery.isFetching && 'animate-spin')} />
+            <RefreshCw
+              className={cn(
+                'h-3.5 w-3.5',
+                itemsQuery.isFetching && 'animate-spin',
+              )}
+            />
             Làm mới
           </Button>
 
@@ -160,7 +187,26 @@ export default function InventoryPage() {
 
       {/* Tabs Control */}
       <div className="flex flex-wrap border-b border-border gap-2">
-        <Button variant={activeTab === 'procurement' ? 'default' : 'outline'} onClick={() => setActiveTab('procurement')}>Mua hàng & Kiểm kê</Button>
+        <Button
+          variant={activeTab === 'waste' ? 'default' : 'outline'}
+          onClick={() => setActiveTab('waste')}
+        >
+          Hao hụt
+        </Button>
+        {authorization.permissionKeys.includes('/inventory_stock_adjust') && (
+          <Button
+            variant={activeTab === 'bulk' ? 'default' : 'outline'}
+            onClick={() => setActiveTab('bulk')}
+          >
+            Nhập / Xuất nhiều nguyên liệu
+          </Button>
+        )}
+        <Button
+          variant={activeTab === 'procurement' ? 'default' : 'outline'}
+          onClick={() => setActiveTab('procurement')}
+        >
+          Mua hàng & Kiểm kê
+        </Button>
         <button
           type="button"
           onClick={() => setActiveTab('items')}
@@ -209,7 +255,18 @@ export default function InventoryPage() {
         </button>
       </div>
 
+      <Button
+        variant="outline"
+        onClick={() =>
+          setActiveTab(activeTab === 'taxonomy' ? 'items' : 'taxonomy')
+        }
+      >
+        Nhóm nguyên liệu & đơn vị
+      </Button>
+      {activeTab === 'taxonomy' && <InventoryTaxonomy />}
       {activeTab === 'procurement' && <ProcurementTab />}
+      {activeTab === 'waste' && <InventoryWasteTab />}
+      {activeTab === 'bulk' && <InventoryBulkTab />}
 
       {/* TAB 1: ITEMS INVENTORY */}
       {activeTab === 'items' && (
@@ -263,9 +320,15 @@ export default function InventoryPage() {
           onClose={() => setImportItem(null)}
           onSuccess={() => {
             setImportItem(null)
-            void queryClient.invalidateQueries({ queryKey: ['inventory-items'] })
-            void queryClient.invalidateQueries({ queryKey: ['inventory-reorder-alerts'] })
-            void queryClient.invalidateQueries({ queryKey: ['inventory-transactions'] })
+            void queryClient.invalidateQueries({
+              queryKey: ['inventory-items'],
+            })
+            void queryClient.invalidateQueries({
+              queryKey: ['inventory-reorder-alerts'],
+            })
+            void queryClient.invalidateQueries({
+              queryKey: ['inventory-transactions'],
+            })
           }}
         />
       )}
@@ -277,9 +340,15 @@ export default function InventoryPage() {
           onClose={() => setExportItem(null)}
           onSuccess={() => {
             setExportItem(null)
-            void queryClient.invalidateQueries({ queryKey: ['inventory-items'] })
-            void queryClient.invalidateQueries({ queryKey: ['inventory-reorder-alerts'] })
-            void queryClient.invalidateQueries({ queryKey: ['inventory-transactions'] })
+            void queryClient.invalidateQueries({
+              queryKey: ['inventory-items'],
+            })
+            void queryClient.invalidateQueries({
+              queryKey: ['inventory-reorder-alerts'],
+            })
+            void queryClient.invalidateQueries({
+              queryKey: ['inventory-transactions'],
+            })
           }}
         />
       )}
@@ -292,8 +361,12 @@ export default function InventoryPage() {
           units={unitsQuery.data ?? []}
           onSuccess={() => {
             setCreateDialogOpen(false)
-            void queryClient.invalidateQueries({ queryKey: ['inventory-items'] })
-            void queryClient.invalidateQueries({ queryKey: ['inventory-reorder-alerts'] })
+            void queryClient.invalidateQueries({
+              queryKey: ['inventory-items'],
+            })
+            void queryClient.invalidateQueries({
+              queryKey: ['inventory-reorder-alerts'],
+            })
           }}
         />
       )}
@@ -307,8 +380,12 @@ export default function InventoryPage() {
           onClose={() => setEditItem(null)}
           onSuccess={() => {
             setEditItem(null)
-            void queryClient.invalidateQueries({ queryKey: ['inventory-items'] })
-            void queryClient.invalidateQueries({ queryKey: ['inventory-reorder-alerts'] })
+            void queryClient.invalidateQueries({
+              queryKey: ['inventory-items'],
+            })
+            void queryClient.invalidateQueries({
+              queryKey: ['inventory-reorder-alerts'],
+            })
           }}
         />
       )}

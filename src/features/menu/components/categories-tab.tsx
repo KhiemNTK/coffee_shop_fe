@@ -3,6 +3,9 @@ import { type UseQueryResult } from '@tanstack/react-query'
 import { type AdminCategoriesResponse, type AdminCategory } from '../menu.admin.api'
 import { Card, CardContent, CardHeader, CardTitle } from '../../../shared/ui/card'
 import { Button } from '../../../shared/ui/button'
+import { Input } from '../../../shared/ui/input'
+import { Pagination } from '../../../shared/ui/pagination'
+import { errorMessage } from '../../../shared/api/client'
 
 interface CategoriesTabProps {
   categoriesQuery: UseQueryResult<AdminCategoriesResponse, Error>
@@ -12,6 +15,10 @@ interface CategoriesTabProps {
   onCreateClick: () => void
   onEditClick: (cat: AdminCategory) => void
   onDeleteClick: (cat: AdminCategory) => void
+  keyword: string
+  onKeywordChange: (value: string) => void
+  page: number
+  onPageChange: (value: number) => void
 }
 
 export function CategoriesTab({
@@ -22,13 +29,19 @@ export function CategoriesTab({
   onCreateClick,
   onEditClick,
   onDeleteClick,
+  keyword, onKeywordChange, page, onPageChange,
 }: CategoriesTabProps) {
   return (
     <div className="space-y-4">
+      <Input aria-label="Tìm danh mục" placeholder="Tìm danh mục…" maxLength={120} value={keyword}
+        onChange={event => { onKeywordChange(event.target.value); onPageChange(1) }} />
+      {categoriesQuery.isError ? <div><p role="alert">{errorMessage(categoriesQuery.error)}</p>
+        <Button variant="outline" onClick={() => void categoriesQuery.refetch()}>Tải lại danh mục</Button></div>
+      : categoriesQuery.isPending ? <p role="status">Đang tải danh mục…</p> : <>
       <Card>
         <CardHeader className="flex flex-row items-center justify-between pb-3">
           <CardTitle className="text-base font-bold text-foreground">
-            Danh mục món ăn & đồ uống
+            Danh mục theo bộ lọc ({categoriesQuery.data.totalItems})
           </CardTitle>
           {canCreate && (
             <Button
@@ -92,11 +105,15 @@ export function CategoriesTab({
 
           {!categoriesQuery.data?.list.length && (
             <p className="py-12 text-center text-sm text-muted-foreground">
-              Chưa có danh mục nào. Hãy tạo danh mục đầu tiên!
+              Không có danh mục trong trang này.
             </p>
           )}
         </CardContent>
       </Card>
+      {(categoriesQuery.data.totalPages > 1 || page > 1) && <Pagination page={page} totalPages={categoriesQuery.data.totalPages}
+        disabled={categoriesQuery.isFetching} onPage={onPageChange} />}
+      {page > Math.max(1, categoriesQuery.data.totalPages) && <Button variant="outline" onClick={() => onPageChange(1)}>Về trang đầu</Button>}
+      </>}
     </div>
   )
 }

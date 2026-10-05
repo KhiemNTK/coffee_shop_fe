@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { apiGet, apiMutate } from '../../shared/api/client'
 import { moneySchema } from './menu.api'
+import { quantitySchema } from '../inventory/quantity'
 
 // --- Categories ---
 export const adminCategorySchema = z.object({
@@ -84,6 +85,17 @@ export const adminMenuItemsResponseSchema = z.object({
 
 export type AdminMenuItem = z.infer<typeof adminMenuItemSchema>
 export type AdminMenuItemsResponse = z.infer<typeof adminMenuItemsResponseSchema>
+
+export const adminMenuItemDetailSchema = adminMenuItemSchema.extend({
+  categoryId: z.uuid(),
+  kitchenStationId: z.uuid().nullable(),
+  category: z.object({ id: z.uuid(), name: z.string() }),
+})
+export type AdminMenuItemDetail = z.infer<typeof adminMenuItemDetailSchema>
+
+export function getAdminItem(id: string, signal?: AbortSignal) {
+  return apiGet(`/menu/items/${id}`, adminMenuItemDetailSchema, signal, true)
+}
 
 export function getAdminItems(
   params: {
@@ -189,13 +201,15 @@ export function getItemStockStatus(
 }
 
 // --- Item Recipe ---
+export const recipeQuantitySchema = quantitySchema.refine(value => !value.startsWith('-') && /[1-9]/.test(value), 'Định lượng phải lớn hơn 0 và có tối đa 4 chữ số thập phân.')
+export type RecipeIngredientInput = { inventoryItemId: string; quantity: string }
 export const recipeIngredientDetailSchema = z.object({
   inventoryItemId: z.uuid(),
-  quantity: moneySchema,
+  quantity: recipeQuantitySchema,
   inventoryItem: z.object({
     id: z.uuid(),
     name: z.string(),
-    stock: moneySchema,
+    stock: quantitySchema,
     unit: z.object({ id: z.uuid(), name: z.string() }).optional(),
     category: z.object({ id: z.uuid(), name: z.string() }).optional(),
   }),
@@ -216,7 +230,7 @@ export function getItemRecipe(id: string, signal?: AbortSignal) {
 
 export function replaceItemRecipe(
   id: string,
-  ingredients: Array<{ inventoryItemId: string; quantity: string | number }>,
+  ingredients: RecipeIngredientInput[],
 ) {
   return apiMutate(`/menu/items/${id}/recipe`, 'PUT', itemRecipeSchema, { ingredients })
 }
@@ -225,14 +239,15 @@ export function replaceItemRecipe(
 export const optionIngredientSchema = z.object({
   id: z.uuid().optional(),
   inventoryItemId: z.uuid(),
-  quantity: moneySchema,
+  quantity: recipeQuantitySchema,
+  inventoryItem: recipeIngredientDetailSchema.shape.inventoryItem.optional(),
 })
 
 export const optionItemSchema = z.object({
   id: z.uuid().optional(),
   name: z.string(),
   priceDelta: moneySchema,
-  ingredients: z.array(optionIngredientSchema).optional().default([]),
+  ingredients: z.array(optionIngredientSchema),
 })
 
 export const optionGroupSchema = z.object({
@@ -265,7 +280,7 @@ export function replaceItemOptions(
     options: Array<{
       name: string
       priceDelta: string | number
-      ingredients: Array<{ inventoryItemId: string; quantity: string | number }>
+      ingredients: RecipeIngredientInput[]
     }>
   }>,
 ) {
@@ -289,9 +304,11 @@ export const kitchenStationsResponseSchema = z.object({
 
 export type KitchenStationBasic = z.infer<typeof kitchenStationBasicSchema>
 
-export function getKitchenStationsList(signal?: AbortSignal) {
+export function getKitchenStationsList(params: { page: number; keyword?: string }, signal?: AbortSignal) {
+  const query = new URLSearchParams({ page: String(params.page), itemPerPage: '20', isActive: 'true' })
+  if (params.keyword?.trim()) query.set('keyword', params.keyword.trim())
   return apiGet(
-    '/kitchen/stations?page=1&itemPerPage=100',
+    `/kitchen/stations?${query}`,
     kitchenStationsResponseSchema,
     signal,
     true,

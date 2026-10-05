@@ -1,6 +1,7 @@
 import { ArrowDownToLine, ArrowUpFromLine, RefreshCw } from 'lucide-react'
 import { type InventoryTransactionsResponse } from '../inventory.api'
 import { formatPrice } from '../../menu/menu.api'
+import { formatQuantity } from '../quantity'
 import { Badge, Card, CardContent, cn } from '../../../shared/ui'
 
 interface InventoryTransactionsTabProps {
@@ -81,7 +82,7 @@ export function InventoryTransactionsTab({
                         )}
                       >
                         {tx.type === 'IMPORT' ? '+' : '-'}
-                        {Number(tx.quantity).toLocaleString('vi-VN')}{' '}
+                        {formatQuantity(tx.quantity)}{' '}
                         {tx.inventoryItem?.unit?.name}
                       </td>
                       <td className="py-3.5 px-4 text-right text-xs text-muted-foreground">

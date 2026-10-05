@@ -15,6 +15,7 @@ import {
   type InventoryItemsResponse,
 } from '../inventory.api'
 import { formatPrice } from '../../menu/menu.api'
+import { formatQuantity } from '../quantity'
 import { errorMessage } from '../../../shared/api/client'
 import { Badge, Button, Card, CardContent, Input, cn } from '../../../shared/ui'
 
@@ -172,7 +173,7 @@ export function InventoryItemsTab({
                   <th className="py-3.5 px-4">Đơn vị</th>
                   <th className="py-3.5 px-4 text-right">Tồn kho hiện tại</th>
                   <th className="py-3.5 px-4 text-right">Ngưỡng tối thiểu</th>
-                  <th className="py-3.5 px-4 text-right">Giá vốn BQ</th>
+                  <th className="py-3.5 px-4 text-right whitespace-nowrap">Giá vốn BQ</th>
                   <th className="py-3.5 px-4 sm:px-6 text-center">Thao tác</th>
                 </tr>
               </thead>
@@ -213,15 +214,15 @@ export function InventoryItemsTab({
                                 : 'text-foreground',
                             )}
                           >
-                            {Number(item.stock).toLocaleString('vi-VN')} {item.unit?.name}
+                            {formatQuantity(item.stock)} {item.unit?.name}
                           </span>
                         </td>
                         <td className="py-3.5 px-4 text-right text-xs text-muted-foreground">
                           {item.reorderPoint
-                            ? Number(item.reorderPoint).toLocaleString('vi-VN')
+                            ? formatQuantity(item.reorderPoint)
                             : '—'}
                         </td>
-                        <td className="py-3.5 px-4 text-right text-xs font-semibold text-brand-800">
+                        <td className="py-3.5 px-4 text-right text-xs font-semibold text-brand-800 whitespace-nowrap tabular-nums">
                           {item.averageUnitCost ? formatPrice(String(item.averageUnitCost)) : '—'}
                         </td>
                         <td className="py-3.5 px-4 sm:px-6">

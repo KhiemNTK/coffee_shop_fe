@@ -18,7 +18,7 @@ export function InventoryKpis({
         <CardContent className="p-4 sm:p-5 flex items-center justify-between">
           <div>
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-              Mặt hàng đang quản lý
+              Nguyên liệu khớp bộ lọc
             </p>
             <h3 className="text-xl sm:text-2xl font-bold text-foreground mt-1">
               {totalItems}
