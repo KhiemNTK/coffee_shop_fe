@@ -13,6 +13,8 @@ const SignUpPage = authConfig.signupEnabled ? lazy(() => import('../features/aut
 const PasswordRecoveryPage = lazy(() => import('../features/auth/password-recovery-page'))
 const PaymentReturnPage = lazy(() => import('../features/invoices/payment-return-page'))
 const ReorderPage = lazy(() => import('../features/online-orders/reorder-page'))
+const PickupPage = lazy(() => import('../features/online-orders/pickup-page'))
+const ReconciliationPage = lazy(() => import('../features/reconciliation/reconciliation-page'))
 const StaffMenuPage = lazy(() => import('../features/menu/staff-menu-page'))
 const CashierShiftPage = lazy(
   () => import('../features/cashier-shifts/cashier-shift-page'),
@@ -78,6 +80,7 @@ export function AppRouter() {
           <Route path="/" element={<MenuPage />} />
           <Route path="/order" element={<OnlineOrderPage />} />
           <Route path="/reorder" element={<ReorderPage />} />
+          <Route path="/pickup" element={<PickupPage />} />
           <Route path="/reservations" element={<PublicReservationsPage />} />
           <Route path="/sign-in" element={<SignInPage />} />
           {SignUpPage && <Route path="/sign-up" element={<SignUpPage />} />}
@@ -87,6 +90,9 @@ export function AppRouter() {
           <Route path="/auth/sign-in" element={<SignInPage />} />
           {SignUpPage && <Route path="/auth/sign-up" element={<SignUpPage />} />}
           <Route path="/staff" element={<StaffLayout />}>
+            <Route element={<PermissionGate anyOf={['/payment-reconciliation_read', '/bank-reconciliation_read', '/reports_read']} />}>
+              <Route path="reconciliation" element={<ReconciliationPage />} />
+            </Route>
             <Route index element={<StaffHome />} />
             <Route element={<PermissionGate permission="/reservations_read" />}>
               <Route path="reservations" element={<StaffReservationsPage />} />
@@ -181,7 +187,7 @@ export function AppRouter() {
             <Route
               element={
                 <PermissionGate
-                  anyOf={['/print-devices_read', '/print-jobs_read']}
+                  anyOf={['/print-devices_read', '/print-jobs_read', '/receipts_reprint']}
                 />
               }
             >

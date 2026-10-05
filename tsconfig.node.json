@@ -21,5 +21,6 @@
     "erasableSyntaxOnly": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["vite.config.ts", "playwright.config.ts", "tests/**/*.ts"]
+  "include": ["vite.config.ts", "playwright.config.ts", "playwright.google.config.ts", "tests/**/*.ts"],
+  "exclude": ["tests/live-backend.spec.ts"]
 }

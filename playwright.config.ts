@@ -2,6 +2,8 @@ import { defineConfig } from '@playwright/test'
 
 export default defineConfig({
   testDir: './tests',
+  outputDir: './test-results/fixtures',
+  testIgnore: ['**/live-backend.spec.ts', '**/google-auth.spec.ts'],
   fullyParallel: true,
   workers: process.env.CI ? 2 : undefined,
   tsconfig: './tsconfig.app.json',
@@ -26,8 +28,8 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: 'pnpm dev --port 4173',
-    env: { VITE_TURNSTILE_SITE_KEY: 'browser-fixture-site-key' },
+    command: 'pnpm dev --port 4173 --mode browser-fixtures',
+    env: { VITE_TURNSTILE_SITE_KEY: 'browser-fixture-site-key', VITE_GOOGLE_CLIENT_ID: '' },
     url: 'http://localhost:4173',
     reuseExistingServer: false,
   },

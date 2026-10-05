@@ -16,8 +16,6 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    env:
-      RUN_LIVE_BACKEND: 'false'
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -33,9 +31,79 @@ jobs:
       - run: pnpm build
       - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm test:e2e --workers=2
+      - run: pnpm test:google --workers=2
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
           name: browser-failures
-          path: test-results/
+          path: |
+            test-results/fixtures/
+            test-results/google/
           retention-days: 7
+
+  integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: coffee_shop_fe
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: coffee_browser_test
+          POSTGRES_PASSWORD: coffee_browser_test
+          POSTGRES_DB: coffee_shop_browser_test
+        ports: ['15432:5432']
+        options: >-
+          --health-cmd "pg_isready -U coffee_browser_test -d coffee_shop_browser_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ['16379:6379']
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      NODE_ENV: test
+      BROWSER_TEST_DATABASE_URL: postgresql://coffee_browser_test:coffee_browser_test@127.0.0.1:15432/coffee_shop_browser_test?schema=public
+      BROWSER_TEST_REDIS_URL: redis://127.0.0.1:16379/0
+      BACKEND_REF: ${{ vars.BACKEND_REF }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: coffee_shop_fe
+      - name: Require an immutable backend revision
+        run: |
+          if [[ ! "$BACKEND_REF" =~ ^[0-9a-f]{40}$ ]]; then
+            echo '::error::Set repository variable BACKEND_REF to the committed backend contract SHA (40 lowercase hex characters).'
+            exit 1
+          fi
+      - uses: actions/checkout@v4
+        with:
+          repository: KhiemNTK/coffee_shop_be
+          ref: ${{ env.BACKEND_REF }}
+          token: ${{ secrets.BACKEND_READ_TOKEN || github.token }}
+          path: coffee_shop_be
+          persist-credentials: false
+      - name: Record backend contract revision
+        run: git -C ../coffee_shop_be rev-parse HEAD
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: '**/pnpm-lock.yaml'
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --dir ../coffee_shop_be install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      - name: Real browser transactions (no mocks, no automatic retries)
+        run: pnpm test:integration
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: real-backend-browser-failures
+          path: coffee_shop_fe/test-results/backend/
+          retention-days: 3

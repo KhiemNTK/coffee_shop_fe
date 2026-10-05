@@ -10,6 +10,8 @@
     "lint": "oxlint --deny-warnings",
     "typecheck": "tsc -b --pretty false",
     "test:e2e": "playwright test",
+    "test:google": "playwright test --config playwright.google.config.ts",
+    "test:integration": "node --experimental-strip-types tests/prepare-backend.mjs && tsc -p tsconfig.integration.json && playwright test --config playwright.backend.config.ts",
     "preview": "vite preview",
     "prepare": "husky"
   },
