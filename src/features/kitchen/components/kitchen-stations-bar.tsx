@@ -21,7 +21,7 @@ export function KitchenStationsBar({
   return (
     <Card className="p-3.5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
           <span className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-muted-foreground mr-1">
             <Filter className="h-3.5 w-3.5" /> Quầy:
           </span>
@@ -43,7 +43,7 @@ export function KitchenStationsBar({
               type="button"
               onClick={() => onSelectStation(s.id)}
               className={cn(
-                'rounded-full px-3.5 py-1 text-xs font-semibold transition-colors cursor-pointer',
+                'max-w-full break-words rounded-full px-3.5 py-1 text-xs font-semibold transition-colors cursor-pointer',
                 selectedStationId === s.id
                   ? 'bg-primary text-primary-foreground shadow-xs'
                   : 'border border-border bg-card text-foreground hover:bg-muted',
@@ -54,7 +54,7 @@ export function KitchenStationsBar({
           ))}
         </div>
 
-        <label className="flex items-center gap-2 text-xs font-medium text-foreground cursor-pointer select-none">
+        <label className="flex shrink-0 items-center gap-2 whitespace-nowrap text-xs font-medium text-foreground cursor-pointer select-none">
           <input
             type="checkbox"
             checked={includeCompleted}

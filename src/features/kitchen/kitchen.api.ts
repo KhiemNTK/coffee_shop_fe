@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { apiGet, apiMutate } from '../../shared/api/client'
+import { selectedOptionsSchema } from '../../shared/api/order-options'
 
 export const kitchenStationSchema = z.object({
   id: z.uuid(),
@@ -7,11 +8,14 @@ export const kitchenStationSchema = z.object({
   name: z.string(),
   prepSlaSeconds: z.number().int(),
   isActive: z.boolean(),
+  printDeviceId: z.string().nullable().optional(),
 })
 
 export const kitchenStationsResponseSchema = z.object({
   list: z.array(kitchenStationSchema),
   totalItems: z.number().int().nonnegative(),
+  totalPages: z.number().int().nonnegative().default(0),
+  currentPage: z.number().int().positive().default(1),
 })
 
 export const kitchenTicketItemSchema = z.object({
@@ -20,7 +24,7 @@ export const kitchenTicketItemSchema = z.object({
   itemName: z.string(),
   quantity: z.number().int().positive(),
   note: z.string().nullable().optional(),
-  selectedOptions: z.any().optional(),
+  selectedOptions: selectedOptionsSchema,
   serveStatus: z.enum(['PENDING', 'COOKING', 'READY', 'SERVED', 'CANCELLED']),
   currentTable: z
     .object({
@@ -88,13 +92,22 @@ export type KitchenWorkload = z.infer<typeof kitchenWorkloadSchema>
 export async function getKitchenStations(
   signal: AbortSignal,
 ): Promise<KitchenStation[]> {
-  const result = await apiGet(
-    '/kitchen/stations?itemPerPage=50&isActive=true',
-    kitchenStationsResponseSchema,
-    signal,
-    true,
-  )
-  return result.list
+  const stations: KitchenStation[] = []
+  let page = 1
+  let total = 0
+  do {
+    const result = await apiGet(
+      `/kitchen/stations?page=${page}&itemPerPage=100&isActive=true`,
+      kitchenStationsResponseSchema,
+      signal,
+      true,
+    )
+    stations.push(...result.list)
+    total = result.totalItems
+    page++
+    if (!result.list.length) break
+  } while (stations.length < total)
+  return stations
 }
 
 export async function getKitchenWorkload(
@@ -107,10 +120,12 @@ export async function getKitchenTickets(
   stationId?: string,
   includeCompleted = false,
   signal?: AbortSignal,
-): Promise<KitchenTicket[]> {
+  page = 1,
+) {
   const params = new URLSearchParams({
     itemPerPage: '100',
     includeCompleted: includeCompleted ? 'true' : 'false',
+    page: String(page),
   })
   if (stationId) params.set('stationId', stationId)
 
@@ -120,17 +135,51 @@ export async function getKitchenTickets(
     signal || new AbortController().signal,
     true,
   )
-  return result.list
+  return result
 }
 
 export async function updateOrderItemStatus(
   orderItemId: string,
-  status: 'COOKING' | 'READY' | 'SERVED' | 'CANCELLED',
+  status: 'COOKING' | 'READY' | 'SERVED',
 ): Promise<unknown> {
   return apiMutate(
     `/orders/items/${orderItemId}/status`,
     'PATCH',
-    z.any(),
-    { status },
+    z.object({
+      id: z.uuid(),
+      serveStatus: z.enum(['COOKING', 'READY', 'SERVED']),
+    }),
+    { serveStatus: status },
+  )
+}
+
+export function getStationPage(page: number, signal?: AbortSignal) {
+  return apiGet(
+    `/kitchen/stations?page=${page}&itemPerPage=20`,
+    kitchenStationsResponseSchema,
+    signal,
+    true,
+  )
+}
+export type StationInput = {
+  code: string
+  name: string
+  prepSlaSeconds: number
+  printDeviceId: string | null
+  isActive?: boolean
+}
+export function saveStation(id: string | undefined, input: StationInput) {
+  return apiMutate(
+    id ? `/kitchen/stations/${id}` : '/kitchen/stations',
+    id ? 'PATCH' : 'POST',
+    kitchenStationSchema,
+    input,
+  )
+}
+export function deleteStation(id: string) {
+  return apiMutate(
+    `/kitchen/stations/${id}`,
+    'DELETE',
+    z.object({ success: z.boolean() }),
   )
 }

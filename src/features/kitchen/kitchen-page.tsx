@@ -1,12 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useOutletContext } from 'react-router-dom'
-import {
-  AlertCircle,
-  ChefHat,
-  Radio,
-  RefreshCw,
-} from 'lucide-react'
+import { AlertCircle, ChefHat, Radio, RefreshCw } from 'lucide-react'
 import { errorMessage } from '../../shared/api/client'
 import { type Session } from '../auth/session'
 import {
@@ -23,16 +18,26 @@ import { cn } from '../../shared/ui/utils'
 import { KitchenWorkloadKpis } from './components/kitchen-workload-kpis'
 import { KitchenStationsBar } from './components/kitchen-stations-bar'
 import { KitchenTicketsGrid } from './components/kitchen-tickets-grid'
+import { Pagination } from '../../shared/ui/pagination'
+import { KitchenStationsManagement } from './components/kitchen-stations-management'
 
 export default function KitchenPage() {
-  const { authorization } = useOutletContext<Session>()
+  const { authorization, employee } = useOutletContext<Session>()
   const queryClient = useQueryClient()
+  const canReadTickets = authorization.permissionKeys.includes(
+    '/kitchen-tickets_read',
+  )
+  const canReadStations = authorization.permissionKeys.includes(
+    '/kitchen-stations_read',
+  )
   const canUpdateStatus = authorization.permissionKeys.includes(
     '/orders_items_update-status',
   )
 
   const [selectedStationId, setSelectedStationId] = useState<string>('')
   const [includeCompleted, setIncludeCompleted] = useState<boolean>(false)
+  const [page, setPage] = useState(1)
+  const [management, setManagement] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
   const [nowMs, setNowMs] = useState(() => Date.now())
 
@@ -42,25 +47,40 @@ export default function KitchenPage() {
   }, [])
 
   // Real-time SSE connection
-  const { status: sseStatus, lastRefreshedAt } = useKitchenSse(true)
+  const { status: sseStatus, lastRefreshedAt } = useKitchenSse(
+    employee.id,
+    canReadTickets && !management,
+  )
 
   // Queries
   const stationsQuery = useQuery({
     queryKey: ['kitchen', 'stations'],
     queryFn: ({ signal }) => getKitchenStations(signal),
+    enabled: canReadStations && !management,
   })
 
   const workloadQuery = useQuery({
     queryKey: ['kitchen', 'workload'],
     queryFn: ({ signal }) => getKitchenWorkload(signal),
+    enabled: canReadTickets && !management,
     refetchInterval: 15_000,
   })
 
   const ticketsQuery = useQuery({
-    queryKey: ['kitchen', 'tickets', { stationId: selectedStationId, includeCompleted }],
+    queryKey: [
+      'kitchen',
+      'tickets',
+      { stationId: selectedStationId, includeCompleted, page },
+    ],
     queryFn: ({ signal }) =>
-      getKitchenTickets(selectedStationId || undefined, includeCompleted, signal),
-    refetchInterval: sseStatus !== 'connected' ? 6_000 : false,
+      getKitchenTickets(
+        selectedStationId || undefined,
+        includeCompleted,
+        signal,
+        page,
+      ),
+    enabled: canReadTickets && !management,
+    refetchInterval: sseStatus !== 'connected' ? 6_000 : 60_000,
   })
 
   const statusMutation = useMutation({
@@ -69,14 +89,18 @@ export default function KitchenPage() {
       status,
     }: {
       orderItemId: string
-      status: 'COOKING' | 'READY' | 'SERVED' | 'CANCELLED'
+      status: 'COOKING' | 'READY' | 'SERVED'
     }) => {
       setActionError(null)
       return updateOrderItemStatus(orderItemId, status)
     },
-    onSuccess: () => {
+    onSettled: () => {
       void queryClient.invalidateQueries({ queryKey: ['kitchen', 'tickets'] })
       void queryClient.invalidateQueries({ queryKey: ['kitchen', 'workload'] })
+      for (const name of ['inventory-items', 'inventory-transactions', 'inventory-reorder-alerts']) {
+        void queryClient.invalidateQueries({ queryKey: [name] })
+      }
+      void queryClient.invalidateQueries({ queryKey: ['private', employee.id, 'admin-menu-stock'] })
     },
     onError: (err) => {
       setActionError(errorMessage(err))
@@ -85,15 +109,21 @@ export default function KitchenPage() {
 
   function advanceItemStatus(item: KitchenTicketItem) {
     if (!canUpdateStatus) {
-      setActionError('Bạn không có quyền cập nhật trạng thái món (/orders_items_update-status).')
+      setActionError(
+        'Bạn không có quyền cập nhật trạng thái món (/orders_items_update-status).',
+      )
       return
     }
     if (item.serveStatus === 'PENDING') {
-      statusMutation.mutate({ orderItemId: item.orderItemId, status: 'COOKING' })
+      statusMutation.mutate({
+        orderItemId: item.orderItemId,
+        status: 'COOKING',
+      })
     } else if (item.serveStatus === 'COOKING') {
-      statusMutation.mutate({ orderItemId: item.orderItemId, status: 'READY' })
-    } else if (item.serveStatus === 'READY') {
-      statusMutation.mutate({ orderItemId: item.orderItemId, status: 'SERVED' })
+      statusMutation.mutate({
+        orderItemId: item.orderItemId,
+        status: item.currentTable ? 'SERVED' : 'READY',
+      })
     }
   }
 
@@ -106,7 +136,8 @@ export default function KitchenPage() {
             KHU VỰC BẾP & PHA CHẾ
           </p>
           <h1 className="flex items-center gap-2.5 text-2xl font-bold tracking-tight text-foreground">
-            <ChefHat className="h-7 w-7 text-primary" /> Điều phối bếp & pha chế (KDS)
+            <ChefHat className="h-7 w-7 text-primary" /> Điều phối bếp & pha chế
+            (KDS)
           </h1>
         </div>
 
@@ -116,8 +147,17 @@ export default function KitchenPage() {
             variant={sseStatus === 'connected' ? 'success' : 'warning'}
             className="gap-1.5 px-3 py-1 text-xs font-semibold"
           >
-            <Radio className={cn('h-3.5 w-3.5', sseStatus === 'connected' && 'animate-pulse')} />
-            {sseStatus === 'connected' ? 'Realtime Live' : 'Đang kết nối lại'}
+            <Radio
+              className={cn(
+                'h-3.5 w-3.5',
+                sseStatus === 'connected' && 'animate-pulse',
+              )}
+            />
+            {!canReadTickets
+              ? 'Không có quyền xem vé bếp'
+              : sseStatus === 'connected'
+                ? 'Realtime Live'
+                : 'Đang kết nối lại'}
           </Badge>
 
           {lastRefreshedAt && (
@@ -151,29 +191,64 @@ export default function KitchenPage() {
         </div>
       )}
 
-      {/* Tóm tắt tải lượng (Workload Summary Bar) */}
-      <KitchenWorkloadKpis workload={workloadQuery.data} />
+      {canReadStations && (
+        <Button variant="outline" onClick={() => setManagement(!management)}>
+          {management ? 'Về màn hình bếp' : 'Trạm bếp & SLA'}
+        </Button>
+      )}
+      {management ? (
+        <KitchenStationsManagement />
+      ) : (
+        <>
+          {/* Tóm tắt tải lượng (Workload Summary Bar) */}
+          {canReadTickets && (
+            <KitchenWorkloadKpis workload={workloadQuery.data} />
+          )}
+          {workloadQuery.isError && (
+            <p role="alert">{errorMessage(workloadQuery.error)}</p>
+          )}
+          {stationsQuery.isError && (
+            <p role="alert">{errorMessage(stationsQuery.error)}</p>
+          )}
 
-      {/* Thanh bộ lọc Quầy Bếp (Station Filter) & Trạng thái hoàn thành */}
-      <KitchenStationsBar
-        stations={stationsQuery.data || []}
-        selectedStationId={selectedStationId}
-        onSelectStation={setSelectedStationId}
-        includeCompleted={includeCompleted}
-        onToggleIncludeCompleted={setIncludeCompleted}
-      />
+          {/* Thanh bộ lọc Quầy Bếp (Station Filter) & Trạng thái hoàn thành */}
+          <KitchenStationsBar
+            stations={stationsQuery.data || []}
+            selectedStationId={selectedStationId}
+            onSelectStation={(id) => {
+              setSelectedStationId(id)
+              setPage(1)
+            }}
+            includeCompleted={includeCompleted}
+            onToggleIncludeCompleted={(value) => {
+              setIncludeCompleted(value)
+              setPage(1)
+            }}
+          />
 
-      {/* Lưới hiển thị các thẻ vé bếp (Kitchen Tickets) */}
-      <KitchenTicketsGrid
-        tickets={ticketsQuery.data || []}
-        isLoading={ticketsQuery.isPending}
-        isError={ticketsQuery.isError}
-        error={ticketsQuery.error}
-        onRetry={() => void ticketsQuery.refetch()}
-        nowMs={nowMs}
-        onAdvanceItemStatus={advanceItemStatus}
-        isUpdatingStatus={statusMutation.isPending}
-      />
+          {/* Lưới hiển thị các thẻ vé bếp (Kitchen Tickets) */}
+          {canReadTickets && (
+            <KitchenTicketsGrid
+              tickets={ticketsQuery.data?.list || []}
+              isLoading={ticketsQuery.isPending}
+              isError={ticketsQuery.isError}
+              error={ticketsQuery.error}
+              onRetry={() => void ticketsQuery.refetch()}
+              nowMs={nowMs}
+              onAdvanceItemStatus={advanceItemStatus}
+              isUpdatingStatus={!canUpdateStatus || statusMutation.isPending}
+            />
+          )}
+          {ticketsQuery.data && (
+            <Pagination
+              page={page}
+              totalPages={ticketsQuery.data.totalPages}
+              onPage={setPage}
+              disabled={ticketsQuery.isFetching}
+            />
+          )}
+        </>
+      )}
     </div>
   )
 }

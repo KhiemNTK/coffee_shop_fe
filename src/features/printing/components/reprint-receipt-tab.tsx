@@ -1,17 +1,8 @@
 import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import {
-  CheckCircle2,
-  Receipt,
-  RefreshCw,
-  Send,
-  XCircle,
-} from 'lucide-react'
-import { errorMessage } from '@/shared/api/client'
-import {
-  printingApi,
-  type PrintDevice,
-} from '../printing.api'
+import { CheckCircle2, Receipt, RefreshCw, Send, XCircle } from 'lucide-react'
+import { ApiError, errorMessage } from '@/shared/api/client'
+import { printingApi, type PrintDevice } from '../printing.api'
 import {
   Button,
   Card,
@@ -33,8 +24,11 @@ export function ReprintReceiptTab({ devices }: ReprintReceiptTabProps) {
   const [reprintReason, setReprintReason] = useState('')
   const [reprintCopies, setReprintCopies] = useState(1)
   const [reprintDeviceId, setReprintDeviceId] = useState('')
-  const [reprintSuccessMsg, setReprintSuccessMsg] = useState<string | null>(null)
+  const [reprintSuccessMsg, setReprintSuccessMsg] = useState<string | null>(
+    null,
+  )
   const [reprintErrorMsg, setReprintErrorMsg] = useState<string | null>(null)
+  const [uncertain, setUncertain] = useState(false)
 
   const reprintMutation = useMutation({
     mutationFn: ({
@@ -45,8 +39,9 @@ export function ReprintReceiptTab({ devices }: ReprintReceiptTabProps) {
       dto: Parameters<typeof printingApi.reprintReceipt>[1]
     }) => printingApi.reprintReceipt(invoiceId, dto),
     onSuccess: (data) => {
+      setUncertain(false)
       setReprintSuccessMsg(
-        `Đã tạo lệnh in lại thành công (Mã lệnh: ${data.id}). Print Agent sẽ nhận và xuất biên lai ngay.`,
+        `Đã tạo lệnh in lại trong hàng đợi (Mã lệnh: ${data.id}).`,
       )
       setReprintErrorMsg(null)
       setReprintInvoiceId('')
@@ -56,10 +51,19 @@ export function ReprintReceiptTab({ devices }: ReprintReceiptTabProps) {
       void queryClient.invalidateQueries({ queryKey: ['print-jobs'] })
     },
     onError: (err) => {
+      setUncertain(
+        !(
+          err instanceof ApiError &&
+          err.status >= 400 &&
+          err.status < 500 &&
+          err.status !== 408
+        ),
+      )
       setReprintErrorMsg(errorMessage(err))
       setReprintSuccessMsg(null)
     },
   })
+  const locked = reprintMutation.isPending || uncertain
 
   return (
     <Card className="max-w-xl mx-auto border border-border shadow-xs">
@@ -73,7 +77,8 @@ export function ReprintReceiptTab({ devices }: ReprintReceiptTabProps) {
               Gửi yêu cầu In lại Hóa đơn
             </CardTitle>
             <CardDescription className="text-xs text-muted-foreground">
-              Chỉ áp dụng cho các hóa đơn đã thanh toán thành công (PAID / PARTIALLY_REFUNDED / REFUNDED)
+              Chỉ áp dụng cho các hóa đơn đã thanh toán thành công (PAID /
+              PARTIALLY_REFUNDED / REFUNDED)
             </CardDescription>
           </div>
         </div>
@@ -95,11 +100,16 @@ export function ReprintReceiptTab({ devices }: ReprintReceiptTabProps) {
         )}
 
         <div>
-          <label htmlFor="reprint-invoice-id" className="block font-medium text-foreground pb-1">
-            Mã Hóa đơn (Invoice ID UUID) <span className="text-rose-500">*</span>
+          <label
+            htmlFor="reprint-invoice-id"
+            className="block font-medium text-foreground pb-1"
+          >
+            Mã Hóa đơn (Invoice ID UUID){' '}
+            <span className="text-rose-500">*</span>
           </label>
           <Input
             id="reprint-invoice-id"
+            disabled={locked}
             placeholder="Nhập mã UUID hóa đơn (VD: 10000000-0000-4000-8000-...)"
             value={reprintInvoiceId}
             onChange={(e) => setReprintInvoiceId(e.target.value)}
@@ -108,11 +118,16 @@ export function ReprintReceiptTab({ devices }: ReprintReceiptTabProps) {
         </div>
 
         <div>
-          <label htmlFor="reprint-reason" className="block font-medium text-foreground pb-1">
-            Lý do in lại <span className="text-rose-500">*</span> (Tối thiểu 3 ký tự)
+          <label
+            htmlFor="reprint-reason"
+            className="block font-medium text-foreground pb-1"
+          >
+            Lý do in lại <span className="text-rose-500">*</span> (Tối thiểu 3
+            ký tự)
           </label>
           <Input
             id="reprint-reason"
+            disabled={locked}
             placeholder="VD: Khách xin thêm hóa đơn, máy in kẹt giấy, phiếu bị rách..."
             value={reprintReason}
             onChange={(e) => setReprintReason(e.target.value)}
@@ -122,11 +137,15 @@ export function ReprintReceiptTab({ devices }: ReprintReceiptTabProps) {
 
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label htmlFor="reprint-copies" className="block font-medium text-foreground pb-1">
+            <label
+              htmlFor="reprint-copies"
+              className="block font-medium text-foreground pb-1"
+            >
               Số lượng bản in
             </label>
             <select
               id="reprint-copies"
+              disabled={locked}
               value={reprintCopies}
               onChange={(e) => setReprintCopies(Number(e.target.value))}
               className="w-full h-9 rounded-lg border border-border bg-card px-2.5 text-xs text-foreground focus:outline-hidden focus:ring-2 focus:ring-ring"
@@ -140,11 +159,15 @@ export function ReprintReceiptTab({ devices }: ReprintReceiptTabProps) {
           </div>
 
           <div>
-            <label htmlFor="reprint-device" className="block font-medium text-foreground pb-1">
+            <label
+              htmlFor="reprint-device"
+              className="block font-medium text-foreground pb-1"
+            >
               Máy in xuất hóa đơn
             </label>
             <select
               id="reprint-device"
+              disabled={locked}
               value={reprintDeviceId}
               onChange={(e) => setReprintDeviceId(e.target.value)}
               className="w-full h-9 rounded-lg border border-border bg-card px-2.5 text-xs text-foreground focus:outline-hidden focus:ring-2 focus:ring-ring"
@@ -169,13 +192,17 @@ export function ReprintReceiptTab({ devices }: ReprintReceiptTabProps) {
               reprintMutation.isPending
             }
             onClick={() => {
+              if (reprintMutation.isPending) return
+              if (uncertain && reprintMutation.variables) {
+                reprintMutation.mutate(reprintMutation.variables)
+                return
+              }
               reprintMutation.mutate({
                 invoiceId: reprintInvoiceId.trim(),
                 dto: {
                   reason: reprintReason.trim(),
                   copies: reprintCopies,
                   deviceId: reprintDeviceId || undefined,
-                  idempotencyKey: crypto.randomUUID(),
                 },
               })
             }}
@@ -186,7 +213,11 @@ export function ReprintReceiptTab({ devices }: ReprintReceiptTabProps) {
             ) : (
               <Send className="h-4 w-4" />
             )}
-            <span>Gửi lệnh in lại hóa đơn</span>
+            <span>
+              {uncertain
+                ? 'Gửi lại lệnh chưa xác nhận'
+                : 'Gửi lệnh in lại hóa đơn'}
+            </span>
           </Button>
         </div>
       </CardContent>

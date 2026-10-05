@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { apiGet, apiMutate } from '@/shared/api/client'
+import { apiIdempotentMutate } from '@/shared/api/idempotency'
 import { paginatedResponseSchema } from '@/shared/api/types'
 
 export const PrintDeviceTypeSchema = z.enum(['RECEIPT', 'KITCHEN'])
@@ -73,7 +74,8 @@ export const PrintJobSchema = z.object({
 })
 export type PrintJob = z.infer<typeof PrintJobSchema>
 
-export const PrintDevicesResponseSchema = paginatedResponseSchema(PrintDeviceSchema)
+export const PrintDevicesResponseSchema =
+  paginatedResponseSchema(PrintDeviceSchema)
 export type PrintDevicesResponse = z.infer<typeof PrintDevicesResponseSchema>
 
 export const PrintJobsResponseSchema = paginatedResponseSchema(PrintJobSchema)
@@ -112,6 +114,7 @@ export interface UpdatePrintDeviceDto {
 }
 
 export interface GetPrintDevicesParams {
+  keyword?: string
   page?: number
   itemPerPage?: number
   type?: PrintDeviceType
@@ -135,7 +138,7 @@ export interface ReprintReceiptDto {
   reason: string
   copies?: number
   deviceId?: string
-  idempotencyKey: string
+  idempotencyKey?: string
 }
 
 export const printingApi = {
@@ -144,12 +147,35 @@ export const printingApi = {
     signal?: AbortSignal,
   ): Promise<PrintDevicesResponse> => {
     const qs = new URLSearchParams()
+    if (params?.keyword?.trim()) qs.set('keyword', params.keyword.trim())
     if (params?.page) qs.set('page', String(params.page))
     if (params?.itemPerPage) qs.set('itemPerPage', String(params.itemPerPage))
     if (params?.type) qs.set('type', params.type)
-    if (params?.isActive !== undefined) qs.set('isActive', String(params.isActive))
+    if (params?.isActive !== undefined)
+      qs.set('isActive', String(params.isActive))
     const query = qs.toString()
-    return apiGet(`/printing/devices${query ? `?${query}` : ''}`, PrintDevicesResponseSchema, signal, true)
+    return apiGet(
+      `/printing/devices${query ? `?${query}` : ''}`,
+      PrintDevicesResponseSchema,
+      signal,
+      true,
+    )
+  },
+
+  getActiveDevices: async (signal?: AbortSignal): Promise<PrintDevice[]> => {
+    const first = await printingApi.getDevices(
+      { page: 1, itemPerPage: 100, isActive: true },
+      signal,
+    )
+    const devices = [...first.list]
+    for (let page = 2; page <= first.totalPages; page++) {
+      const next = await printingApi.getDevices(
+        { page, itemPerPage: 100, isActive: true },
+        signal,
+      )
+      devices.push(...next.list)
+    }
+    return devices
   },
 
   getDevice: (id: string, signal?: AbortSignal): Promise<PrintDevice> =>
@@ -165,7 +191,12 @@ export const printingApi = {
     apiMutate(`/printing/devices/${id}`, 'DELETE', DeleteResponseSchema),
 
   rotateKey: (id: string): Promise<RotateKeyResponse> =>
-    apiMutate(`/printing/devices/${id}/rotate-key`, 'POST', RotateKeyResponseSchema, {}),
+    apiMutate(
+      `/printing/devices/${id}/rotate-key`,
+      'POST',
+      RotateKeyResponseSchema,
+      {},
+    ),
 
   getJobs: (
     params?: GetPrintJobsParams,
@@ -179,7 +210,12 @@ export const printingApi = {
     if (params?.deviceId) qs.set('deviceId', params.deviceId)
     if (params?.invoiceId) qs.set('invoiceId', params.invoiceId)
     const query = qs.toString()
-    return apiGet(`/printing/jobs${query ? `?${query}` : ''}`, PrintJobsResponseSchema, signal, true)
+    return apiGet(
+      `/printing/jobs${query ? `?${query}` : ''}`,
+      PrintJobsResponseSchema,
+      signal,
+      true,
+    )
   },
 
   getJob: (id: string, signal?: AbortSignal): Promise<PrintJob> =>
@@ -188,6 +224,13 @@ export const printingApi = {
   retryJob: (id: string, dto: RetryPrintJobDto): Promise<PrintJob> =>
     apiMutate(`/printing/jobs/${id}/retry`, 'POST', PrintJobSchema, dto),
 
-  reprintReceipt: (invoiceId: string, dto: ReprintReceiptDto): Promise<PrintJob> =>
-    apiMutate(`/printing/invoices/${invoiceId}/reprint`, 'POST', PrintJobSchema, dto),
+  reprintReceipt: (
+    invoiceId: string,
+    dto: ReprintReceiptDto,
+  ): Promise<PrintJob> =>
+    apiIdempotentMutate(
+      `/printing/invoices/${invoiceId}/reprint`,
+      PrintJobSchema,
+      { ...dto },
+    ),
 }

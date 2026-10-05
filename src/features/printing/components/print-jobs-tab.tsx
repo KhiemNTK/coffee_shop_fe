@@ -54,8 +54,12 @@ interface PrintJobsTabProps {
 export function PrintJobsTab({ canManageJobs, devices }: PrintJobsTabProps) {
   const queryClient = useQueryClient()
 
-  const [jobStatusFilter, setJobStatusFilter] = useState<'ALL' | PrintJobStatus>('ALL')
-  const [jobTypeFilter, setJobTypeFilter] = useState<'ALL' | PrintJobType>('ALL')
+  const [jobStatusFilter, setJobStatusFilter] = useState<
+    'ALL' | PrintJobStatus
+  >('ALL')
+  const [jobTypeFilter, setJobTypeFilter] = useState<'ALL' | PrintJobType>(
+    'ALL',
+  )
   const [jobPage, setJobPage] = useState(1)
 
   const [retryingJob, setRetryingJob] = useState<PrintJob | null>(null)
@@ -66,6 +70,8 @@ export function PrintJobsTab({ canManageJobs, devices }: PrintJobsTabProps) {
     data: jobsData,
     isLoading: isLoadingJobs,
     isFetching: isFetchingJobs,
+    error,
+    refetch,
   } = useQuery({
     queryKey: ['print-jobs', jobStatusFilter, jobTypeFilter, jobPage],
     queryFn: ({ signal }) =>
@@ -139,24 +145,37 @@ export function PrintJobsTab({ canManageJobs, devices }: PrintJobsTabProps) {
             </div>
 
             <div className="text-xs text-muted-foreground">
-              Tổng cộng: <span className="font-semibold text-foreground">{totalJobs}</span> lệnh in
+              Tổng cộng:{' '}
+              <span className="font-semibold text-foreground">{totalJobs}</span>{' '}
+              lệnh in
             </div>
           </div>
         </CardContent>
       </Card>
 
       {/* Jobs Table */}
-      {isLoadingJobs ? (
+      {error ? (
+        <p role="alert" className="text-sm text-destructive">
+          {errorMessage(error)}{' '}
+          <Button variant="outline" onClick={() => void refetch()}>
+            Thử lại
+          </Button>
+        </p>
+      ) : isLoadingJobs ? (
         <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border py-16">
           <RefreshCw className="h-8 w-8 animate-spin text-muted-foreground" />
-          <p className="mt-3 text-sm text-muted-foreground">Đang tải danh sách lệnh in...</p>
+          <p className="mt-3 text-sm text-muted-foreground">
+            Đang tải danh sách lệnh in...
+          </p>
         </div>
       ) : jobs.length === 0 ? (
         <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border py-16 text-center">
           <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted">
             <Clock className="h-6 w-6 text-muted-foreground" />
           </div>
-          <h3 className="mt-3 text-base font-bold text-foreground">Không tìm thấy lệnh in nào</h3>
+          <h3 className="mt-3 text-base font-bold text-foreground">
+            Không tìm thấy lệnh in nào
+          </h3>
           <p className="mt-1 max-w-sm text-xs text-muted-foreground">
             Chưa có lệnh in nào khớp với bộ lọc trạng thái hiện tại.
           </p>
@@ -167,13 +186,27 @@ export function PrintJobsTab({ canManageJobs, devices }: PrintJobsTabProps) {
             <table className="w-full text-left text-sm">
               <thead className="border-b border-border bg-muted/30 text-xs font-semibold uppercase text-muted-foreground">
                 <tr>
-                  <th scope="col" className="px-4 py-3">Loại lệnh</th>
-                  <th scope="col" className="px-4 py-3">Máy in đích</th>
-                  <th scope="col" className="px-4 py-3">Người yêu cầu</th>
-                  <th scope="col" className="px-4 py-3">Lần thử</th>
-                  <th scope="col" className="px-4 py-3">Thời gian tạo</th>
-                  <th scope="col" className="px-4 py-3">Trạng thái</th>
-                  <th scope="col" className="px-4 py-3 text-right">Thao tác</th>
+                  <th scope="col" className="px-4 py-3">
+                    Loại lệnh
+                  </th>
+                  <th scope="col" className="px-4 py-3">
+                    Máy in đích
+                  </th>
+                  <th scope="col" className="px-4 py-3">
+                    Người yêu cầu
+                  </th>
+                  <th scope="col" className="px-4 py-3">
+                    Lần thử
+                  </th>
+                  <th scope="col" className="px-4 py-3">
+                    Thời gian tạo
+                  </th>
+                  <th scope="col" className="px-4 py-3">
+                    Trạng thái
+                  </th>
+                  <th scope="col" className="px-4 py-3 text-right">
+                    Thao tác
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/60">
@@ -183,7 +216,10 @@ export function PrintJobsTab({ canManageJobs, devices }: PrintJobsTabProps) {
                   const canRetry = canManageJobs && (isFailed || isPending)
 
                   return (
-                    <tr key={job.id} className="transition-colors hover:bg-muted/20">
+                    <tr
+                      key={job.id}
+                      className="transition-colors hover:bg-muted/20"
+                    >
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1.5">
                           {job.type === 'RECEIPT' ? (
@@ -194,10 +230,15 @@ export function PrintJobsTab({ canManageJobs, devices }: PrintJobsTabProps) {
                           <div>
                             <div className="flex items-center gap-1.5">
                               <span className="font-semibold text-xs text-foreground">
-                                {job.type === 'RECEIPT' ? 'Hóa đơn' : 'Phiếu bếp'}
+                                {job.type === 'RECEIPT'
+                                  ? 'Hóa đơn'
+                                  : 'Phiếu bếp'}
                               </span>
                               {job.reprintOfId && (
-                                <Badge variant="outline" className="text-[10px] text-amber-600 border-amber-300">
+                                <Badge
+                                  variant="outline"
+                                  className="text-[10px] text-amber-600 border-amber-300"
+                                >
                                   In lại
                                 </Badge>
                               )}
@@ -300,7 +341,9 @@ export function PrintJobsTab({ canManageJobs, devices }: PrintJobsTabProps) {
           {totalJobPages > 1 && (
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between px-1">
               <p className="text-xs text-muted-foreground">
-                Trang <span className="font-bold text-foreground">{jobPage}</span> / {totalJobPages} (Tổng cộng {totalJobs} lệnh in)
+                Trang{' '}
+                <span className="font-bold text-foreground">{jobPage}</span> /{' '}
+                {totalJobPages} (Tổng cộng {totalJobs} lệnh in)
               </p>
               <div className="flex items-center gap-1.5">
                 <Button
@@ -315,7 +358,9 @@ export function PrintJobsTab({ canManageJobs, devices }: PrintJobsTabProps) {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => setJobPage((p) => Math.min(totalJobPages, p + 1))}
+                  onClick={() =>
+                    setJobPage((p) => Math.min(totalJobPages, p + 1))
+                  }
                   disabled={jobPage >= totalJobPages || isFetchingJobs}
                   className="h-8 px-3 text-xs"
                 >
@@ -342,7 +387,10 @@ export function PrintJobsTab({ canManageJobs, devices }: PrintJobsTabProps) {
 
             <div className="mt-4 space-y-3 text-xs">
               <div>
-                <label htmlFor="retry-dev-select" className="block font-medium text-foreground pb-1">
+                <label
+                  htmlFor="retry-dev-select"
+                  className="block font-medium text-foreground pb-1"
+                >
                   Chọn máy in thực hiện lại:
                 </label>
                 <select
@@ -352,11 +400,24 @@ export function PrintJobsTab({ canManageJobs, devices }: PrintJobsTabProps) {
                   className="w-full h-9 rounded-lg border border-border bg-card px-2.5 text-xs text-foreground focus:outline-hidden focus:ring-2 focus:ring-ring"
                 >
                   <option value="">Máy in mặc định theo cấu hình lệnh</option>
+                  {retryingJob.deviceId &&
+                    !devices.some((d) => d.id === retryingJob.deviceId) && (
+                      <option value={retryingJob.deviceId}>
+                        {retryingJob.device?.name ?? 'Máy in đã gán'}
+                      </option>
+                    )}
                   {devices
-                    .filter((d) => d.type === retryingJob.type && d.isActive)
+                    .filter(
+                      (d) =>
+                        d.type ===
+                          (retryingJob.type === 'KITCHEN_TICKET'
+                            ? 'KITCHEN'
+                            : 'RECEIPT') && d.isActive,
+                    )
                     .map((d) => (
                       <option key={d.id} value={d.id}>
-                        {d.name} ({d.paperSize}) {d.isDefault ? '- Mặc định' : ''}
+                        {d.name} ({d.paperSize}){' '}
+                        {d.isDefault ? '- Mặc định' : ''}
                       </option>
                     ))}
                 </select>
@@ -370,7 +431,11 @@ export function PrintJobsTab({ canManageJobs, devices }: PrintJobsTabProps) {
             </div>
 
             <DialogFooter className="mt-5">
-              <Button variant="outline" onClick={() => setRetryingJob(null)} className="h-9">
+              <Button
+                variant="outline"
+                onClick={() => setRetryingJob(null)}
+                className="h-9"
+              >
                 Hủy
               </Button>
               <Button
@@ -394,7 +459,10 @@ export function PrintJobsTab({ canManageJobs, devices }: PrintJobsTabProps) {
       </Dialog>
 
       {/* JOB DETAIL MODAL */}
-      <Dialog open={!!selectedJob} onOpenChange={(open) => !open && setSelectedJob(null)}>
+      <Dialog
+        open={!!selectedJob}
+        onOpenChange={(open) => !open && setSelectedJob(null)}
+      >
         {selectedJob && (
           <div className="max-w-lg">
             <DialogHeader>
@@ -403,7 +471,9 @@ export function PrintJobsTab({ canManageJobs, devices }: PrintJobsTabProps) {
                   Chi tiết Lệnh in
                 </DialogTitle>
                 <Badge
-                  variant={selectedJob.status === 'PRINTED' ? 'default' : 'outline'}
+                  variant={
+                    selectedJob.status === 'PRINTED' ? 'default' : 'outline'
+                  }
                   className="text-xs font-mono"
                 >
                   {selectedJob.status}
@@ -417,53 +487,80 @@ export function PrintJobsTab({ canManageJobs, devices }: PrintJobsTabProps) {
             <div className="mt-4 space-y-3 text-xs">
               <div className="grid grid-cols-2 gap-2.5 rounded-lg border border-border bg-muted/30 p-3">
                 <div>
-                  <span className="text-muted-foreground block text-[11px]">Loại lệnh</span>
+                  <span className="text-muted-foreground block text-[11px]">
+                    Loại lệnh
+                  </span>
                   <span className="font-semibold text-foreground">
-                    {selectedJob.type === 'RECEIPT' ? 'Hóa đơn thanh toán' : 'Phiếu chế biến bếp'}
+                    {selectedJob.type === 'RECEIPT'
+                      ? 'Hóa đơn thanh toán'
+                      : 'Phiếu chế biến bếp'}
                   </span>
                 </div>
                 <div>
-                  <span className="text-muted-foreground block text-[11px]">Thiết bị</span>
+                  <span className="text-muted-foreground block text-[11px]">
+                    Thiết bị
+                  </span>
                   <span className="font-semibold text-foreground">
                     {selectedJob.device?.name || 'Mặc định'}
                   </span>
                 </div>
                 <div>
-                  <span className="text-muted-foreground block text-[11px]">Số bản in / Lần thử</span>
+                  <span className="text-muted-foreground block text-[11px]">
+                    Số bản in / Lần thử
+                  </span>
                   <span className="font-semibold text-foreground">
-                    {selectedJob.copies} bản / ({selectedJob.attempts}/{selectedJob.maxAttempts})
+                    {selectedJob.copies} bản / ({selectedJob.attempts}/
+                    {selectedJob.maxAttempts})
                   </span>
                 </div>
                 <div>
-                  <span className="text-muted-foreground block text-[11px]">Thời gian tạo</span>
+                  <span className="text-muted-foreground block text-[11px]">
+                    Thời gian tạo
+                  </span>
                   <span className="font-semibold text-foreground">
                     {formatDateTime(selectedJob.createdAt)}
                   </span>
                 </div>
                 {selectedJob.invoiceId && (
                   <div className="col-span-2">
-                    <span className="text-muted-foreground block text-[11px]">Mã Hóa đơn</span>
-                    <span className="font-mono text-foreground">{selectedJob.invoiceId}</span>
+                    <span className="text-muted-foreground block text-[11px]">
+                      Mã Hóa đơn
+                    </span>
+                    <span className="font-mono text-foreground">
+                      {selectedJob.invoiceId}
+                    </span>
                   </div>
                 )}
                 {selectedJob.kitchenTicketId && (
                   <div className="col-span-2">
-                    <span className="text-muted-foreground block text-[11px]">Mã Phiếu Bếp</span>
-                    <span className="font-mono text-foreground">{selectedJob.kitchenTicketId}</span>
+                    <span className="text-muted-foreground block text-[11px]">
+                      Mã Phiếu Bếp
+                    </span>
+                    <span className="font-mono text-foreground">
+                      {selectedJob.kitchenTicketId}
+                    </span>
                   </div>
                 )}
               </div>
 
               {selectedJob.lastError && (
                 <div className="rounded-lg border border-rose-200 bg-rose-50 dark:border-rose-900/50 dark:bg-rose-950/30 p-3 text-rose-700 dark:text-rose-400">
-                  <span className="font-semibold block text-[11px]">Thông báo lỗi gần nhất:</span>
-                  <span className="font-mono mt-0.5 block">{selectedJob.lastError}</span>
+                  <span className="font-semibold block text-[11px]">
+                    Thông báo lỗi gần nhất:
+                  </span>
+                  <span className="font-mono mt-0.5 block">
+                    {selectedJob.lastError}
+                  </span>
                 </div>
               )}
             </div>
 
             <DialogFooter className="mt-5">
-              <Button variant="outline" onClick={() => setSelectedJob(null)} className="h-9">
+              <Button
+                variant="outline"
+                onClick={() => setSelectedJob(null)}
+                className="h-9"
+              >
                 Đóng
               </Button>
             </DialogFooter>

@@ -1,4 +1,4 @@
-import { useState, useDeferredValue, useMemo } from 'react'
+import { useState, useDeferredValue } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   AlertTriangle,
@@ -14,6 +14,7 @@ import {
   Trash2,
 } from 'lucide-react'
 import { errorMessage } from '@/shared/api/client'
+import { Pagination } from '@/shared/ui/pagination'
 import {
   printingApi,
   type PrintDevice,
@@ -67,15 +68,23 @@ export function PrintDevicesTab({
   const queryClient = useQueryClient()
 
   const [deviceSearch, setDeviceSearch] = useState('')
+  const [page, setPage] = useState(1)
   const deferredDeviceSearch = useDeferredValue(deviceSearch)
-  const [deviceTypeFilter, setDeviceTypeFilter] = useState<'ALL' | PrintDeviceType>('ALL')
-  const [deviceActiveFilter, setDeviceActiveFilter] = useState<'ALL' | 'ACTIVE' | 'INACTIVE'>('ALL')
+  const [deviceTypeFilter, setDeviceTypeFilter] = useState<
+    'ALL' | PrintDeviceType
+  >('ALL')
+  const [deviceActiveFilter, setDeviceActiveFilter] = useState<
+    'ALL' | 'ACTIVE' | 'INACTIVE'
+  >('ALL')
 
   // Dialog states
   const [editingDevice, setEditingDevice] = useState<PrintDevice | null>(null)
   const [deletingDevice, setDeletingDevice] = useState<PrintDevice | null>(null)
   const [rotatingDevice, setRotatingDevice] = useState<PrintDevice | null>(null)
-  const [apiKeyModal, setApiKeyModal] = useState<{ name: string; key: string } | null>(null)
+  const [apiKeyModal, setApiKeyModal] = useState<{
+    name: string
+    key: string
+  } | null>(null)
   const [copiedKey, setCopiedKey] = useState(false)
 
   // Form states for Create Device
@@ -98,11 +107,22 @@ export function PrintDevicesTab({
   const {
     data: devicesData,
     isLoading: isLoadingDevices,
+    isFetching,
+    error,
+    refetch,
   } = useQuery({
-    queryKey: ['print-devices', deviceTypeFilter, deviceActiveFilter],
+    queryKey: [
+      'print-devices',
+      deviceTypeFilter,
+      deviceActiveFilter,
+      deferredDeviceSearch,
+      page,
+    ],
     queryFn: ({ signal }) =>
       printingApi.getDevices(
         {
+          keyword: deferredDeviceSearch.trim() || undefined,
+          page,
           type: deviceTypeFilter === 'ALL' ? undefined : deviceTypeFilter,
           isActive:
             deviceActiveFilter === 'ACTIVE'
@@ -118,23 +138,18 @@ export function PrintDevicesTab({
 
   const devices = devicesData?.list ?? EMPTY_DEVICES
 
-  const filteredDevices = useMemo(() => {
-    return devices.filter((d) => {
-      if (deferredDeviceSearch.trim()) {
-        const query = deferredDeviceSearch.toLowerCase()
-        return d.name.toLowerCase().includes(query) || d.type.toLowerCase().includes(query)
-      }
-      return true
-    })
-  }, [devices, deferredDeviceSearch])
-
   // Mutations
   const createDeviceMutation = useMutation({
     mutationFn: printingApi.createDevice,
     onSuccess: (data) => {
       void queryClient.invalidateQueries({ queryKey: ['print-devices'] })
       setIsCreateOpen(false)
-      setCreateForm({ name: '', type: 'RECEIPT', paperSize: '80mm', isDefault: true })
+      setCreateForm({
+        name: '',
+        type: 'RECEIPT',
+        paperSize: '80mm',
+        isDefault: true,
+      })
       if (data.apiKey) {
         setApiKeyModal({ name: data.device.name, key: data.apiKey })
       }
@@ -142,8 +157,13 @@ export function PrintDevicesTab({
   })
 
   const updateDeviceMutation = useMutation({
-    mutationFn: ({ id, dto }: { id: string; dto: Parameters<typeof printingApi.updateDevice>[1] }) =>
-      printingApi.updateDevice(id, dto),
+    mutationFn: ({
+      id,
+      dto,
+    }: {
+      id: string
+      dto: Parameters<typeof printingApi.updateDevice>[1]
+    }) => printingApi.updateDevice(id, dto),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['print-devices'] })
       setEditingDevice(null)
@@ -155,6 +175,7 @@ export function PrintDevicesTab({
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['print-devices'] })
       setDeletingDevice(null)
+      setPage(1)
     },
   })
 
@@ -165,7 +186,10 @@ export function PrintDevicesTab({
       void queryClient.invalidateQueries({ queryKey: ['print-devices'] })
       setRotatingDevice(null)
       if (data.apiKey) {
-        setApiKeyModal({ name: targetDevice?.name || 'Máy in', key: data.apiKey })
+        setApiKeyModal({
+          name: targetDevice?.name || 'Máy in',
+          key: data.apiKey,
+        })
       }
     },
   })
@@ -202,7 +226,10 @@ export function PrintDevicesTab({
               <Input
                 placeholder="Tìm theo tên máy in..."
                 value={deviceSearch}
-                onChange={(e) => setDeviceSearch(e.target.value)}
+                onChange={(e) => {
+                  setDeviceSearch(e.target.value)
+                  setPage(1)
+                }}
                 className="pl-8 h-9 text-xs"
               />
             </div>
@@ -211,7 +238,10 @@ export function PrintDevicesTab({
               <select
                 aria-label="Lọc theo loại máy in"
                 value={deviceTypeFilter}
-                onChange={(e) => setDeviceTypeFilter(e.target.value as 'ALL' | PrintDeviceType)}
+                onChange={(e) => {
+                  setDeviceTypeFilter(e.target.value as 'ALL' | PrintDeviceType)
+                  setPage(1)
+                }}
                 className="h-9 rounded-lg border border-border bg-card px-2.5 text-xs text-foreground focus:outline-hidden focus:ring-2 focus:ring-ring"
               >
                 <option value="ALL">Tất cả loại máy in</option>
@@ -222,7 +252,12 @@ export function PrintDevicesTab({
               <select
                 aria-label="Lọc theo trạng thái kích hoạt"
                 value={deviceActiveFilter}
-                onChange={(e) => setDeviceActiveFilter(e.target.value as 'ALL' | 'ACTIVE' | 'INACTIVE')}
+                onChange={(e) => {
+                  setDeviceActiveFilter(
+                    e.target.value as 'ALL' | 'ACTIVE' | 'INACTIVE',
+                  )
+                  setPage(1)
+                }}
                 className="h-9 rounded-lg border border-border bg-card px-2.5 text-xs text-foreground focus:outline-hidden focus:ring-2 focus:ring-ring"
               >
                 <option value="ALL">Tất cả tình trạng</option>
@@ -235,19 +270,32 @@ export function PrintDevicesTab({
       </Card>
 
       {/* Device Cards Grid */}
-      {isLoadingDevices ? (
+      {error ? (
+        <p role="alert" className="text-sm text-destructive">
+          {errorMessage(error)}{' '}
+          <Button variant="outline" onClick={() => void refetch()}>
+            Thử lại
+          </Button>
+        </p>
+      ) : isLoadingDevices ? (
         <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border py-16">
           <RefreshCw className="h-8 w-8 animate-spin text-muted-foreground" />
-          <p className="mt-3 text-sm text-muted-foreground">Đang tải danh sách thiết bị in...</p>
+          <p className="mt-3 text-sm text-muted-foreground">
+            Đang tải danh sách thiết bị in...
+          </p>
         </div>
-      ) : filteredDevices.length === 0 ? (
+      ) : devices.length === 0 ? (
         <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border py-16 text-center">
           <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted">
             <Printer className="h-6 w-6 text-muted-foreground" />
           </div>
-          <h3 className="mt-3 text-base font-bold text-foreground">Chưa có thiết bị in nào</h3>
+          <h3 className="mt-3 text-base font-bold text-foreground">
+            Chưa có thiết bị in nào
+          </h3>
           <p className="mt-1 max-w-sm text-xs text-muted-foreground">
-            {deviceSearch || deviceTypeFilter !== 'ALL' || deviceActiveFilter !== 'ALL'
+            {deviceSearch ||
+            deviceTypeFilter !== 'ALL' ||
+            deviceActiveFilter !== 'ALL'
               ? 'Không tìm thấy thiết bị nào khớp với bộ lọc tìm kiếm.'
               : 'Hãy thêm máy in mới để kết nối phần mềm in Print Agent tại quầy thu ngân và khu vực bếp.'}
           </p>
@@ -264,7 +312,7 @@ export function PrintDevicesTab({
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {filteredDevices.map((device) => {
+          {devices.map((device) => {
             const isOnline = device.isOnline
             return (
               <Card
@@ -295,7 +343,9 @@ export function PrintDevicesTab({
                       </CardTitle>
                     </div>
                     <Badge
-                      variant={device.type === 'RECEIPT' ? 'default' : 'secondary'}
+                      variant={
+                        device.type === 'RECEIPT' ? 'default' : 'secondary'
+                      }
                       className="text-[11px] shrink-0 font-medium"
                     >
                       {device.type === 'RECEIPT' ? 'Hóa đơn' : 'Bếp & Bar'}
@@ -350,7 +400,9 @@ export function PrintDevicesTab({
                             : 'text-muted-foreground'
                         }`}
                       >
-                        {isOnline ? 'Trực tuyến (Online)' : 'Ngoại tuyến (Offline)'}
+                        {isOnline
+                          ? 'Trực tuyến (Online)'
+                          : 'Ngoại tuyến (Offline)'}
                       </span>
                     </div>
                     <div className="mt-1 flex items-center justify-between text-[11px] text-muted-foreground">
@@ -416,6 +468,15 @@ export function PrintDevicesTab({
         </div>
       )}
 
+      {devicesData && !error && (
+        <Pagination
+          page={page}
+          totalPages={devicesData.totalPages}
+          onPage={setPage}
+          disabled={isFetching}
+        />
+      )}
+
       {/* CREATE DEVICE MODAL */}
       <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
         <div className="max-w-md">
@@ -424,27 +485,36 @@ export function PrintDevicesTab({
               Thêm Máy in Mới
             </DialogTitle>
             <DialogDescription className="text-xs text-muted-foreground">
-              Định danh phần cứng và tạo mã xác thực API Key cho dịch vụ Print Agent
+              Định danh phần cứng và tạo mã xác thực API Key cho dịch vụ Print
+              Agent
             </DialogDescription>
           </DialogHeader>
 
           <div className="mt-4 space-y-3.5 text-xs">
             <div>
-              <label htmlFor="create-dev-name" className="block font-medium text-foreground pb-1">
+              <label
+                htmlFor="create-dev-name"
+                className="block font-medium text-foreground pb-1"
+              >
                 Tên máy in <span className="text-rose-500">*</span>
               </label>
               <Input
                 id="create-dev-name"
                 placeholder="VD: Máy in hóa đơn Quầy 1, Máy in Bếp Nóng..."
                 value={createForm.name}
-                onChange={(e) => setCreateForm({ ...createForm, name: e.target.value })}
+                onChange={(e) =>
+                  setCreateForm({ ...createForm, name: e.target.value })
+                }
                 className="h-9 text-xs"
               />
             </div>
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label htmlFor="create-dev-type" className="block font-medium text-foreground pb-1">
+                <label
+                  htmlFor="create-dev-type"
+                  className="block font-medium text-foreground pb-1"
+                >
                   Loại máy in
                 </label>
                 <select
@@ -455,7 +525,8 @@ export function PrintDevicesTab({
                     setCreateForm({
                       ...createForm,
                       type: newType,
-                      isDefault: newType === 'RECEIPT' ? createForm.isDefault : false,
+                      isDefault:
+                        newType === 'RECEIPT' ? createForm.isDefault : false,
                     })
                   }}
                   className="w-full h-9 rounded-lg border border-border bg-card px-2.5 text-xs text-foreground focus:outline-hidden focus:ring-2 focus:ring-ring"
@@ -466,13 +537,18 @@ export function PrintDevicesTab({
               </div>
 
               <div>
-                <label htmlFor="create-dev-papersize" className="block font-medium text-foreground pb-1">
+                <label
+                  htmlFor="create-dev-papersize"
+                  className="block font-medium text-foreground pb-1"
+                >
                   Khổ giấy in
                 </label>
                 <select
                   id="create-dev-papersize"
                   value={createForm.paperSize}
-                  onChange={(e) => setCreateForm({ ...createForm, paperSize: e.target.value })}
+                  onChange={(e) =>
+                    setCreateForm({ ...createForm, paperSize: e.target.value })
+                  }
                   className="w-full h-9 rounded-lg border border-border bg-card px-2.5 text-xs text-foreground focus:outline-hidden focus:ring-2 focus:ring-ring"
                 >
                   <option value="80mm">80mm (Khổ nhiệt chuẩn POS)</option>
@@ -487,10 +563,17 @@ export function PrintDevicesTab({
                 <input
                   type="checkbox"
                   checked={createForm.isDefault}
-                  onChange={(e) => setCreateForm({ ...createForm, isDefault: e.target.checked })}
+                  onChange={(e) =>
+                    setCreateForm({
+                      ...createForm,
+                      isDefault: e.target.checked,
+                    })
+                  }
                   className="rounded border-border text-primary focus:ring-primary"
                 />
-                <span className="text-xs text-foreground">Đặt làm máy in hóa đơn mặc định của quán</span>
+                <span className="text-xs text-foreground">
+                  Đặt làm máy in hóa đơn mặc định của quán
+                </span>
               </label>
             )}
 
@@ -502,22 +585,33 @@ export function PrintDevicesTab({
           </div>
 
           <DialogFooter className="mt-5">
-            <Button variant="outline" onClick={() => setIsCreateOpen(false)} className="h-9">
+            <Button
+              variant="outline"
+              onClick={() => setIsCreateOpen(false)}
+              className="h-9"
+            >
               Hủy
             </Button>
             <Button
-              disabled={!createForm.name.trim() || createDeviceMutation.isPending}
+              disabled={
+                !createForm.name.trim() || createDeviceMutation.isPending
+              }
               onClick={() => {
                 createDeviceMutation.mutate({
                   name: createForm.name.trim(),
                   type: createForm.type,
                   paperSize: createForm.paperSize,
-                  isDefault: createForm.type === 'RECEIPT' ? createForm.isDefault : undefined,
+                  isDefault:
+                    createForm.type === 'RECEIPT'
+                      ? createForm.isDefault
+                      : undefined,
                 })
               }}
               className="h-9 bg-primary text-primary-foreground"
             >
-              {createDeviceMutation.isPending && <RefreshCw className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
+              {createDeviceMutation.isPending && (
+                <RefreshCw className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+              )}
               Tạo máy in
             </Button>
           </DialogFooter>
@@ -525,7 +619,10 @@ export function PrintDevicesTab({
       </Dialog>
 
       {/* EDIT DEVICE MODAL */}
-      <Dialog open={!!editingDevice} onOpenChange={(open) => !open && setEditingDevice(null)}>
+      <Dialog
+        open={!!editingDevice}
+        onOpenChange={(open) => !open && setEditingDevice(null)}
+      >
         {editingDevice && (
           <div className="max-w-md">
             <DialogHeader>
@@ -539,27 +636,38 @@ export function PrintDevicesTab({
 
             <div className="mt-4 space-y-3.5 text-xs">
               <div>
-                <label htmlFor="edit-dev-name" className="block font-medium text-foreground pb-1">
+                <label
+                  htmlFor="edit-dev-name"
+                  className="block font-medium text-foreground pb-1"
+                >
                   Tên máy in
                 </label>
                 <Input
                   id="edit-dev-name"
                   value={editForm.name}
-                  onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, name: e.target.value })
+                  }
                   className="h-9 text-xs"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label htmlFor="edit-dev-status" className="block font-medium text-foreground pb-1">
+                  <label
+                    htmlFor="edit-dev-status"
+                    className="block font-medium text-foreground pb-1"
+                  >
                     Trạng thái
                   </label>
                   <select
                     id="edit-dev-status"
                     value={editForm.status}
                     onChange={(e) =>
-                      setEditForm({ ...editForm, status: e.target.value as PrintDeviceStatus })
+                      setEditForm({
+                        ...editForm,
+                        status: e.target.value as PrintDeviceStatus,
+                      })
                     }
                     className="w-full h-9 rounded-lg border border-border bg-card px-2.5 text-xs text-foreground focus:outline-hidden focus:ring-2 focus:ring-ring"
                   >
@@ -570,13 +678,18 @@ export function PrintDevicesTab({
                 </div>
 
                 <div>
-                  <label htmlFor="edit-dev-papersize" className="block font-medium text-foreground pb-1">
+                  <label
+                    htmlFor="edit-dev-papersize"
+                    className="block font-medium text-foreground pb-1"
+                  >
                     Khổ giấy
                   </label>
                   <select
                     id="edit-dev-papersize"
                     value={editForm.paperSize}
-                    onChange={(e) => setEditForm({ ...editForm, paperSize: e.target.value })}
+                    onChange={(e) =>
+                      setEditForm({ ...editForm, paperSize: e.target.value })
+                    }
                     className="w-full h-9 rounded-lg border border-border bg-card px-2.5 text-xs text-foreground focus:outline-hidden focus:ring-2 focus:ring-ring"
                   >
                     <option value="80mm">80mm</option>
@@ -591,10 +704,14 @@ export function PrintDevicesTab({
                   <input
                     type="checkbox"
                     checked={editForm.isDefault}
-                    onChange={(e) => setEditForm({ ...editForm, isDefault: e.target.checked })}
+                    onChange={(e) =>
+                      setEditForm({ ...editForm, isDefault: e.target.checked })
+                    }
                     className="rounded border-border text-primary focus:ring-primary"
                   />
-                  <span className="text-xs text-foreground">Máy in hóa đơn mặc định</span>
+                  <span className="text-xs text-foreground">
+                    Máy in hóa đơn mặc định
+                  </span>
                 </label>
               )}
 
@@ -602,10 +719,14 @@ export function PrintDevicesTab({
                 <input
                   type="checkbox"
                   checked={editForm.isActive}
-                  onChange={(e) => setEditForm({ ...editForm, isActive: e.target.checked })}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, isActive: e.target.checked })
+                  }
                   className="rounded border-border text-primary focus:ring-primary"
                 />
-                <span className="text-xs text-foreground">Kích hoạt hoạt động cho máy in này</span>
+                <span className="text-xs text-foreground">
+                  Kích hoạt hoạt động cho máy in này
+                </span>
               </label>
 
               {updateDeviceMutation.isError && (
@@ -616,11 +737,17 @@ export function PrintDevicesTab({
             </div>
 
             <DialogFooter className="mt-5">
-              <Button variant="outline" onClick={() => setEditingDevice(null)} className="h-9">
+              <Button
+                variant="outline"
+                onClick={() => setEditingDevice(null)}
+                className="h-9"
+              >
                 Hủy
               </Button>
               <Button
-                disabled={!editForm.name.trim() || updateDeviceMutation.isPending}
+                disabled={
+                  !editForm.name.trim() || updateDeviceMutation.isPending
+                }
                 onClick={() => {
                   updateDeviceMutation.mutate({
                     id: editingDevice.id,
@@ -629,7 +756,10 @@ export function PrintDevicesTab({
                       paperSize: editForm.paperSize,
                       status: editForm.status,
                       isActive: editForm.isActive,
-                      isDefault: editingDevice.type === 'RECEIPT' ? editForm.isDefault : undefined,
+                      isDefault:
+                        editingDevice.type === 'RECEIPT'
+                          ? editForm.isDefault
+                          : undefined,
                     },
                   })
                 }}
@@ -646,7 +776,10 @@ export function PrintDevicesTab({
       </Dialog>
 
       {/* ROTATE KEY CONFIRMATION MODAL */}
-      <Dialog open={!!rotatingDevice} onOpenChange={(open) => !open && setRotatingDevice(null)}>
+      <Dialog
+        open={!!rotatingDevice}
+        onOpenChange={(open) => !open && setRotatingDevice(null)}
+      >
         {rotatingDevice && (
           <div className="max-w-md">
             <DialogHeader>
@@ -660,15 +793,24 @@ export function PrintDevicesTab({
 
             <div className="mt-3 text-xs text-muted-foreground space-y-2">
               <p>
-                Khi cấp lại khóa, API Key hiện tại của máy in sẽ <strong className="text-foreground">hết hiệu lực ngay lập tức</strong>.
+                Khi cấp lại khóa, API Key hiện tại của máy in sẽ{' '}
+                <strong className="text-foreground">
+                  hết hiệu lực ngay lập tức
+                </strong>
+                .
               </p>
               <p>
-                Phần mềm Print Agent trên thiết bị này sẽ cần được cập nhật khóa mới để tiếp tục nhận lệnh in.
+                Phần mềm Print Agent trên thiết bị này sẽ cần được cập nhật khóa
+                mới để tiếp tục nhận lệnh in.
               </p>
             </div>
 
             <DialogFooter className="mt-5">
-              <Button variant="outline" onClick={() => setRotatingDevice(null)} className="h-9">
+              <Button
+                variant="outline"
+                onClick={() => setRotatingDevice(null)}
+                className="h-9"
+              >
                 Hủy
               </Button>
               <Button
@@ -687,7 +829,10 @@ export function PrintDevicesTab({
       </Dialog>
 
       {/* API KEY DISPLAY MODAL */}
-      <Dialog open={!!apiKeyModal} onOpenChange={(open) => !open && setApiKeyModal(null)}>
+      <Dialog
+        open={!!apiKeyModal}
+        onOpenChange={(open) => !open && setApiKeyModal(null)}
+      >
         {apiKeyModal && (
           <div className="max-w-md">
             <DialogHeader>
@@ -713,12 +858,16 @@ export function PrintDevicesTab({
                   Lưu ý bảo mật quan trọng:
                 </p>
                 <p className="mt-1">
-                  Mã API Key chỉ hiển thị duy nhất một lần. Vui lòng sao chép và cấu hình vào file cài đặt của ứng dụng Print Agent trên máy trạm.
+                  Mã API Key chỉ hiển thị duy nhất một lần. Vui lòng sao chép và
+                  cấu hình vào file cài đặt của ứng dụng Print Agent trên máy
+                  trạm.
                 </p>
               </div>
 
               <div>
-                <label className="block text-muted-foreground pb-1">Mã API Key:</label>
+                <label className="block text-muted-foreground pb-1">
+                  Mã API Key:
+                </label>
                 <div className="flex items-center gap-1.5">
                   <code className="flex-1 rounded-md border border-border bg-muted/60 p-2 font-mono text-[11px] break-all select-all text-foreground">
                     {apiKeyModal.key}
@@ -746,7 +895,10 @@ export function PrintDevicesTab({
             </div>
 
             <DialogFooter className="mt-5">
-              <Button onClick={() => setApiKeyModal(null)} className="h-9 w-full">
+              <Button
+                onClick={() => setApiKeyModal(null)}
+                className="h-9 w-full"
+              >
                 Tôi đã lưu API Key
               </Button>
             </DialogFooter>
@@ -755,7 +907,10 @@ export function PrintDevicesTab({
       </Dialog>
 
       {/* DELETE DEVICE MODAL */}
-      <Dialog open={!!deletingDevice} onOpenChange={(open) => !open && setDeletingDevice(null)}>
+      <Dialog
+        open={!!deletingDevice}
+        onOpenChange={(open) => !open && setDeletingDevice(null)}
+      >
         {deletingDevice && (
           <div className="max-w-md">
             <DialogHeader>
@@ -769,10 +924,15 @@ export function PrintDevicesTab({
 
             <div className="mt-3 text-xs text-muted-foreground space-y-2">
               <p>
-                Bạn có chắc chắn muốn xóa máy in <strong className="text-foreground">{deletingDevice.name}</strong>?
+                Bạn có chắc chắn muốn xóa máy in{' '}
+                <strong className="text-foreground">
+                  {deletingDevice.name}
+                </strong>
+                ?
               </p>
               <p className="text-rose-600 dark:text-rose-400">
-                Các lệnh in đang chờ xử lý sẽ được chuyển trả về hàng đợi chung để các máy in khác xử lý.
+                Các lệnh in đang chờ xử lý sẽ được chuyển trả về hàng đợi chung
+                để các máy in khác xử lý.
               </p>
             </div>
 
@@ -783,7 +943,11 @@ export function PrintDevicesTab({
             )}
 
             <DialogFooter className="mt-5">
-              <Button variant="outline" onClick={() => setDeletingDevice(null)} className="h-9">
+              <Button
+                variant="outline"
+                onClick={() => setDeletingDevice(null)}
+                className="h-9"
+              >
                 Hủy
               </Button>
               <Button

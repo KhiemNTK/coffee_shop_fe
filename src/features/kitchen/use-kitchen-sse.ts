@@ -1,9 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
+import { posKeys } from '../pos/pos.keys'
 
-export type KitchenConnectionStatus = 'connected' | 'connecting' | 'disconnected'
+export type KitchenConnectionStatus =
+  | 'connected'
+  | 'connecting'
+  | 'disconnected'
 
-export function useKitchenSse(enabled = true) {
+export function useKitchenSse(employeeId: string, enabled = true) {
   const queryClient = useQueryClient()
   const [status, setStatus] = useState<KitchenConnectionStatus>(() =>
     enabled ? 'connecting' : 'disconnected',
@@ -17,6 +21,20 @@ export function useKitchenSse(enabled = true) {
     let source: EventSource | null = null
     let active = true
 
+    function refresh() {
+      void queryClient.invalidateQueries({ queryKey: ['kitchen', 'tickets'] })
+      void queryClient.invalidateQueries({ queryKey: ['kitchen', 'workload'] })
+      void queryClient.invalidateQueries({
+        queryKey: posKeys.sessions(employeeId),
+      })
+      void queryClient.invalidateQueries({
+        queryKey: posKeys.tables(employeeId),
+      })
+      void queryClient.invalidateQueries({
+        queryKey: posKeys.session(employeeId).slice(0, -1),
+      })
+    }
+
     function connect() {
       if (!active) return
       setStatus('connecting')
@@ -28,14 +46,13 @@ export function useKitchenSse(enabled = true) {
       source.onopen = () => {
         if (!active) return
         setStatus('connected')
+        refresh()
       }
 
       source.addEventListener('kitchen.refresh', () => {
         if (!active) return
         setLastRefreshedAt(new Date().toLocaleTimeString('vi-VN'))
-        void queryClient.invalidateQueries({ queryKey: ['kitchen', 'tickets'] })
-        void queryClient.invalidateQueries({ queryKey: ['kitchen', 'workload'] })
-        void queryClient.invalidateQueries({ queryKey: ['pos'] })
+        refresh()
       })
 
       source.addEventListener('heartbeat', () => {
@@ -60,7 +77,7 @@ export function useKitchenSse(enabled = true) {
       }
       source?.close()
     }
-  }, [enabled, queryClient])
+  }, [employeeId, enabled, queryClient])
 
   return { status, lastRefreshedAt }
 }

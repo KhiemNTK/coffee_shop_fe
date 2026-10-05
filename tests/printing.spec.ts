@@ -7,7 +7,10 @@ const employee = {
   username: 'admin',
   fullName: 'Quản trị viên Hệ thống',
   isActive: true,
-  position: { id: '20000000-0000-4000-8000-000000000001', name: 'Quản trị viên' },
+  position: {
+    id: '20000000-0000-4000-8000-000000000001',
+    name: 'Quản trị viên',
+  },
 }
 
 const authorization = {
@@ -117,7 +120,9 @@ const mockJobs = [
 
 test.describe('Printing & Print Jobs Management', () => {
   test.beforeEach(async ({ page }) => {
-    await page.route('**/api/v1/auth/me', (route) => route.fulfill({ json: envelope(employee) }))
+    await page.route('**/api/v1/auth/me', (route) =>
+      route.fulfill({ json: envelope(employee) }),
+    )
     await page.route('**/api/v1/auth/me/permissions', (route) =>
       route.fulfill({ json: envelope(authorization) }),
     )
@@ -176,11 +181,20 @@ test.describe('Printing & Print Jobs Management', () => {
       }
 
       // GET devices
+      const params = new URL(url).searchParams
+      const keyword = (params.get('keyword') ?? '').toLowerCase()
+      const devices = mockDevices.filter(
+        (device) =>
+          (!keyword || device.name.toLowerCase().includes(keyword)) &&
+          (!params.get('type') || device.type === params.get('type')) &&
+          (!params.has('isActive') ||
+            String(device.isActive) === params.get('isActive')),
+      )
       return route.fulfill({
         json: envelope({
-          list: mockDevices,
+          list: devices,
           totalPages: 1,
-          totalItems: mockDevices.length,
+          totalItems: devices.length,
           currentPage: 1,
         }),
       })
@@ -242,29 +256,40 @@ test.describe('Printing & Print Jobs Management', () => {
     page,
   }) => {
     await page.goto('/staff/printing')
-    await expect(page.getByRole('heading', { name: /Quản trị Thiết bị In & Lệnh In/i })).toBeVisible()
-    await expect(page.getByText('Hardware Infrastructure')).toBeVisible()
-    await expect(page.getByRole('link', { name: /Máy in & Lệnh in/i }).first()).toBeVisible()
+    await expect(
+      page.getByRole('heading', { name: /Quản trị Thiết bị In & Lệnh In/i }),
+    ).toBeVisible()
+    await expect(page.getByText('Hardware Infrastructure')).toHaveCount(0)
+    await expect(
+      page.getByRole('link', { name: /Máy in & Lệnh in/i }).first(),
+    ).toBeVisible()
   })
 
-  test('renders top KPI cards and print devices list', async ({ page }) => {
+  test('renders print devices without claiming queue health from a partial list', async ({
+    page,
+  }) => {
     await page.goto('/staff/printing')
 
-    // KPI cards
-    await expect(page.getByText('Tổng thiết bị in')).toBeVisible()
-    await expect(page.getByText('Máy in Hóa đơn', { exact: true })).toBeVisible()
-    await expect(page.getByText('Máy in Bếp & Bar')).toBeVisible()
-    await expect(page.getByText('Lệnh in cần chú ý')).toBeVisible()
+    await expect(page.getByText('Lệnh in cần chú ý')).toHaveCount(0)
+    await expect(page.getByText('Hàng đợi ổn định')).toHaveCount(0)
 
     // Devices
-    await expect(page.getByRole('heading', { name: 'Máy in Quầy Thu ngân 1' })).toBeVisible()
-    await expect(page.getByRole('heading', { name: 'Máy in Trạm Pha chế Bar' })).toBeVisible()
-    await expect(page.getByRole('heading', { name: 'Máy in Bếp Nóng' })).toBeVisible()
+    await expect(
+      page.getByRole('heading', { name: 'Máy in Quầy Thu ngân 1' }),
+    ).toBeVisible()
+    await expect(
+      page.getByRole('heading', { name: 'Máy in Trạm Pha chế Bar' }),
+    ).toBeVisible()
+    await expect(
+      page.getByRole('heading', { name: 'Máy in Bếp Nóng' }),
+    ).toBeVisible()
 
     // Status badges
     await expect(page.getByText('Sẵn sàng').first()).toBeVisible()
     await expect(page.getByText('Báo lỗi')).toBeVisible()
-    await expect(page.getByText('Kẹt giấy máy in (Paper jam detected)')).toBeVisible()
+    await expect(
+      page.getByText('Kẹt giấy máy in (Paper jam detected)'),
+    ).toBeVisible()
   })
 
   test('filters devices by search keyword and type', async ({ page }) => {
@@ -273,14 +298,22 @@ test.describe('Printing & Print Jobs Management', () => {
     const searchInput = page.getByPlaceholder(/Tìm theo tên máy in/i)
     await searchInput.fill('Bếp Nóng')
 
-    await expect(page.getByRole('heading', { name: 'Máy in Bếp Nóng' })).toBeVisible()
-    await expect(page.getByRole('heading', { name: 'Máy in Quầy Thu ngân 1' })).not.toBeVisible()
+    await expect(
+      page.getByRole('heading', { name: 'Máy in Bếp Nóng' }),
+    ).toBeVisible()
+    await expect(
+      page.getByRole('heading', { name: 'Máy in Quầy Thu ngân 1' }),
+    ).not.toBeVisible()
 
     await searchInput.clear()
-    await expect(page.getByRole('heading', { name: 'Máy in Quầy Thu ngân 1' })).toBeVisible()
+    await expect(
+      page.getByRole('heading', { name: 'Máy in Quầy Thu ngân 1' }),
+    ).toBeVisible()
   })
 
-  test('creates a new print device and views generated API key', async ({ page }) => {
+  test('creates a new print device and views generated API key', async ({
+    page,
+  }) => {
     await page.goto('/staff/printing')
 
     // Click "Thêm máy in"
@@ -303,7 +336,9 @@ test.describe('Printing & Print Jobs Management', () => {
     await expect(page.getByRole('dialog')).not.toBeVisible()
   })
 
-  test('switches to Print Jobs tab and retries a failed job', async ({ page }) => {
+  test('switches to Print Jobs tab and retries a failed job', async ({
+    page,
+  }) => {
     await page.goto('/staff/printing')
 
     // Click "Hàng đợi Lệnh in" tab
@@ -327,7 +362,9 @@ test.describe('Printing & Print Jobs Management', () => {
     await expect(retryDialog).not.toBeVisible()
   })
 
-  test('switches to Reprint Receipt tab and submits reprint request', async ({ page }) => {
+  test('switches to Reprint Receipt tab and submits reprint request', async ({
+    page,
+  }) => {
     await page.goto('/staff/printing')
 
     // Click "In lại Hóa đơn" tab
@@ -337,12 +374,16 @@ test.describe('Printing & Print Jobs Management', () => {
 
     // Fill form
     await page.getByLabel(/Mã Hóa đơn/i).fill('inv-1001')
-    await page.getByLabel(/Lý do in lại/i).fill('Khách xin thêm phiếu tính tiền')
+    await page
+      .getByLabel(/Lý do in lại/i)
+      .fill('Khách xin thêm phiếu tính tiền')
 
     // Submit
     await page.getByRole('button', { name: /Gửi lệnh in lại hóa đơn/i }).click()
 
     // Expect success message
-    await expect(page.getByText(/Đã tạo lệnh in lại thành công/i)).toBeVisible()
+    await expect(
+      page.getByText(/Đã tạo lệnh in lại trong hàng đợi/i),
+    ).toBeVisible()
   })
 })
