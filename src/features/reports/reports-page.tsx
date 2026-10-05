@@ -8,6 +8,7 @@ import {
   FileSpreadsheet,
   RefreshCw,
   TrendingUp,
+  Star,
 } from 'lucide-react'
 import { type Session } from '../auth/session'
 import {
@@ -19,10 +20,19 @@ import {
   getKitchenSlaReport,
 } from './reports.api'
 import { ApiError, errorMessage } from '../../shared/api/client'
-import { Button, Tabs, TabsContent, TabsList, TabsTrigger, cn } from '../../shared/ui'
+import {
+  Button,
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+  cn,
+} from '../../shared/ui'
 import { FinancialOverviewTab } from './components/financial-overview-tab'
 import { KitchenOperationsTab } from './components/kitchen-operations-tab'
 import { DailySalesCloseTab } from './components/daily-sales-close-tab'
+import { OnlineBusinessTab } from './components/online-business-tab'
+import { FeedbackReport } from './components/feedback-report'
 
 function getPresetDates(preset: 'today' | '7days' | '30days' | 'month') {
   const now = new Date()
@@ -41,12 +51,16 @@ function getPresetDates(preset: 'today' | '7days' | '30days' | 'month') {
     return { from: start.toISOString(), to }
   }
   // month
-  const start = new Date(getTodayDateString().slice(0, 7) + '-01T00:00:00+07:00')
+  const start = new Date(
+    getTodayDateString().slice(0, 7) + '-01T00:00:00+07:00',
+  )
   return { from: start.toISOString(), to }
 }
 
 function getTodayDateString() {
-  return new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Ho_Chi_Minh' })
+  return new Date().toLocaleDateString('sv-SE', {
+    timeZone: 'Asia/Ho_Chi_Minh',
+  })
 }
 
 export default function ReportsPage() {
@@ -58,15 +72,20 @@ export default function ReportsPage() {
   const canClose = permissions.includes('/reports_close')
 
   // Date filters
-  const [preset, setPreset] = useState<'today' | '7days' | '30days' | 'month'>('today')
+  const [preset, setPreset] = useState<'today' | '7days' | '30days' | 'month'>(
+    'today',
+  )
   const [dateRange, setDateRange] = useState(() => getPresetDates('today'))
   const [granularity, setGranularity] = useState<'day' | 'hour'>('day')
-  const [activeTab, setActiveTab] = useState<'overview' | 'kitchen' | 'daily-close'>('overview')
+  const [activeTab, setActiveTab] = useState<
+    'overview' | 'kitchen' | 'daily-close' | 'online' | 'feedback'
+  >('overview')
   const [isExporting, setIsExporting] = useState(false)
   const [exportError, setExportError] = useState<string | null>(null)
 
   // Daily close date picker (defaults to yesterday or today)
-  const [selectedCloseDate, setSelectedCloseDate] = useState<string>(getTodayDateString)
+  const [selectedCloseDate, setSelectedCloseDate] =
+    useState<string>(getTodayDateString)
   const [confirmCloseModalOpen, setConfirmCloseModalOpen] = useState(false)
 
   function handleSelectPreset(p: 'today' | '7days' | '30days' | 'month') {
@@ -76,7 +95,14 @@ export default function ReportsPage() {
 
   // Queries (lazy loaded according to activeTab)
   const dashboardQuery = useQuery({
-    queryKey: ['private', employee.id, 'dashboard-report', dateRange.from, dateRange.to, granularity],
+    queryKey: [
+      'private',
+      employee.id,
+      'dashboard-report',
+      dateRange.from,
+      dateRange.to,
+      granularity,
+    ],
     queryFn: ({ signal }) =>
       getDashboardReport(
         {
@@ -91,7 +117,13 @@ export default function ReportsPage() {
   })
 
   const kitchenSlaQuery = useQuery({
-    queryKey: ['private', employee.id, 'kitchen-sla-report', dateRange.from, dateRange.to],
+    queryKey: [
+      'private',
+      employee.id,
+      'kitchen-sla-report',
+      dateRange.from,
+      dateRange.to,
+    ],
     queryFn: ({ signal }) =>
       getKitchenSlaReport(
         {
@@ -104,7 +136,13 @@ export default function ReportsPage() {
   })
 
   const kitchenBottlenecksQuery = useQuery({
-    queryKey: ['private', employee.id, 'kitchen-bottlenecks-report', dateRange.from, dateRange.to],
+    queryKey: [
+      'private',
+      employee.id,
+      'kitchen-bottlenecks-report',
+      dateRange.from,
+      dateRange.to,
+    ],
     queryFn: ({ signal }) =>
       getKitchenBottlenecks(
         {
@@ -113,7 +151,10 @@ export default function ReportsPage() {
         },
         signal,
       ),
-    enabled: activeTab === 'kitchen' && new Date(dateRange.to).getTime() - new Date(dateRange.from).getTime() <= 7 * 86400000,
+    enabled:
+      activeTab === 'kitchen' &&
+      new Date(dateRange.to).getTime() - new Date(dateRange.from).getTime() <=
+        7 * 86400000,
   })
 
   const dailyCloseQuery = useQuery({
@@ -136,7 +177,12 @@ export default function ReportsPage() {
     onSuccess: () => {
       setConfirmCloseModalOpen(false)
       void queryClient.invalidateQueries({
-        queryKey: ['private', employee.id, 'daily-sales-close', selectedCloseDate],
+        queryKey: [
+          'private',
+          employee.id,
+          'daily-sales-close',
+          selectedCloseDate,
+        ],
       })
     },
   })
@@ -172,12 +218,16 @@ export default function ReportsPage() {
       {/* Top Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <p className="text-xs font-bold uppercase tracking-wider text-primary">BÁO CÁO & THỐNG KÊ</p>
+          <p className="text-xs font-bold uppercase tracking-wider text-primary">
+            BÁO CÁO & THỐNG KÊ
+          </p>
           <h1 className="flex items-center gap-2.5 text-2xl font-bold tracking-tight text-foreground">
-            <BarChart3 className="h-7 w-7 text-primary" /> Báo cáo Doanh thu & Vận hành
+            <BarChart3 className="h-7 w-7 text-primary" /> Báo cáo Doanh thu &
+            Vận hành
           </h1>
           <p className="text-sm text-muted-foreground">
-            Theo dõi dòng tiền, lợi nhuận gộp, hiệu suất quầy pha chế và chốt sổ doanh thu ngày.
+            Theo dõi dòng tiền, lợi nhuận gộp, hiệu suất quầy pha chế và chốt sổ
+            doanh thu ngày.
           </p>
         </div>
 
@@ -246,7 +296,12 @@ export default function ReportsPage() {
             className="gap-1.5"
             title="Làm mới dữ liệu"
           >
-            <RefreshCw className={cn('h-4 w-4', dashboardQuery.isFetching && 'animate-spin')} />
+            <RefreshCw
+              className={cn(
+                'h-4 w-4',
+                dashboardQuery.isFetching && 'animate-spin',
+              )}
+            />
             <span className="hidden sm:inline">Làm mới</span>
           </Button>
 
@@ -276,7 +331,10 @@ export default function ReportsPage() {
       )}
 
       {/* Tabs */}
-      <Tabs value={activeTab} onValueChange={(val) => setActiveTab(val as typeof activeTab)}>
+      <Tabs
+        value={activeTab}
+        onValueChange={(val) => setActiveTab(val as typeof activeTab)}
+      >
         <TabsList className="mb-4">
           <TabsTrigger value="overview" className="gap-2">
             <TrendingUp className="h-4 w-4" />
@@ -290,7 +348,22 @@ export default function ReportsPage() {
             <CalendarCheck className="h-4 w-4" />
             Chốt sổ doanh thu ngày
           </TabsTrigger>
+          <TabsTrigger value="online" className="gap-2">
+            <TrendingUp className="h-4 w-4" />
+            Hiệu quả đơn online
+          </TabsTrigger>
+          <TabsTrigger value="feedback" className="gap-2">
+            <Star className="h-4 w-4" />
+            Phản hồi khách
+          </TabsTrigger>
         </TabsList>
+        <TabsContent value="feedback">
+          <FeedbackReport
+            key={`${dateRange.from}:${dateRange.to}`}
+            from={dateRange.from}
+            to={dateRange.to}
+          />
+        </TabsContent>
 
         {/* TAB 1: FINANCIAL OVERVIEW */}
         <TabsContent value="overview">
@@ -314,10 +387,24 @@ export default function ReportsPage() {
             slaError={kitchenSlaQuery.error}
             bottleneckSlots={kitchenBottlenecksQuery.data?.slots}
             isBottlenecksPending={kitchenBottlenecksQuery.isPending}
-            bottlenecksError={new Date(dateRange.to).getTime() - new Date(dateRange.from).getTime() > 7 * 86400000
-              ? new ApiError(400, undefined, undefined, 'Báo cáo nghẽn bếp chỉ hỗ trợ tối đa 7 ngày. Chọn khoảng thời gian ngắn hơn.')
-              : kitchenBottlenecksQuery.error}
+            bottlenecksError={
+              new Date(dateRange.to).getTime() -
+                new Date(dateRange.from).getTime() >
+              7 * 86400000
+                ? new ApiError(
+                    400,
+                    undefined,
+                    undefined,
+                    'Báo cáo nghẽn bếp chỉ hỗ trợ tối đa 7 ngày. Chọn khoảng thời gian ngắn hơn.',
+                  )
+                : kitchenBottlenecksQuery.error
+            }
           />
+        </TabsContent>
+
+        {/* TAB 3: DAILY SALES CLOSE */}
+        <TabsContent value="online">
+          <OnlineBusinessTab from={dateRange.from} to={dateRange.to} />
         </TabsContent>
 
         {/* TAB 3: DAILY SALES CLOSE */}

@@ -2,9 +2,7 @@ import { z } from 'zod'
 import { apiGet, apiMutate } from '../../shared/api/client'
 import { moneySchema } from '../menu/menu.api'
 
-const signedMoneySchema = z.union([
-  moneySchema, z.string().regex(/^-\d{1,16}(\.\d{1,2})?$/),
-])
+import { signedMoneySchema } from '../../shared/api/money'
 
 // --- Dashboard Report Schemas ---
 
@@ -88,6 +86,14 @@ export const cashRiskOverviewSchema = z.object({
   openingShortageAmount: moneySchema.optional(),
   openingOverageAmount: moneySchema.optional(),
   repeatShortageEmployeeCount: z.number().int().nonnegative().optional(),
+  currentPendingExpenseRequestCount: z.number().optional(),
+  currentPendingExpenseRequestAmount: moneySchema.optional(),
+  currentPendingHandoverCount: z.number().optional(),
+  currentPendingHandoverAmount: moneySchema.optional(),
+  overdueBankSettlementCount: z.number().optional(),
+  overdueBankSettlementAmount: moneySchema.optional(),
+  currentMismatchedBankStatementEntryCount: z.number().optional(),
+  currentMismatchedBankStatementEntryAmount: moneySchema.optional(),
 })
 
 export const dashboardReportSchema = z.object({
@@ -101,8 +107,28 @@ export const dashboardReportSchema = z.object({
   lowStockItems: z.array(lowStockReportItemSchema),
   cashRisk: z.object({
     overview: cashRiskOverviewSchema.optional(),
-    varianceTrend: z.array(z.record(z.string(), z.unknown())).optional(),
-    employees: z.array(z.record(z.string(), z.unknown())).optional(),
+    varianceTrend: z
+      .array(
+        z.object({
+          bucket: z.string(),
+          closedShiftCount: z.number(),
+          discrepantShiftCount: z.number(),
+          cashShortageAmount: moneySchema,
+          cashOverageAmount: moneySchema,
+        }),
+      )
+      .optional(),
+    employees: z
+      .array(
+        z.object({
+          employeeId: z.string(),
+          employeeName: z.string(),
+          closedShiftCount: z.number(),
+          shortageShiftCount: z.number(),
+          totalShortageAmount: moneySchema,
+        }),
+      )
+      .optional(),
   }),
 })
 
@@ -122,7 +148,10 @@ export const kitchenSlaStationSchema = z.object({
   completedCount: z.number().int().nonnegative(),
   lateCompletedCount: z.number().int().nonnegative(),
   overdueOpenCount: z.number().int().nonnegative(),
-  lateRatePercent: z.string().regex(/^\d+(\.\d+)?$/).nullable(),
+  lateRatePercent: z
+    .string()
+    .regex(/^\d+(\.\d+)?$/)
+    .nullable(),
   averageTicketToReadySeconds: z.number().nullable().optional(),
   p95TicketToReadySeconds: z.number().nullable().optional(),
 })
@@ -174,16 +203,25 @@ export interface GetDashboardFilters {
   lowStockThreshold?: number
 }
 
-export function getDashboardReport(filters: GetDashboardFilters = {}, signal?: AbortSignal) {
+export function getDashboardReport(
+  filters: GetDashboardFilters = {},
+  signal?: AbortSignal,
+) {
   const q = new URLSearchParams()
   if (filters.from) q.set('from', filters.from)
   if (filters.to) q.set('to', filters.to)
   if (filters.granularity) q.set('granularity', filters.granularity)
   if (filters.topLimit) q.set('topLimit', String(filters.topLimit))
-  if (filters.lowStockThreshold) q.set('lowStockThreshold', String(filters.lowStockThreshold))
+  if (filters.lowStockThreshold)
+    q.set('lowStockThreshold', String(filters.lowStockThreshold))
 
   const query = q.toString()
-  return apiGet(`/reports/dashboard${query ? `?${query}` : ''}`, dashboardReportSchema, signal, true)
+  return apiGet(
+    `/reports/dashboard${query ? `?${query}` : ''}`,
+    dashboardReportSchema,
+    signal,
+    true,
+  )
 }
 
 export function getKitchenSlaReport(
@@ -196,7 +234,12 @@ export function getKitchenSlaReport(
   if (filters.stationId) q.set('stationId', filters.stationId)
 
   const query = q.toString()
-  return apiGet(`/reports/kitchen-sla${query ? `?${query}` : ''}`, kitchenSlaResponseSchema, signal, true)
+  return apiGet(
+    `/reports/kitchen-sla${query ? `?${query}` : ''}`,
+    kitchenSlaResponseSchema,
+    signal,
+    true,
+  )
 }
 
 export function getKitchenBottlenecks(
@@ -209,29 +252,47 @@ export function getKitchenBottlenecks(
   if (filters.stationId) q.set('stationId', filters.stationId)
 
   const query = q.toString()
-  return apiGet(`/reports/kitchen-bottlenecks${query ? `?${query}` : ''}`, kitchenBottlenecksResponseSchema, signal, true)
+  return apiGet(
+    `/reports/kitchen-bottlenecks${query ? `?${query}` : ''}`,
+    kitchenBottlenecksResponseSchema,
+    signal,
+    true,
+  )
 }
 
 export function getDailySalesClose(businessDate: string, signal?: AbortSignal) {
-  return apiGet(`/reports/daily-closes/${businessDate}`, dailySalesCloseSchema, signal, true)
+  return apiGet(
+    `/reports/daily-closes/${businessDate}`,
+    dailySalesCloseSchema,
+    signal,
+    true,
+  )
 }
 
 export function executeDailySalesClose(businessDate: string) {
-  return apiMutate('/reports/daily-closes', 'POST', dailySalesCloseSchema, { businessDate })
+  return apiMutate('/reports/daily-closes', 'POST', dailySalesCloseSchema, {
+    businessDate,
+  })
 }
 
-export async function downloadDashboardExcel(filters: GetDashboardFilters = {}): Promise<Blob> {
+export async function downloadDashboardExcel(
+  filters: GetDashboardFilters = {},
+): Promise<Blob> {
   const q = new URLSearchParams()
   if (filters.from) q.set('from', filters.from)
   if (filters.to) q.set('to', filters.to)
   if (filters.granularity) q.set('granularity', filters.granularity)
   if (filters.topLimit) q.set('topLimit', String(filters.topLimit))
-  if (filters.lowStockThreshold) q.set('lowStockThreshold', String(filters.lowStockThreshold))
+  if (filters.lowStockThreshold)
+    q.set('lowStockThreshold', String(filters.lowStockThreshold))
 
   const query = q.toString()
-  const res = await fetch(`/api/v1/reports/dashboard/export${query ? `?${query}` : ''}`, {
-    credentials: 'include',
-  })
+  const res = await fetch(
+    `/api/v1/reports/dashboard/export${query ? `?${query}` : ''}`,
+    {
+      credentials: 'include',
+    },
+  )
   if (!res.ok) {
     throw new Error(`Xuất báo cáo Excel thất bại (${res.status})`)
   }

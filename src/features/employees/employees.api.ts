@@ -79,13 +79,11 @@ export const rolePermissionDetailSchema = z.object({
   name: z.string(),
   description: z.string().nullable().optional(),
   isSystemRole: z.boolean().optional(),
-  rolePermissions: z
-    .array(
-      z.object({
-        permission: permissionSchema,
-      }),
-    )
-    .optional(),
+  rolePermissions: z.array(
+    z.object({
+      permission: permissionSchema,
+    }),
+  ),
 })
 
 export type RolePermissionDetail = z.infer<typeof rolePermissionDetailSchema>
@@ -139,10 +137,20 @@ export const employeeRolesResponseSchema = z.object({
 
 export type EmployeeRolesResponse = z.infer<typeof employeeRolesResponseSchema>
 
-const newPasswordSchema = z.string().min(12, 'Mật khẩu tối thiểu 12 ký tự')
-  .refine((value) => new TextEncoder().encode(value).length <= 72, 'Mật khẩu tối đa 72 byte UTF-8')
-const phoneInputSchema = z.string().trim()
-  .refine((value) => !value || (value.length >= 10 && value.length <= 15), 'Điện thoại cần 10–15 ký tự')
+const newPasswordSchema = z
+  .string()
+  .min(12, 'Mật khẩu tối thiểu 12 ký tự')
+  .refine(
+    (value) => new TextEncoder().encode(value).length <= 72,
+    'Mật khẩu tối đa 72 byte UTF-8',
+  )
+const phoneInputSchema = z
+  .string()
+  .trim()
+  .refine(
+    (value) => !value || (value.length >= 10 && value.length <= 15),
+    'Điện thoại cần 10–15 ký tự',
+  )
 
 export const createEmployeeInputSchema = z.object({
   fullName: z.string().trim().min(1, 'Họ và tên không được để trống'),
@@ -158,7 +166,11 @@ export const createEmployeeInputSchema = z.object({
 export type CreateEmployeeInput = z.infer<typeof createEmployeeInputSchema>
 
 export const updateEmployeeInputSchema = z.object({
-  fullName: z.string().trim().min(1, 'Họ và tên không được để trống').optional(),
+  fullName: z
+    .string()
+    .trim()
+    .min(1, 'Họ và tên không được để trống')
+    .optional(),
   phoneNumber: phoneInputSchema.optional(),
   address: z.string().trim().optional(),
   positionId: z.string().optional(),
@@ -181,21 +193,36 @@ export type ActionMessageResponse = z.infer<typeof actionMessageResponseSchema>
 
 // Employees API
 export async function getEmployees(
-  params: { page?: number; itemPerPage?: number; search?: string },
+  params: {
+    page?: number
+    itemPerPage?: number
+    search?: string
+    isActive?: boolean
+    positionId?: string
+  },
   signal?: AbortSignal,
 ): Promise<PaginatedEmployees> {
   const query = new URLSearchParams()
   query.set('page', String(params.page || 1))
   query.set('itemPerPage', String(params.itemPerPage || 10))
   if (params.search) query.set('search', params.search)
-  return apiGet(`/employees?${query.toString()}`, paginatedEmployeesSchema, signal, true)
+  if (params.isActive !== undefined)
+    query.set('isActive', String(params.isActive))
+  if (params.positionId) query.set('positionId', params.positionId)
+  return apiGet(
+    `/employees?${query.toString()}`,
+    paginatedEmployeesSchema,
+    signal,
+    true,
+  )
 }
 
 export async function createEmployee(
   payload: CreateEmployeeInput,
 ): Promise<EmployeeListItem> {
   return apiMutate('/employees', 'POST', employeeListItemSchema, {
-    ...payload, phoneNumber: payload.phoneNumber?.trim() || undefined,
+    ...payload,
+    phoneNumber: payload.phoneNumber?.trim() || undefined,
   })
 }
 
@@ -204,33 +231,59 @@ export async function updateEmployee(
   payload: UpdateEmployeeInput,
 ): Promise<EmployeeListItem> {
   return apiMutate(`/employees/${id}`, 'PATCH', employeeListItemSchema, {
-    ...payload, phoneNumber: payload.phoneNumber === undefined ? undefined : payload.phoneNumber.trim() || null,
+    ...payload,
+    phoneNumber:
+      payload.phoneNumber === undefined
+        ? undefined
+        : payload.phoneNumber.trim() || null,
   })
 }
 
-export async function deleteEmployee(id: string): Promise<ActionMessageResponse> {
-  return apiMutate(`/employees/${id}`, 'DELETE', actionMessageResponseSchema, undefined)
+export async function deleteEmployee(
+  id: string,
+): Promise<ActionMessageResponse> {
+  return apiMutate(
+    `/employees/${id}`,
+    'DELETE',
+    actionMessageResponseSchema,
+    undefined,
+  )
 }
 
 export async function getEmployeeRoles(
   id: string,
   signal?: AbortSignal,
 ): Promise<EmployeeRolesResponse> {
-  return apiGet(`/employees/${id}/roles`, employeeRolesResponseSchema, signal, true)
+  return apiGet(
+    `/employees/${id}/roles`,
+    employeeRolesResponseSchema,
+    signal,
+    true,
+  )
 }
 
 export async function replaceEmployeeRoles(
   id: string,
   roleIds: string[],
 ): Promise<ActionMessageResponse> {
-  return apiMutate(`/employees/${id}/roles`, 'PUT', actionMessageResponseSchema, { roleIds })
+  return apiMutate(
+    `/employees/${id}/roles`,
+    'PUT',
+    actionMessageResponseSchema,
+    { roleIds },
+  )
 }
 
 // Positions API
 export async function getPositionsDropdown(
   signal?: AbortSignal,
 ): Promise<PositionDropdownItem[]> {
-  return apiGet('/positions/dropdown', z.array(positionDropdownItemSchema), signal, true)
+  return apiGet(
+    '/positions/dropdown',
+    z.array(positionDropdownItemSchema),
+    signal,
+    true,
+  )
 }
 
 export async function getPositions(
@@ -240,7 +293,12 @@ export async function getPositions(
   const query = new URLSearchParams()
   query.set('page', String(params.page || 1))
   query.set('itemPerPage', String(params.itemPerPage || 20))
-  return apiGet(`/positions?${query.toString()}`, paginatedPositionsSchema, signal, true)
+  return apiGet(
+    `/positions?${query.toString()}`,
+    paginatedPositionsSchema,
+    signal,
+    true,
+  )
 }
 
 export async function createPosition(payload: {
@@ -257,8 +315,15 @@ export async function updatePosition(
   return apiMutate(`/positions/${id}`, 'PATCH', positionSchema, payload)
 }
 
-export async function deletePosition(id: string): Promise<ActionMessageResponse> {
-  return apiMutate(`/positions/${id}`, 'DELETE', actionMessageResponseSchema, undefined)
+export async function deletePosition(
+  id: string,
+): Promise<ActionMessageResponse> {
+  return apiMutate(
+    `/positions/${id}`,
+    'DELETE',
+    actionMessageResponseSchema,
+    undefined,
+  )
 }
 
 // Roles & Permissions API
@@ -269,23 +334,38 @@ export async function getRoles(
   const query = new URLSearchParams()
   query.set('page', String(params.page || 1))
   query.set('itemPerPage', String(params.itemPerPage || 20))
-  return apiGet(`/roles?${query.toString()}`, paginatedRolesSchema, signal, true)
+  return apiGet(
+    `/roles?${query.toString()}`,
+    paginatedRolesSchema,
+    signal,
+    true,
+  )
 }
 
 export async function getRolePermissions(
   id: string,
   signal?: AbortSignal,
 ): Promise<RolePermissionDetail> {
-  return apiGet(`/roles/${id}/permissions`, rolePermissionDetailSchema, signal, true)
+  return apiGet(
+    `/roles/${id}/permissions`,
+    rolePermissionDetailSchema,
+    signal,
+    true,
+  )
 }
 
 export async function replaceRolePermissions(
   id: string,
   permissionIds: string[],
 ): Promise<ActionMessageResponse> {
-  return apiMutate(`/roles/${id}/permissions`, 'PUT', actionMessageResponseSchema, {
-    permissionIds,
-  })
+  return apiMutate(
+    `/roles/${id}/permissions`,
+    'PUT',
+    actionMessageResponseSchema,
+    {
+      permissionIds,
+    },
+  )
 }
 
 export async function getPermissions(
@@ -295,5 +375,52 @@ export async function getPermissions(
   const query = new URLSearchParams()
   query.set('page', String(params.page || 1))
   query.set('itemPerPage', String(params.itemPerPage || 100))
-  return apiGet(`/permissions?${query.toString()}`, paginatedPermissionsSchema, signal, true)
+  return apiGet(
+    `/permissions?${query.toString()}`,
+    paginatedPermissionsSchema,
+    signal,
+    true,
+  )
+}
+
+export async function getAllRoles(signal?: AbortSignal) {
+  const list: Role[] = []
+  let page = 1
+  let totalPages = 1
+  do {
+    const result = await getRoles({ page, itemPerPage: 100 }, signal)
+    list.push(...result.list)
+    totalPages = result.totalPages
+    page++
+  } while (page <= totalPages)
+  return list
+}
+
+export async function getAllPermissions(signal?: AbortSignal) {
+  const list: Permission[] = []
+  let page = 1
+  let totalPages = 1
+  do {
+    const result = await getPermissions({ page, itemPerPage: 100 }, signal)
+    list.push(...result.list)
+    totalPages = result.totalPages
+    page++
+  } while (page <= totalPages)
+  return list
+}
+
+export function saveRole(
+  id: string | undefined,
+  data: { name: string; description?: string | null },
+) {
+  return apiMutate(
+    id ? `/roles/${id}` : '/roles',
+    id ? 'PATCH' : 'POST',
+    roleSchema,
+    data,
+  )
+}
+
+export function deleteRole(id: string) {
+  return apiMutate(`/roles/${id}`, 'DELETE', z.unknown())
 }

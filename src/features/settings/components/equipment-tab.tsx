@@ -1,5 +1,6 @@
-import { useState, useMemo, useDeferredValue } from 'react'
+import { useState, useDeferredValue } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { Pagination } from '@/shared/ui/pagination'
 import {
   Cpu,
   Search,
@@ -7,10 +8,7 @@ import {
   Edit2,
   History,
   ArrowRightLeft,
-  CheckCircle2,
   AlertCircle,
-  Wrench,
-  Ban,
 } from 'lucide-react'
 import {
   settingsApi,
@@ -26,7 +24,6 @@ import {
   Button,
   Badge,
   Card,
-  CardContent,
   Input,
   Dialog,
   DialogHeader,
@@ -35,7 +32,10 @@ import {
   DialogFooter,
 } from '@/shared/ui'
 
-const ALLOWED_EQUIPMENT_TRANSITIONS: Record<EquipmentStatus, EquipmentStatus[]> = {
+const ALLOWED_EQUIPMENT_TRANSITIONS: Record<
+  EquipmentStatus,
+  EquipmentStatus[]
+> = {
   IN_USE: ['MAINTENANCE', 'BROKEN', 'LIQUIDATED'],
   MAINTENANCE: ['IN_USE', 'BROKEN', 'LIQUIDATED'],
   BROKEN: ['MAINTENANCE', 'LIQUIDATED'],
@@ -62,47 +62,71 @@ export function EquipmentTab({
 
   // Search & Filter
   const [equipmentSearch, setEquipmentSearch] = useState('')
+  const [page, setPage] = useState(1)
+  const [eventsPage, setEventsPage] = useState(1)
   const deferredEquipmentSearch = useDeferredValue(equipmentSearch)
-  const [equipmentStatusFilter, setEquipmentStatusFilter] = useState<'ALL' | EquipmentStatus>('ALL')
+  const [equipmentStatusFilter, setEquipmentStatusFilter] = useState<
+    'ALL' | EquipmentStatus
+  >('ALL')
 
   // Modals state
-  const [createEquipmentData, setCreateEquipmentData] = useState<CreateEquipmentInput>(() => ({
-    assetCode: '',
-    name: '',
-    quantity: 1,
-    unitPrice: '0',
-    purchaseDate: new Date().toISOString().split('T')[0]!,
-    location: '',
-    notes: '',
-  }))
-  const [createEquipmentError, setCreateEquipmentError] = useState<string | null>(null)
+  const [createEquipmentData, setCreateEquipmentData] =
+    useState<CreateEquipmentInput>(() => ({
+      assetCode: '',
+      name: '',
+      quantity: 1,
+      unitPrice: '0',
+      purchaseDate: new Date().toISOString().split('T')[0]!,
+      location: '',
+      notes: '',
+    }))
+  const [createEquipmentError, setCreateEquipmentError] = useState<
+    string | null
+  >(null)
 
-  const [editingEquipment, setEditingEquipment] = useState<EquipmentItem | null>(null)
-  const [editEquipmentData, setEditEquipmentData] = useState<UpdateEquipmentInput>({})
-  const [editEquipmentError, setEditEquipmentError] = useState<string | null>(null)
+  const [editingEquipment, setEditingEquipment] =
+    useState<EquipmentItem | null>(null)
+  const [editEquipmentData, setEditEquipmentData] =
+    useState<UpdateEquipmentInput>({})
+  const [editEquipmentError, setEditEquipmentError] = useState<string | null>(
+    null,
+  )
 
-  const [transitioningEquipment, setTransitioningEquipment] = useState<EquipmentItem | null>(null)
-  const [transitionData, setTransitionData] = useState<TransitionEquipmentInput>({
-    status: 'MAINTENANCE',
-    reason: '',
-    cost: '0',
-  })
+  const [transitioningEquipment, setTransitioningEquipment] =
+    useState<EquipmentItem | null>(null)
+  const [transitionData, setTransitionData] =
+    useState<TransitionEquipmentInput>({
+      status: 'MAINTENANCE',
+      reason: '',
+      cost: '0',
+    })
   const [transitionError, setTransitionError] = useState<string | null>(null)
 
-  const [viewingEventsEquipment, setViewingEventsEquipment] = useState<EquipmentItem | null>(null)
+  const [viewingEventsEquipment, setViewingEventsEquipment] =
+    useState<EquipmentItem | null>(null)
 
   // Queries
   const {
     data: equipmentData,
     isLoading: isLoadingEquipment,
+    isFetching,
+    error,
+    refetch,
   } = useQuery({
-    queryKey: ['equipment-list', deferredEquipmentSearch, equipmentStatusFilter],
+    queryKey: [
+      'equipment-list',
+      deferredEquipmentSearch,
+      equipmentStatusFilter,
+      page,
+    ],
     queryFn: ({ signal }) =>
       settingsApi.getEquipment(
         {
           keyword: deferredEquipmentSearch.trim() || undefined,
-          status: equipmentStatusFilter === 'ALL' ? undefined : equipmentStatusFilter,
-          itemPerPage: 50,
+          status:
+            equipmentStatusFilter === 'ALL' ? undefined : equipmentStatusFilter,
+          page,
+          itemPerPage: 20,
         },
         signal,
       ),
@@ -111,11 +135,18 @@ export function EquipmentTab({
   const {
     data: equipmentEventsData,
     isLoading: isLoadingEvents,
+    isFetching: isFetchingEvents,
+    error: eventsError,
+    refetch: refetchEvents,
   } = useQuery({
-    queryKey: ['equipment-events', viewingEventsEquipment?.id],
+    queryKey: ['equipment-events', viewingEventsEquipment?.id, eventsPage],
     queryFn: ({ signal }) =>
       viewingEventsEquipment
-        ? settingsApi.getEquipmentEvents(viewingEventsEquipment.id, undefined, signal)
+        ? settingsApi.getEquipmentEvents(
+            viewingEventsEquipment.id,
+            { page: eventsPage, itemPerPage: 20 },
+            signal,
+          )
         : null,
     enabled: !!viewingEventsEquipment,
   })
@@ -126,7 +157,8 @@ export function EquipmentTab({
 
   // Mutations
   const createEquipmentMutation = useMutation({
-    mutationFn: (data: CreateEquipmentInput) => settingsApi.createEquipment(data),
+    mutationFn: (data: CreateEquipmentInput) =>
+      settingsApi.createEquipment(data),
     onSuccess: (item) => {
       invalidateEquipment()
       onToast(`Đã thêm thiết bị "${item.name}" thành công`)
@@ -158,87 +190,26 @@ export function EquipmentTab({
   })
 
   const transitionEquipmentMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: TransitionEquipmentInput }) =>
-      settingsApi.transitionEquipment(id, data),
+    mutationFn: ({
+      id,
+      data,
+    }: {
+      id: string
+      data: TransitionEquipmentInput
+    }) => settingsApi.transitionEquipment(id, data),
     onSuccess: (res) => {
       invalidateEquipment()
-      onToast(`Đã chuyển trạng thái thiết bị "${res.equipment.name}" thành công`)
+      onToast(
+        `Đã chuyển trạng thái thiết bị "${res.equipment.name}" thành công`,
+      )
       setTransitioningEquipment(null)
       setTransitionError(null)
     },
     onError: (err) => setTransitionError(errorMessage(err)),
   })
 
-  // Computed KPI Metrics
-  const equipmentStats = useMemo(() => {
-    const list = equipmentData?.list || []
-    return {
-      total: equipmentData?.totalItems ?? list.length,
-      inUse: list.filter((e) => e.status === 'IN_USE').length,
-      maintenance: list.filter((e) => e.status === 'MAINTENANCE').length,
-      brokenOrLiquidated: list.filter(
-        (e) => e.status === 'BROKEN' || e.status === 'LIQUIDATED',
-      ).length,
-    }
-  }, [equipmentData])
-
   return (
     <div className="space-y-4">
-      {/* 4 KPI Cards */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:gap-4">
-        <Card className="border border-border/80 shadow-xs">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-medium text-muted-foreground">Tổng thiết bị</span>
-              <Cpu className="h-4 w-4 text-primary" />
-            </div>
-            <div className="mt-2 text-2xl font-bold text-foreground">
-              {equipmentStats.total}
-            </div>
-            <p className="mt-0.5 text-xs text-muted-foreground">tài sản quán</p>
-          </CardContent>
-        </Card>
-
-        <Card className="border border-border/80 shadow-xs">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-medium text-muted-foreground">Đang hoạt động</span>
-              <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-            </div>
-            <div className="mt-2 text-2xl font-bold text-emerald-700 dark:text-emerald-400">
-              {equipmentStats.inUse}
-            </div>
-            <p className="mt-0.5 text-xs text-muted-foreground">vận hành tốt</p>
-          </CardContent>
-        </Card>
-
-        <Card className="border border-border/80 shadow-xs">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-medium text-muted-foreground">Đang bảo trì</span>
-              <Wrench className="h-4 w-4 text-amber-600" />
-            </div>
-            <div className="mt-2 text-2xl font-bold text-amber-700 dark:text-amber-400">
-              {equipmentStats.maintenance}
-            </div>
-            <p className="mt-0.5 text-xs text-muted-foreground">cần bảo dưỡng</p>
-          </CardContent>
-        </Card>
-
-        <Card className="border border-border/80 shadow-xs">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-medium text-muted-foreground">Hỏng / Thanh lý</span>
-              <Ban className="h-4 w-4 text-destructive" />
-            </div>
-            <div className="mt-2 text-2xl font-bold text-destructive">
-              {equipmentStats.brokenOrLiquidated}
-            </div>
-            <p className="mt-0.5 text-xs text-muted-foreground">ngừng sử dụng</p>
-          </CardContent>
-        </Card>
-      </div>
-
       {/* Filters */}
       <Card className="border border-border/80 p-3 shadow-xs">
         <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
@@ -248,7 +219,10 @@ export function EquipmentTab({
               type="text"
               placeholder="Tìm theo tên thiết bị, mã tài sản, serial number..."
               value={equipmentSearch}
-              onChange={(e) => setEquipmentSearch(e.target.value)}
+              onChange={(e) => {
+                setEquipmentSearch(e.target.value)
+                setPage(1)
+              }}
               className="pl-9 h-9 text-xs"
             />
           </div>
@@ -257,7 +231,12 @@ export function EquipmentTab({
             <select
               aria-label="Lọc theo trạng thái thiết bị"
               value={equipmentStatusFilter}
-              onChange={(e) => setEquipmentStatusFilter(e.target.value as any)}
+              onChange={(e) => {
+                setEquipmentStatusFilter(
+                  e.target.value as 'ALL' | EquipmentStatus,
+                )
+                setPage(1)
+              }}
               className="h-9 rounded-lg border border-border bg-card px-2.5 text-xs text-foreground focus:outline-hidden focus:ring-2 focus:ring-ring"
             >
               <option value="ALL">Tất cả trạng thái</option>
@@ -271,7 +250,14 @@ export function EquipmentTab({
       </Card>
 
       {/* Equipment Table */}
-      {isLoadingEquipment ? (
+      {error ? (
+        <p role="alert" className="text-sm text-destructive">
+          {errorMessage(error)}{' '}
+          <Button variant="outline" onClick={() => void refetch()}>
+            Thử lại
+          </Button>
+        </p>
+      ) : isLoadingEquipment ? (
         <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
           <RefreshCw className="h-8 w-8 animate-spin" />
           <p className="mt-3 text-sm">Đang tải danh sách trang thiết bị...</p>
@@ -279,9 +265,12 @@ export function EquipmentTab({
       ) : !equipmentData?.list || equipmentData.list.length === 0 ? (
         <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border py-16 text-center">
           <Cpu className="h-10 w-10 text-muted-foreground mb-2" />
-          <h3 className="text-base font-semibold text-foreground">Không tìm thấy thiết bị nào</h3>
+          <h3 className="text-base font-semibold text-foreground">
+            Không tìm thấy thiết bị nào
+          </h3>
           <p className="text-xs text-muted-foreground mt-1 max-w-sm">
-            Chưa có thiết bị nào phù hợp với bộ lọc hoặc hệ thống chưa ghi nhận tài sản máy móc.
+            Chưa có thiết bị nào phù hợp với bộ lọc hoặc hệ thống chưa ghi nhận
+            tài sản máy móc.
           </p>
         </div>
       ) : (
@@ -305,15 +294,22 @@ export function EquipmentTab({
                   const isLiquidated = item.status === 'LIQUIDATED'
 
                   return (
-                    <tr key={item.id} className="hover:bg-muted/30 transition-colors">
+                    <tr
+                      key={item.id}
+                      className="hover:bg-muted/30 transition-colors"
+                    >
                       <td className="px-4 py-3.5">
                         <div>
-                          <div className="font-semibold text-foreground">{item.name}</div>
+                          <div className="font-semibold text-foreground">
+                            {item.name}
+                          </div>
                           <div className="flex items-center gap-2 mt-0.5 text-xs text-muted-foreground font-mono">
                             <span className="bg-muted px-1.5 py-0.5 rounded text-[11px]">
                               {item.assetCode}
                             </span>
-                            {item.serialNumber && <span>SN: {item.serialNumber}</span>}
+                            {item.serialNumber && (
+                              <span>SN: {item.serialNumber}</span>
+                            )}
                           </div>
                         </div>
                       </td>
@@ -372,7 +368,9 @@ export function EquipmentTab({
                             {formatDate(item.nextMaintenanceAt)}
                           </span>
                         </div>
-                        <div>Bảo hành: {formatDate(item.warrantyExpiresAt)}</div>
+                        <div>
+                          Bảo hành: {formatDate(item.warrantyExpiresAt)}
+                        </div>
                       </td>
                       <td className="px-4 py-3.5 text-right">
                         <div className="flex items-center justify-end gap-1.5">
@@ -385,7 +383,9 @@ export function EquipmentTab({
                                 setTransitioningEquipment(item)
                                 setTransitionData({
                                   status:
-                                    ALLOWED_EQUIPMENT_TRANSITIONS[item.status][0] || 'MAINTENANCE',
+                                    ALLOWED_EQUIPMENT_TRANSITIONS[
+                                      item.status
+                                    ][0] || 'MAINTENANCE',
                                   reason: '',
                                   cost: '0',
                                   nextMaintenanceAt: '',
@@ -396,14 +396,19 @@ export function EquipmentTab({
                               title="Chuyển trạng thái thiết bị"
                             >
                               <ArrowRightLeft className="h-3.5 w-3.5" />
-                              <span className="hidden sm:inline">Chuyển TT</span>
+                              <span className="hidden sm:inline">
+                                Chuyển TT
+                              </span>
                             </Button>
                           )}
 
                           {/* Lịch sử sự kiện */}
                           <button
                             type="button"
-                            onClick={() => setViewingEventsEquipment(item)}
+                            onClick={() => {
+                              setViewingEventsEquipment(item)
+                              setEventsPage(1)
+                            }}
                             className="rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground cursor-pointer"
                             title="Xem lịch sử bảo trì & vòng đời"
                           >
@@ -444,6 +449,15 @@ export function EquipmentTab({
       )}
 
       {/* ==================================================== */}
+      {equipmentData && !error && (
+        <Pagination
+          page={page}
+          totalPages={equipmentData.totalPages}
+          onPage={setPage}
+          disabled={isFetching}
+        />
+      )}
+
       {/* MODALS: CREATE EQUIPMENT                            */}
       {/* ==================================================== */}
       <Dialog
@@ -456,7 +470,8 @@ export function EquipmentTab({
             Thêm thiết bị / máy móc mới
           </DialogTitle>
           <DialogDescription className="text-sm text-muted-foreground">
-            Đăng ký tài sản máy móc vào hệ thống quán để theo dõi bảo trì và khấu hao
+            Đăng ký tài sản máy móc vào hệ thống quán để theo dõi bảo trì và
+            khấu hao
           </DialogDescription>
         </DialogHeader>
 
@@ -488,20 +503,28 @@ export function EquipmentTab({
                 placeholder="VD: EQ-ESP-01"
                 value={createEquipmentData.assetCode}
                 onChange={(e) =>
-                  setCreateEquipmentData({ ...createEquipmentData, assetCode: e.target.value })
+                  setCreateEquipmentData({
+                    ...createEquipmentData,
+                    assetCode: e.target.value,
+                  })
                 }
                 required
                 className="mt-1 uppercase font-mono"
               />
             </div>
             <div>
-              <label className="text-xs font-medium text-foreground">Số Serial (nếu có)</label>
+              <label className="text-xs font-medium text-foreground">
+                Số Serial (nếu có)
+              </label>
               <Input
                 type="text"
                 placeholder="SN-12345678"
                 value={createEquipmentData.serialNumber || ''}
                 onChange={(e) =>
-                  setCreateEquipmentData({ ...createEquipmentData, serialNumber: e.target.value })
+                  setCreateEquipmentData({
+                    ...createEquipmentData,
+                    serialNumber: e.target.value,
+                  })
                 }
                 className="mt-1"
               />
@@ -517,7 +540,10 @@ export function EquipmentTab({
               placeholder="VD: Máy pha cà phê La Marzocco Linea PB 2 Group"
               value={createEquipmentData.name}
               onChange={(e) =>
-                setCreateEquipmentData({ ...createEquipmentData, name: e.target.value })
+                setCreateEquipmentData({
+                  ...createEquipmentData,
+                  name: e.target.value,
+                })
               }
               required
               className="mt-1"
@@ -526,7 +552,9 @@ export function EquipmentTab({
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="text-xs font-medium text-foreground">Số lượng</label>
+              <label className="text-xs font-medium text-foreground">
+                Số lượng
+              </label>
               <Input
                 type="number"
                 min="1"
@@ -542,13 +570,18 @@ export function EquipmentTab({
               />
             </div>
             <div>
-              <label className="text-xs font-medium text-foreground">Đơn giá mua (VND)</label>
+              <label className="text-xs font-medium text-foreground">
+                Đơn giá mua (VND)
+              </label>
               <Input
                 type="text"
                 placeholder="250000000"
                 value={createEquipmentData.unitPrice}
                 onChange={(e) =>
-                  setCreateEquipmentData({ ...createEquipmentData, unitPrice: e.target.value })
+                  setCreateEquipmentData({
+                    ...createEquipmentData,
+                    unitPrice: e.target.value,
+                  })
                 }
                 required
                 className="mt-1"
@@ -565,20 +598,28 @@ export function EquipmentTab({
                 type="date"
                 value={createEquipmentData.purchaseDate}
                 onChange={(e) =>
-                  setCreateEquipmentData({ ...createEquipmentData, purchaseDate: e.target.value })
+                  setCreateEquipmentData({
+                    ...createEquipmentData,
+                    purchaseDate: e.target.value,
+                  })
                 }
                 required
                 className="mt-1"
               />
             </div>
             <div>
-              <label className="text-xs font-medium text-foreground">Vị trí lắp đặt</label>
+              <label className="text-xs font-medium text-foreground">
+                Vị trí lắp đặt
+              </label>
               <Input
                 type="text"
                 placeholder="Quầy bar chính, Bếp bánh..."
                 value={createEquipmentData.location || ''}
                 onChange={(e) =>
-                  setCreateEquipmentData({ ...createEquipmentData, location: e.target.value })
+                  setCreateEquipmentData({
+                    ...createEquipmentData,
+                    location: e.target.value,
+                  })
                 }
                 className="mt-1"
               />
@@ -601,7 +642,9 @@ export function EquipmentTab({
               disabled={createEquipmentMutation.isPending}
               className="bg-primary text-primary-foreground hover:bg-primary/90"
             >
-              {createEquipmentMutation.isPending ? 'Đang tạo...' : 'Lưu thiết bị'}
+              {createEquipmentMutation.isPending
+                ? 'Đang tạo...'
+                : 'Lưu thiết bị'}
             </Button>
           </DialogFooter>
         </form>
@@ -622,7 +665,8 @@ export function EquipmentTab({
                 Chỉnh sửa thông tin thiết bị
               </DialogTitle>
               <DialogDescription className="text-sm text-muted-foreground">
-                Cập nhật thông tin chi tiết cho thiết bị {editingEquipment.name} ({editingEquipment.assetCode})
+                Cập nhật thông tin chi tiết cho thiết bị {editingEquipment.name}{' '}
+                ({editingEquipment.assetCode})
               </DialogDescription>
             </DialogHeader>
 
@@ -644,12 +688,17 @@ export function EquipmentTab({
               className="mt-4 space-y-3.5"
             >
               <div>
-                <label className="text-xs font-medium text-foreground">Tên thiết bị</label>
+                <label className="text-xs font-medium text-foreground">
+                  Tên thiết bị
+                </label>
                 <Input
                   type="text"
                   value={editEquipmentData.name || ''}
                   onChange={(e) =>
-                    setEditEquipmentData({ ...editEquipmentData, name: e.target.value })
+                    setEditEquipmentData({
+                      ...editEquipmentData,
+                      name: e.target.value,
+                    })
                   }
                   required
                   className="mt-1"
@@ -658,23 +707,33 @@ export function EquipmentTab({
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="text-xs font-medium text-foreground">Số Serial</label>
+                  <label className="text-xs font-medium text-foreground">
+                    Số Serial
+                  </label>
                   <Input
                     type="text"
                     value={editEquipmentData.serialNumber || ''}
                     onChange={(e) =>
-                      setEditEquipmentData({ ...editEquipmentData, serialNumber: e.target.value })
+                      setEditEquipmentData({
+                        ...editEquipmentData,
+                        serialNumber: e.target.value,
+                      })
                     }
                     className="mt-1"
                   />
                 </div>
                 <div>
-                  <label className="text-xs font-medium text-foreground">Vị trí lắp đặt</label>
+                  <label className="text-xs font-medium text-foreground">
+                    Vị trí lắp đặt
+                  </label>
                   <Input
                     type="text"
                     value={editEquipmentData.location || ''}
                     onChange={(e) =>
-                      setEditEquipmentData({ ...editEquipmentData, location: e.target.value })
+                      setEditEquipmentData({
+                        ...editEquipmentData,
+                        location: e.target.value,
+                      })
                     }
                     className="mt-1"
                   />
@@ -683,7 +742,9 @@ export function EquipmentTab({
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="text-xs font-medium text-foreground">Số lượng</label>
+                  <label className="text-xs font-medium text-foreground">
+                    Số lượng
+                  </label>
                   <Input
                     type="number"
                     min="1"
@@ -698,12 +759,17 @@ export function EquipmentTab({
                   />
                 </div>
                 <div>
-                  <label className="text-xs font-medium text-foreground">Đơn giá mua (VND)</label>
+                  <label className="text-xs font-medium text-foreground">
+                    Đơn giá mua (VND)
+                  </label>
                   <Input
                     type="text"
                     value={editEquipmentData.unitPrice || '0'}
                     onChange={(e) =>
-                      setEditEquipmentData({ ...editEquipmentData, unitPrice: e.target.value })
+                      setEditEquipmentData({
+                        ...editEquipmentData,
+                        unitPrice: e.target.value,
+                      })
                     }
                     className="mt-1"
                   />
@@ -726,7 +792,9 @@ export function EquipmentTab({
                   disabled={updateEquipmentMutation.isPending}
                   className="bg-primary text-primary-foreground hover:bg-primary/90"
                 >
-                  {updateEquipmentMutation.isPending ? 'Đang lưu...' : 'Lưu thay đổi'}
+                  {updateEquipmentMutation.isPending
+                    ? 'Đang lưu...'
+                    : 'Lưu thay đổi'}
                 </Button>
               </DialogFooter>
             </form>
@@ -749,7 +817,10 @@ export function EquipmentTab({
                 Chuyển trạng thái: {transitioningEquipment.name}
               </DialogTitle>
               <DialogDescription className="text-sm text-muted-foreground">
-                Trạng thái hiện tại: <span className="font-semibold">{transitioningEquipment.status}</span>
+                Trạng thái hiện tại:{' '}
+                <span className="font-semibold">
+                  {transitioningEquipment.status}
+                </span>
               </DialogDescription>
             </DialogHeader>
 
@@ -772,7 +843,8 @@ export function EquipmentTab({
             >
               <div>
                 <label className="text-xs font-medium text-foreground">
-                  Trạng thái mục tiêu <span className="text-destructive">*</span>
+                  Trạng thái mục tiêu{' '}
+                  <span className="text-destructive">*</span>
                 </label>
                 <select
                   aria-label="Chọn trạng thái mục tiêu"
@@ -786,10 +858,13 @@ export function EquipmentTab({
                   required
                   className="mt-1 w-full rounded-lg border border-border bg-card p-2 text-sm text-foreground focus:outline-hidden focus:ring-2 focus:ring-ring"
                 >
-                  {ALLOWED_EQUIPMENT_TRANSITIONS[transitioningEquipment.status].map((s) => (
+                  {ALLOWED_EQUIPMENT_TRANSITIONS[
+                    transitioningEquipment.status
+                  ].map((s) => (
                     <option key={s} value={s}>
                       {s === 'IN_USE' && 'IN_USE - Đang hoạt động tốt'}
-                      {s === 'MAINTENANCE' && 'MAINTENANCE - Đang bảo trì / Sửa chữa'}
+                      {s === 'MAINTENANCE' &&
+                        'MAINTENANCE - Đang bảo trì / Sửa chữa'}
                       {s === 'BROKEN' && 'BROKEN - Hỏng hóc'}
                       {s === 'LIQUIDATED' && 'LIQUIDATED - Thanh lý tài sản'}
                     </option>
@@ -799,14 +874,18 @@ export function EquipmentTab({
 
               <div>
                 <label className="text-xs font-medium text-foreground">
-                  Lý do chuyển trạng thái <span className="text-destructive">*</span>
+                  Lý do chuyển trạng thái{' '}
+                  <span className="text-destructive">*</span>
                 </label>
                 <Input
                   type="text"
                   placeholder="VD: Thay gioăng cao su định kỳ, sửa bơm nước..."
                   value={transitionData.reason}
                   onChange={(e) =>
-                    setTransitionData({ ...transitionData, reason: e.target.value })
+                    setTransitionData({
+                      ...transitionData,
+                      reason: e.target.value,
+                    })
                   }
                   required
                   className="mt-1"
@@ -815,13 +894,18 @@ export function EquipmentTab({
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="text-xs font-medium text-foreground">Chi phí phát sinh (VND)</label>
+                  <label className="text-xs font-medium text-foreground">
+                    Chi phí phát sinh (VND)
+                  </label>
                   <Input
                     type="text"
                     placeholder="0"
                     value={transitionData.cost || '0'}
                     onChange={(e) =>
-                      setTransitionData({ ...transitionData, cost: e.target.value })
+                      setTransitionData({
+                        ...transitionData,
+                        cost: e.target.value,
+                      })
                     }
                     className="mt-1"
                   />
@@ -834,7 +918,10 @@ export function EquipmentTab({
                     type="date"
                     value={transitionData.nextMaintenanceAt || ''}
                     onChange={(e) =>
-                      setTransitionData({ ...transitionData, nextMaintenanceAt: e.target.value })
+                      setTransitionData({
+                        ...transitionData,
+                        nextMaintenanceAt: e.target.value,
+                      })
                     }
                     className="mt-1"
                   />
@@ -857,7 +944,9 @@ export function EquipmentTab({
                   disabled={transitionEquipmentMutation.isPending}
                   className="bg-primary text-primary-foreground hover:bg-primary/90"
                 >
-                  {transitionEquipmentMutation.isPending ? 'Đang chuyển...' : 'Xác nhận chuyển'}
+                  {transitionEquipmentMutation.isPending
+                    ? 'Đang chuyển...'
+                    : 'Xác nhận chuyển'}
                 </Button>
               </DialogFooter>
             </form>
@@ -884,16 +973,30 @@ export function EquipmentTab({
                 Lịch sử bảo trì & vòng đời: {viewingEventsEquipment.name}
               </DialogTitle>
               <DialogDescription className="text-sm text-muted-foreground">
-                Mã tài sản: <span className="font-mono">{viewingEventsEquipment.assetCode}</span>
+                Mã tài sản:{' '}
+                <span className="font-mono">
+                  {viewingEventsEquipment.assetCode}
+                </span>
               </DialogDescription>
             </DialogHeader>
 
             <div className="mt-4 flex-1 overflow-y-auto pr-1 space-y-3">
-              {isLoadingEvents ? (
+              {eventsError ? (
+                <p role="alert" className="text-sm text-destructive">
+                  {errorMessage(eventsError)}{' '}
+                  <Button
+                    variant="outline"
+                    onClick={() => void refetchEvents()}
+                  >
+                    Thử lại
+                  </Button>
+                </p>
+              ) : isLoadingEvents ? (
                 <div className="py-12 text-center text-muted-foreground">
                   Đang tải lịch sử sự kiện...
                 </div>
-              ) : !equipmentEventsData?.list || equipmentEventsData.list.length === 0 ? (
+              ) : !equipmentEventsData?.list ||
+                equipmentEventsData.list.length === 0 ? (
                 <div className="py-12 text-center text-muted-foreground">
                   Chưa ghi nhận sự kiện bảo trì nào cho thiết bị này.
                 </div>
@@ -905,13 +1008,17 @@ export function EquipmentTab({
                       <div className="rounded-xl border border-border/80 bg-card p-3 shadow-xs">
                         <div className="flex items-center justify-between gap-2">
                           <span className="font-semibold text-xs text-foreground">
-                            {ev.fromStatus ? `${ev.fromStatus} → ${ev.toStatus}` : ev.toStatus}
+                            {ev.fromStatus
+                              ? `${ev.fromStatus} → ${ev.toStatus}`
+                              : ev.toStatus}
                           </span>
                           <span className="text-[11px] text-muted-foreground font-mono">
                             {formatDate(ev.occurredAt || ev.createdAt)}
                           </span>
                         </div>
-                        <p className="mt-1 text-xs text-foreground/90">{ev.reason}</p>
+                        <p className="mt-1 text-xs text-foreground/90">
+                          {ev.reason}
+                        </p>
                         {ev.cost && ev.cost !== '0' && (
                           <div className="mt-1 text-xs font-medium text-amber-700 dark:text-amber-400">
                             Chi phí: {formatVnd(ev.cost)}
@@ -927,6 +1034,14 @@ export function EquipmentTab({
               )}
             </div>
 
+            {equipmentEventsData && !eventsError && (
+              <Pagination
+                page={eventsPage}
+                totalPages={equipmentEventsData.totalPages}
+                onPage={setEventsPage}
+                disabled={isFetchingEvents}
+              />
+            )}
             <DialogFooter className="mt-6 flex justify-end pt-3 border-t border-border">
               <Button
                 type="button"

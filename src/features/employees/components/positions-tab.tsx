@@ -10,6 +10,7 @@ import {
 } from '@/features/employees/employees.api'
 import { errorMessage } from '@/shared/api/client'
 import { formatPrice } from '@/shared/lib/format'
+import { Pagination } from '@/shared/ui/pagination'
 import {
   Button,
   Card,
@@ -37,6 +38,7 @@ export function PositionsTab({
   setIsCreateOpen,
 }: PositionsTabProps) {
   const queryClient = useQueryClient()
+  const [page, setPage] = useState(1)
 
   const [editingPosition, setEditingPosition] = useState<Position | null>(null)
   const [positionName, setPositionName] = useState('')
@@ -46,14 +48,19 @@ export function PositionsTab({
   const {
     data: positionsData,
     isLoading: isLoadingPositions,
+    isFetching,
+    error,
+    refetch,
   } = useQuery({
-    queryKey: ['private', 'positions'],
-    queryFn: ({ signal }) => getPositions({ page: 1, itemPerPage: 50 }, signal),
+    queryKey: ['private', 'positions', page],
+    queryFn: ({ signal }) => getPositions({ page, itemPerPage: 20 }, signal),
   })
 
   const invalidateQueries = () => {
     void queryClient.invalidateQueries({ queryKey: ['private', 'positions'] })
-    void queryClient.invalidateQueries({ queryKey: ['private', 'positions-dropdown'] })
+    void queryClient.invalidateQueries({
+      queryKey: ['private', 'positions-dropdown'],
+    })
   }
 
   const savePositionMutation = useMutation({
@@ -71,7 +78,11 @@ export function PositionsTab({
     },
     onSuccess: () => {
       invalidateQueries()
-      onToast(editingPosition ? 'Đã cập nhật vị trí công việc' : 'Đã thêm vị trí công việc mới')
+      onToast(
+        editingPosition
+          ? 'Đã cập nhật vị trí công việc'
+          : 'Đã thêm vị trí công việc mới',
+      )
       setIsCreateOpen(false)
       setEditingPosition(null)
       setPositionName('')
@@ -86,6 +97,7 @@ export function PositionsTab({
     onSuccess: () => {
       invalidateQueries()
       onToast('Đã xóa vị trí công việc')
+      setPage(1)
     },
     onError: (err) => onToast(errorMessage(err)),
   })
@@ -103,22 +115,44 @@ export function PositionsTab({
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {isLoadingPositions ? (
+              {error ? (
                 <tr>
-                  <td colSpan={3} className="px-4 py-8 text-center text-muted-foreground">
+                  <td colSpan={3} className="p-4">
+                    <p role="alert" className="text-destructive">
+                      {errorMessage(error)}{' '}
+                      <Button variant="outline" onClick={() => void refetch()}>
+                        Thử lại
+                      </Button>
+                    </p>
+                  </td>
+                </tr>
+              ) : isLoadingPositions ? (
+                <tr>
+                  <td
+                    colSpan={3}
+                    className="px-4 py-8 text-center text-muted-foreground"
+                  >
                     Đang tải danh sách vị trí...
                   </td>
                 </tr>
               ) : positionsData?.list?.length === 0 ? (
                 <tr>
-                  <td colSpan={3} className="px-4 py-8 text-center text-muted-foreground">
+                  <td
+                    colSpan={3}
+                    className="px-4 py-8 text-center text-muted-foreground"
+                  >
                     Chưa có vị trí công việc nào được định nghĩa.
                   </td>
                 </tr>
               ) : (
                 positionsData?.list?.map((pos) => (
-                  <tr key={pos.id} className="hover:bg-muted/30 transition-colors">
-                    <td className="px-4 py-3.5 font-semibold text-foreground">{pos.name}</td>
+                  <tr
+                    key={pos.id}
+                    className="hover:bg-muted/30 transition-colors"
+                  >
+                    <td className="px-4 py-3.5 font-semibold text-foreground">
+                      {pos.name}
+                    </td>
                     <td className="px-4 py-3.5 text-xs text-muted-foreground">
                       {formatPrice(pos.salary)}
                     </td>
@@ -144,7 +178,11 @@ export function PositionsTab({
                           <button
                             type="button"
                             onClick={() => {
-                              if (confirm(`Bạn có chắc chắn muốn xóa vị trí "${pos.name}"?`)) {
+                              if (
+                                confirm(
+                                  `Bạn có chắc chắn muốn xóa vị trí "${pos.name}"?`,
+                                )
+                              ) {
                                 deletePositionMutation.mutate(pos.id)
                               }
                             }}
@@ -164,6 +202,15 @@ export function PositionsTab({
         </div>
       </Card>
 
+      {positionsData && !error && (
+        <Pagination
+          page={page}
+          totalPages={positionsData.totalPages}
+          onPage={setPage}
+          disabled={isFetching}
+        />
+      )}
+
       {/* MODAL: POSITION CREATE / EDIT */}
       <Dialog
         open={isCreateOpen}
@@ -179,10 +226,13 @@ export function PositionsTab({
       >
         <DialogHeader>
           <DialogTitle className="text-lg font-bold text-foreground">
-            {editingPosition ? 'Chỉnh sửa vị trí công việc' : 'Thêm vị trí công việc mới'}
+            {editingPosition
+              ? 'Chỉnh sửa vị trí công việc'
+              : 'Thêm vị trí công việc mới'}
           </DialogTitle>
           <DialogDescription className="text-sm text-muted-foreground">
-            Định danh chức danh nghề nghiệp trong quán (ví dụ: Quản lý ca, Thu ngân, Pha chế)
+            Định danh chức danh nghề nghiệp trong quán (ví dụ: Quản lý ca, Thu
+            ngân, Pha chế)
           </DialogDescription>
         </DialogHeader>
 
@@ -222,9 +272,18 @@ export function PositionsTab({
           </div>
 
           <div>
-            <label htmlFor="position-salary" className="text-xs font-medium text-foreground">Lương cơ bản (VND)</label>
+            <label
+              htmlFor="position-salary"
+              className="text-xs font-medium text-foreground"
+            >
+              Lương cơ bản (VND)
+            </label>
             <Input
-              id="position-salary" type="number" min="0" step="0.01" required
+              id="position-salary"
+              type="number"
+              min="0"
+              step="0.01"
+              required
               value={positionSalary}
               disabled={savePositionMutation.isPending}
               onChange={(e) => setPositionSalary(e.target.value)}

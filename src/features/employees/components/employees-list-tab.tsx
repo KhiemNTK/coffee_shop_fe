@@ -25,6 +25,7 @@ import {
   type UpdateEmployeeInput,
 } from '@/features/employees/employees.api'
 import { errorMessage } from '@/shared/api/client'
+import { Pagination } from '@/shared/ui/pagination'
 import {
   Button,
   Badge,
@@ -41,6 +42,7 @@ import {
 export interface EmployeesListTabProps {
   positionsDropdown: PositionDropdownItem[]
   roles: Role[]
+  rolesLoaded: boolean
   canCreate: boolean
   canUpdate: boolean
   canDelete: boolean
@@ -53,6 +55,7 @@ export interface EmployeesListTabProps {
 export function EmployeesListTab({
   positionsDropdown,
   roles,
+  rolesLoaded,
   canUpdate,
   canDelete,
   canManageRoles,
@@ -64,52 +67,97 @@ export function EmployeesListTab({
 
   // Filter & Search
   const [searchQuery, setSearchQuery] = useState('')
+  const [page, setPage] = useState(1)
   const deferredSearchQuery = useDeferredValue(searchQuery)
-  const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'INACTIVE'>('ALL')
+  const [statusFilter, setStatusFilter] = useState<
+    'ALL' | 'ACTIVE' | 'INACTIVE'
+  >('ALL')
   const [positionFilter, setPositionFilter] = useState<string>('ALL')
 
   // Modals state: Employee Create
-  const [createEmployeeData, setCreateEmployeeData] = useState<CreateEmployeeInput>({
-    fullName: '',
-    email: '',
-    username: '',
-    password: '',
-    phoneNumber: '',
-    address: '',
-    positionId: '',
-    isActive: true,
-  })
-  const [createEmployeeError, setCreateEmployeeError] = useState<string | null>(null)
+  const [createEmployeeData, setCreateEmployeeData] =
+    useState<CreateEmployeeInput>({
+      fullName: '',
+      email: '',
+      username: '',
+      password: '',
+      phoneNumber: '',
+      address: '',
+      positionId: '',
+      isActive: true,
+    })
+  const [createEmployeeError, setCreateEmployeeError] = useState<string | null>(
+    null,
+  )
 
   // Modals state: Employee Edit
-  const [editingEmployee, setEditingEmployee] = useState<EmployeeListItem | null>(null)
-  const [editEmployeeData, setEditEmployeeData] = useState<UpdateEmployeeInput>({
-    fullName: '',
-    phoneNumber: '',
-    address: '',
-    positionId: '',
-    isActive: true,
-  })
-  const [editEmployeeError, setEditEmployeeError] = useState<string | null>(null)
+  const [editingEmployee, setEditingEmployee] =
+    useState<EmployeeListItem | null>(null)
+  const [editEmployeeData, setEditEmployeeData] = useState<UpdateEmployeeInput>(
+    {
+      fullName: '',
+      phoneNumber: '',
+      address: '',
+      positionId: '',
+      isActive: true,
+    },
+  )
+  const [editEmployeeError, setEditEmployeeError] = useState<string | null>(
+    null,
+  )
 
   // Modals state: Employee Delete
-  const [deletingEmployee, setDeletingEmployee] = useState<EmployeeListItem | null>(null)
-  const [deleteEmployeeError, setDeleteEmployeeError] = useState<string | null>(null)
+  const [deletingEmployee, setDeletingEmployee] =
+    useState<EmployeeListItem | null>(null)
+  const [deleteEmployeeError, setDeleteEmployeeError] = useState<string | null>(
+    null,
+  )
 
   // Modals state: Employee Role Assignment
-  const [roleAssignEmployee, setRoleAssignEmployee] = useState<EmployeeListItem | null>(null)
-  const [selectedRoleIds, setSelectedRoleIds] = useState<string[]>([])
+  const [roleAssignEmployee, setRoleAssignEmployee] =
+    useState<EmployeeListItem | null>(null)
+  const [selectedRoleIds, setSelectedRoleIds] = useState<string[] | null>(null)
   const [roleAssignError, setRoleAssignError] = useState<string | null>(null)
+  const assignment = useQuery({
+    queryKey: ['private', 'employee-role-assignment', roleAssignEmployee?.id],
+    queryFn: ({ signal }) => getEmployeeRoles(roleAssignEmployee!.id, signal),
+    enabled: Boolean(roleAssignEmployee),
+    retry: false,
+    refetchOnWindowFocus: false,
+  })
+  const roleIds =
+    selectedRoleIds ??
+    assignment.data?.employeeRoles.map((item) => item.role.id) ??
+    []
+  const assignmentReady =
+    rolesLoaded && assignment.isSuccess && !assignment.isFetching
 
   // Queries
   const {
     data: employeesData,
     isLoading: isLoadingEmployees,
+    isFetching,
+    error,
+    refetch,
   } = useQuery({
-    queryKey: ['private', 'employees', deferredSearchQuery],
+    queryKey: [
+      'private',
+      'employees',
+      deferredSearchQuery,
+      statusFilter,
+      positionFilter,
+      page,
+    ],
     queryFn: ({ signal }) =>
       getEmployees(
-        { page: 1, itemPerPage: 100, search: deferredSearchQuery.trim() || undefined },
+        {
+          page,
+          itemPerPage: 20,
+          search: deferredSearchQuery.trim() || undefined,
+          isActive:
+            statusFilter === 'ALL' ? undefined : statusFilter === 'ACTIVE',
+          positionId: positionFilter === 'ALL' ? undefined : positionFilter,
+        },
         signal,
       ),
   })
@@ -157,6 +205,7 @@ export function EmployeesListTab({
     onSuccess: () => {
       invalidateEmployeeQueries()
       onToast('Đã xóa nhân viên thành công')
+      setPage(1)
       setDeletingEmployee(null)
       setDeleteEmployeeError(null)
     },
@@ -184,27 +233,16 @@ export function EmployeesListTab({
   }, [positionsDropdown])
 
   // Filtered Employees
-  const filteredEmployees = useMemo(() => {
-    const list = employeesData?.list ?? []
-    return list.filter((emp) => {
-      if (statusFilter === 'ACTIVE' && !emp.isActive) return false
-      if (statusFilter === 'INACTIVE' && emp.isActive) return false
-      if (positionFilter !== 'ALL' && emp.positionId !== positionFilter) return false
-      return true
-    })
-  }, [employeesData?.list, statusFilter, positionFilter])
+  const employees = employeesData?.list ?? []
 
   // Handler: Open Role Assignment Modal
-  const handleOpenRoleAssign = async (emp: EmployeeListItem) => {
+  const handleOpenRoleAssign = (emp: EmployeeListItem) => {
     setRoleAssignEmployee(emp)
     setRoleAssignError(null)
-    try {
-      const res = await getEmployeeRoles(emp.id)
-      const currentRoleIds = res.employeeRoles.map((er) => er.role.id)
-      setSelectedRoleIds(currentRoleIds)
-    } catch {
-      setSelectedRoleIds([])
-    }
+    setSelectedRoleIds(null)
+    void queryClient.invalidateQueries({
+      queryKey: ['private', 'employee-role-assignment', emp.id],
+    })
   }
 
   return (
@@ -220,7 +258,10 @@ export function EmployeesListTab({
                 type="text"
                 placeholder="Tìm theo tên nhân viên, username hoặc email..."
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value)
+                  setPage(1)
+                }}
                 className="pl-9"
               />
             </div>
@@ -230,7 +271,12 @@ export function EmployeesListTab({
               <select
                 aria-label="Lọc theo trạng thái"
                 value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value as any)}
+                onChange={(e) => {
+                  setStatusFilter(
+                    e.target.value as 'ALL' | 'ACTIVE' | 'INACTIVE',
+                  )
+                  setPage(1)
+                }}
                 className="h-8.5 rounded-lg border border-border bg-card px-2.5 text-xs text-foreground focus:outline-hidden focus:ring-2 focus:ring-ring"
               >
                 <option value="ALL">Tất cả trạng thái</option>
@@ -241,7 +287,10 @@ export function EmployeesListTab({
               <select
                 aria-label="Lọc theo vị trí"
                 value={positionFilter}
-                onChange={(e) => setPositionFilter(e.target.value)}
+                onChange={(e) => {
+                  setPositionFilter(e.target.value)
+                  setPage(1)
+                }}
                 className="h-8.5 rounded-lg border border-border bg-card px-2.5 text-xs text-foreground focus:outline-hidden focus:ring-2 focus:ring-ring"
               >
                 <option value="ALL">Tất cả vị trí</option>
@@ -257,19 +306,31 @@ export function EmployeesListTab({
       </Card>
 
       {/* Employee Table */}
-      {isLoadingEmployees ? (
+      {error ? (
+        <p role="alert" className="text-sm text-destructive">
+          {errorMessage(error)}{' '}
+          <Button variant="outline" onClick={() => void refetch()}>
+            Thử lại
+          </Button>
+        </p>
+      ) : isLoadingEmployees ? (
         <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border py-16">
           <RefreshCw className="h-8 w-8 animate-spin text-muted-foreground" />
-          <p className="mt-3 text-sm text-muted-foreground">Đang tải danh sách nhân sự...</p>
+          <p className="mt-3 text-sm text-muted-foreground">
+            Đang tải danh sách nhân sự...
+          </p>
         </div>
-      ) : filteredEmployees.length === 0 ? (
+      ) : employees.length === 0 ? (
         <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border bg-card/50 py-16 text-center">
           <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted text-muted-foreground">
             <Users className="h-6 w-6" />
           </div>
-          <h3 className="mt-4 text-base font-semibold text-foreground">Không tìm thấy nhân viên</h3>
+          <h3 className="mt-4 text-base font-semibold text-foreground">
+            Không tìm thấy nhân viên
+          </h3>
           <p className="mt-1 text-sm text-muted-foreground max-w-sm">
-            Không có dữ liệu phù hợp với điều kiện tìm kiếm hoặc hệ thống chưa có nhân sự.
+            Không có dữ liệu phù hợp với điều kiện tìm kiếm hoặc hệ thống chưa
+            có nhân sự.
           </p>
         </div>
       ) : (
@@ -286,13 +347,16 @@ export function EmployeesListTab({
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
-                {filteredEmployees.map((emp) => {
+                {employees.map((emp) => {
                   const posName = emp.positionId
                     ? positionMap.get(emp.positionId) || '—'
                     : 'Chưa xếp'
 
                   return (
-                    <tr key={emp.id} className="hover:bg-muted/30 transition-colors">
+                    <tr
+                      key={emp.id}
+                      className="hover:bg-muted/30 transition-colors"
+                    >
                       <td className="px-4 py-3.5">
                         <div className="flex items-center gap-3">
                           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-100 font-bold text-xs text-blue-800 dark:bg-blue-950 dark:text-blue-300">
@@ -410,6 +474,15 @@ export function EmployeesListTab({
         </Card>
       )}
 
+      {employeesData && !error && (
+        <Pagination
+          page={page}
+          totalPages={employeesData.totalPages}
+          onPage={setPage}
+          disabled={isFetching}
+        />
+      )}
+
       {/* MODAL: CREATE EMPLOYEE */}
       <Dialog
         open={isCreateOpen}
@@ -452,7 +525,10 @@ export function EmployeesListTab({
               placeholder="Ví dụ: Nguyễn Văn An"
               value={createEmployeeData.fullName}
               onChange={(e) =>
-                setCreateEmployeeData({ ...createEmployeeData, fullName: e.target.value })
+                setCreateEmployeeData({
+                  ...createEmployeeData,
+                  fullName: e.target.value,
+                })
               }
               required
               className="mt-1"
@@ -469,7 +545,10 @@ export function EmployeesListTab({
                 placeholder="nhanvien@example.com"
                 value={createEmployeeData.email}
                 onChange={(e) =>
-                  setCreateEmployeeData({ ...createEmployeeData, email: e.target.value })
+                  setCreateEmployeeData({
+                    ...createEmployeeData,
+                    email: e.target.value,
+                  })
                 }
                 required
                 className="mt-1"
@@ -477,14 +556,18 @@ export function EmployeesListTab({
             </div>
             <div>
               <label className="text-xs font-medium text-foreground">
-                Tên đăng nhập (Username) <span className="text-destructive">*</span>
+                Tên đăng nhập (Username){' '}
+                <span className="text-destructive">*</span>
               </label>
               <Input
                 type="text"
                 placeholder="nguyenvanan"
                 value={createEmployeeData.username}
                 onChange={(e) =>
-                  setCreateEmployeeData({ ...createEmployeeData, username: e.target.value })
+                  setCreateEmployeeData({
+                    ...createEmployeeData,
+                    username: e.target.value,
+                  })
                 }
                 required
                 className="mt-1"
@@ -504,7 +587,10 @@ export function EmployeesListTab({
                 maxLength={72}
                 value={createEmployeeData.password}
                 onChange={(e) =>
-                  setCreateEmployeeData({ ...createEmployeeData, password: e.target.value })
+                  setCreateEmployeeData({
+                    ...createEmployeeData,
+                    password: e.target.value,
+                  })
                 }
                 required
                 className="mt-1"
@@ -518,7 +604,10 @@ export function EmployeesListTab({
                 aria-label="Chọn vị trí công việc"
                 value={createEmployeeData.positionId}
                 onChange={(e) =>
-                  setCreateEmployeeData({ ...createEmployeeData, positionId: e.target.value })
+                  setCreateEmployeeData({
+                    ...createEmployeeData,
+                    positionId: e.target.value,
+                  })
                 }
                 required
                 className="mt-1 w-full rounded-lg border border-border bg-card p-2 text-sm text-foreground focus:outline-hidden focus:ring-2 focus:ring-ring"
@@ -535,25 +624,35 @@ export function EmployeesListTab({
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="text-xs font-medium text-foreground">Số điện thoại</label>
+              <label className="text-xs font-medium text-foreground">
+                Số điện thoại
+              </label>
               <Input
                 type="tel"
                 placeholder="0912345678"
                 value={createEmployeeData.phoneNumber || ''}
                 onChange={(e) =>
-                  setCreateEmployeeData({ ...createEmployeeData, phoneNumber: e.target.value })
+                  setCreateEmployeeData({
+                    ...createEmployeeData,
+                    phoneNumber: e.target.value,
+                  })
                 }
                 className="mt-1"
               />
             </div>
             <div>
-              <label className="text-xs font-medium text-foreground">Địa chỉ</label>
+              <label className="text-xs font-medium text-foreground">
+                Địa chỉ
+              </label>
               <Input
                 type="text"
                 placeholder="Địa chỉ cư trú"
                 value={createEmployeeData.address || ''}
                 onChange={(e) =>
-                  setCreateEmployeeData({ ...createEmployeeData, address: e.target.value })
+                  setCreateEmployeeData({
+                    ...createEmployeeData,
+                    address: e.target.value,
+                  })
                 }
                 className="mt-1"
               />
@@ -576,7 +675,9 @@ export function EmployeesListTab({
               disabled={createEmployeeMutation.isPending}
               className="bg-blue-600 hover:bg-blue-700 text-white"
             >
-              {createEmployeeMutation.isPending ? 'Đang tạo...' : 'Lưu nhân viên'}
+              {createEmployeeMutation.isPending
+                ? 'Đang tạo...'
+                : 'Lưu nhân viên'}
             </Button>
           </DialogFooter>
         </form>
@@ -595,7 +696,8 @@ export function EmployeesListTab({
                 Cập nhật thông tin nhân viên
               </DialogTitle>
               <DialogDescription className="text-sm text-muted-foreground">
-                Điều chỉnh thông tin hồ sơ và trạng thái tài khoản của {editingEmployee.fullName}
+                Điều chỉnh thông tin hồ sơ và trạng thái tài khoản của{' '}
+                {editingEmployee.fullName}
               </DialogDescription>
             </DialogHeader>
 
@@ -617,12 +719,17 @@ export function EmployeesListTab({
               className="mt-4 space-y-3.5"
             >
               <div>
-                <label className="text-xs font-medium text-foreground">Họ và tên</label>
+                <label className="text-xs font-medium text-foreground">
+                  Họ và tên
+                </label>
                 <Input
                   type="text"
                   value={editEmployeeData.fullName || ''}
                   onChange={(e) =>
-                    setEditEmployeeData({ ...editEmployeeData, fullName: e.target.value })
+                    setEditEmployeeData({
+                      ...editEmployeeData,
+                      fullName: e.target.value,
+                    })
                   }
                   required
                   className="mt-1"
@@ -631,12 +738,17 @@ export function EmployeesListTab({
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="text-xs font-medium text-foreground">Vị trí công việc</label>
+                  <label className="text-xs font-medium text-foreground">
+                    Vị trí công việc
+                  </label>
                   <select
                     aria-label="Chọn vị trí công việc"
                     value={editEmployeeData.positionId || ''}
                     onChange={(e) =>
-                      setEditEmployeeData({ ...editEmployeeData, positionId: e.target.value })
+                      setEditEmployeeData({
+                        ...editEmployeeData,
+                        positionId: e.target.value,
+                      })
                     }
                     className="mt-1 w-full rounded-lg border border-border bg-card p-2 text-sm text-foreground focus:outline-hidden focus:ring-2 focus:ring-ring"
                   >
@@ -649,7 +761,9 @@ export function EmployeesListTab({
                   </select>
                 </div>
                 <div>
-                  <label className="text-xs font-medium text-foreground">Trạng thái làm việc</label>
+                  <label className="text-xs font-medium text-foreground">
+                    Trạng thái làm việc
+                  </label>
                   <select
                     aria-label="Trạng thái làm việc"
                     value={editEmployeeData.isActive ? 'true' : 'false'}
@@ -669,12 +783,17 @@ export function EmployeesListTab({
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="text-xs font-medium text-foreground">Số điện thoại</label>
+                  <label className="text-xs font-medium text-foreground">
+                    Số điện thoại
+                  </label>
                   <Input
                     type="tel"
                     value={editEmployeeData.phoneNumber || ''}
                     onChange={(e) =>
-                      setEditEmployeeData({ ...editEmployeeData, phoneNumber: e.target.value })
+                      setEditEmployeeData({
+                        ...editEmployeeData,
+                        phoneNumber: e.target.value,
+                      })
                     }
                     className="mt-1"
                   />
@@ -714,7 +833,9 @@ export function EmployeesListTab({
                   disabled={updateEmployeeMutation.isPending}
                   className="bg-blue-600 hover:bg-blue-700 text-white"
                 >
-                  {updateEmployeeMutation.isPending ? 'Đang lưu...' : 'Lưu thay đổi'}
+                  {updateEmployeeMutation.isPending
+                    ? 'Đang lưu...'
+                    : 'Lưu thay đổi'}
                 </Button>
               </DialogFooter>
             </form>
@@ -725,7 +846,10 @@ export function EmployeesListTab({
       {/* MODAL: ASSIGN ROLES TO EMPLOYEE */}
       <Dialog
         open={!!roleAssignEmployee}
-        onOpenChange={(open) => !open && setRoleAssignEmployee(null)}
+        onOpenChange={(open) => {
+          if (!open && !replaceRolesMutation.isPending)
+            setRoleAssignEmployee(null)
+        }}
       >
         {roleAssignEmployee && (
           <>
@@ -748,9 +872,29 @@ export function EmployeesListTab({
               </div>
             )}
 
-            <div className="mt-4 space-y-2 max-h-60 overflow-y-auto pr-1">
+            {assignment.isPending && (
+              <p role="status">Đang tải vai trò hiện tại...</p>
+            )}
+            {assignment.isError && (
+              <div role="alert">
+                <p>{errorMessage(assignment.error)}</p>
+                <Button
+                  variant="outline"
+                  onClick={() => void assignment.refetch()}
+                >
+                  Thử tải lại
+                </Button>
+              </div>
+            )}
+            {!rolesLoaded && (
+              <p role="alert">Danh sách vai trò chưa tải thành công.</p>
+            )}
+            <fieldset
+              disabled={!assignmentReady || replaceRolesMutation.isPending}
+              className="mt-4 space-y-2 max-h-60 overflow-y-auto pr-1"
+            >
               {roles.map((role) => {
-                const isChecked = selectedRoleIds.includes(role.id)
+                const isChecked = roleIds.includes(role.id)
 
                 return (
                   <label
@@ -762,21 +906,27 @@ export function EmployeesListTab({
                       checked={isChecked}
                       onChange={(e) => {
                         if (e.target.checked) {
-                          setSelectedRoleIds([...selectedRoleIds, role.id])
+                          setSelectedRoleIds([...roleIds, role.id])
                         } else {
-                          setSelectedRoleIds(selectedRoleIds.filter((id) => id !== role.id))
+                          setSelectedRoleIds(
+                            roleIds.filter((id) => id !== role.id),
+                          )
                         }
                       }}
                       className="rounded border-border text-blue-600 focus:ring-blue-500 mt-0.5"
                     />
                     <div className="flex-1 text-xs">
-                      <div className="font-semibold text-foreground">{role.name}</div>
-                      <div className="text-muted-foreground">{role.description || '—'}</div>
+                      <div className="font-semibold text-foreground">
+                        {role.name}
+                      </div>
+                      <div className="text-muted-foreground">
+                        {role.description || '—'}
+                      </div>
                     </div>
                   </label>
                 )
               })}
-            </div>
+            </fieldset>
 
             <DialogFooter className="mt-6 flex justify-end gap-2">
               <Button
@@ -792,12 +942,20 @@ export function EmployeesListTab({
                 type="button"
                 size="sm"
                 onClick={() => {
+                  if (!assignmentReady || replaceRolesMutation.isPending) return
+                  if (
+                    !roleIds.length &&
+                    !window.confirm(
+                      'Thu hồi toàn bộ vai trò của nhân viên này?',
+                    )
+                  )
+                    return
                   replaceRolesMutation.mutate({
                     id: roleAssignEmployee.id,
-                    roleIds: selectedRoleIds,
+                    roleIds,
                   })
                 }}
-                disabled={replaceRolesMutation.isPending}
+                disabled={!assignmentReady || replaceRolesMutation.isPending}
                 className="bg-blue-600 hover:bg-blue-700 text-white"
               >
                 {replaceRolesMutation.isPending ? 'Đang lưu...' : 'Lưu vai trò'}
@@ -826,8 +984,8 @@ export function EmployeesListTab({
                 <span className="font-semibold text-foreground">
                   {deletingEmployee.fullName}
                 </span>{' '}
-                (@{deletingEmployee.username})? Toàn bộ phiên đăng nhập của nhân viên này sẽ bị thu
-                hồi ngay lập tức.
+                (@{deletingEmployee.username})? Toàn bộ phiên đăng nhập của nhân
+                viên này sẽ bị thu hồi ngay lập tức.
               </DialogDescription>
             </DialogHeader>
 
@@ -851,11 +1009,15 @@ export function EmployeesListTab({
               <Button
                 type="button"
                 size="sm"
-                onClick={() => deleteEmployeeMutation.mutate(deletingEmployee.id)}
+                onClick={() =>
+                  deleteEmployeeMutation.mutate(deletingEmployee.id)
+                }
                 disabled={deleteEmployeeMutation.isPending}
                 className="bg-destructive hover:bg-destructive/90 text-destructive-foreground"
               >
-                {deleteEmployeeMutation.isPending ? 'Đang xóa...' : 'Xác nhận xóa'}
+                {deleteEmployeeMutation.isPending
+                  ? 'Đang xóa...'
+                  : 'Xác nhận xóa'}
               </Button>
             </DialogFooter>
           </>

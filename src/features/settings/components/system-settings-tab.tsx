@@ -18,6 +18,7 @@ import {
 } from '@/features/settings/settings.api'
 import { errorMessage } from '@/shared/api/client'
 import { formatDate } from '@/shared/lib/format'
+import { Pagination } from '@/shared/ui/pagination'
 import {
   Button,
   Badge,
@@ -49,39 +50,59 @@ export function SystemSettingsTab({
 
   // Search & Type filter
   const [settingsSearch, setSettingsSearch] = useState('')
+  const [page, setPage] = useState(1)
+  const [revisionsPage, setRevisionsPage] = useState(1)
   const deferredSettingsSearch = useDeferredValue(settingsSearch)
-  const [settingTypeFilter, setSettingTypeFilter] = useState<'ALL' | SettingValueType>('ALL')
+  const [settingTypeFilter, setSettingTypeFilter] = useState<
+    'ALL' | SettingValueType
+  >('ALL')
 
   // Modals state
-  const [createSettingData, setCreateSettingData] = useState<CreateSystemSettingInput>({
-    key: '',
-    value: '',
-    valueType: 'STRING',
-    description: '',
-    isPublic: false,
-  })
-  const [createSettingError, setCreateSettingError] = useState<string | null>(null)
+  const [createSettingData, setCreateSettingData] =
+    useState<CreateSystemSettingInput>({
+      key: '',
+      value: '',
+      valueType: 'STRING',
+      description: '',
+      isPublic: false,
+    })
+  const [createSettingError, setCreateSettingError] = useState<string | null>(
+    null,
+  )
 
-  const [editingSetting, setEditingSetting] = useState<SystemSettingItem | null>(null)
+  const [editingSetting, setEditingSetting] =
+    useState<SystemSettingItem | null>(null)
   const [editSettingValue, setEditSettingValue] = useState('')
   const [editSettingDescription, setEditSettingDescription] = useState('')
   const [editSettingIsPublic, setEditSettingIsPublic] = useState(false)
   const [editSettingError, setEditSettingError] = useState<string | null>(null)
 
-  const [viewingRevisionsKey, setViewingRevisionsKey] = useState<string | null>(null)
+  const [viewingRevisionsKey, setViewingRevisionsKey] = useState<string | null>(
+    null,
+  )
 
   // Queries
   const {
     data: settingsData,
     isLoading: isLoadingSettings,
+    isFetching,
+    error,
+    refetch,
   } = useQuery({
-    queryKey: ['system-settings-list', deferredSettingsSearch, settingTypeFilter],
+    queryKey: [
+      'system-settings-list',
+      deferredSettingsSearch,
+      settingTypeFilter,
+      page,
+    ],
     queryFn: ({ signal }) =>
       settingsApi.getSystemSettings(
         {
           keyword: deferredSettingsSearch.trim() || undefined,
-          valueType: settingTypeFilter === 'ALL' ? undefined : settingTypeFilter,
-          itemPerPage: 50,
+          valueType:
+            settingTypeFilter === 'ALL' ? undefined : settingTypeFilter,
+          page,
+          itemPerPage: 20,
         },
         signal,
       ),
@@ -90,11 +111,18 @@ export function SystemSettingsTab({
   const {
     data: settingRevisionsData,
     isLoading: isLoadingRevisions,
+    isFetching: isFetchingRevisions,
+    error: revisionsError,
+    refetch: refetchRevisions,
   } = useQuery({
-    queryKey: ['system-setting-revisions', viewingRevisionsKey],
+    queryKey: ['system-setting-revisions', viewingRevisionsKey, revisionsPage],
     queryFn: ({ signal }) =>
       viewingRevisionsKey
-        ? settingsApi.getSystemSettingRevisions(viewingRevisionsKey, undefined, signal)
+        ? settingsApi.getSystemSettingRevisions(
+            viewingRevisionsKey,
+            { page: revisionsPage, itemPerPage: 20 },
+            signal,
+          )
         : null,
     enabled: !!viewingRevisionsKey,
   })
@@ -105,7 +133,8 @@ export function SystemSettingsTab({
 
   // Mutations
   const createSettingMutation = useMutation({
-    mutationFn: (data: CreateSystemSettingInput) => settingsApi.createSystemSetting(data),
+    mutationFn: (data: CreateSystemSettingInput) =>
+      settingsApi.createSystemSetting(data),
     onSuccess: (item) => {
       invalidateSettings()
       onToast(`Đã khởi tạo cấu hình "${item.key}" thành công`)
@@ -123,8 +152,13 @@ export function SystemSettingsTab({
   })
 
   const updateSettingMutation = useMutation({
-    mutationFn: ({ key, data }: { key: string; data: UpdateSystemSettingInput }) =>
-      settingsApi.updateSystemSetting(key, data),
+    mutationFn: ({
+      key,
+      data,
+    }: {
+      key: string
+      data: UpdateSystemSettingInput
+    }) => settingsApi.updateSystemSetting(key, data),
     onSuccess: (item) => {
       invalidateSettings()
       onToast(`Đã cập nhật cấu hình "${item.key}" thành công`)
@@ -140,6 +174,7 @@ export function SystemSettingsTab({
     onSuccess: (res) => {
       invalidateSettings()
       onToast(`Đã xóa cấu hình "${res.key}"`)
+      setPage(1)
     },
     onError: (err) => onToast(errorMessage(err)),
   })
@@ -148,11 +183,17 @@ export function SystemSettingsTab({
   const formatSettingValueDisplay = (val: unknown, type: SettingValueType) => {
     if (type === 'BOOLEAN') {
       return val === true || val === 'true' ? (
-        <Badge variant="outline" className="border-emerald-300 bg-emerald-50 text-emerald-700">
+        <Badge
+          variant="outline"
+          className="border-emerald-300 bg-emerald-50 text-emerald-700"
+        >
           TRUE
         </Badge>
       ) : (
-        <Badge variant="outline" className="border-border bg-muted text-muted-foreground">
+        <Badge
+          variant="outline"
+          className="border-border bg-muted text-muted-foreground"
+        >
           FALSE
         </Badge>
       )
@@ -164,7 +205,9 @@ export function SystemSettingsTab({
         </code>
       )
     }
-    return <span className="font-medium text-foreground">{String(val ?? '')}</span>
+    return (
+      <span className="font-medium text-foreground">{String(val ?? '')}</span>
+    )
   }
 
   return (
@@ -178,7 +221,10 @@ export function SystemSettingsTab({
               type="text"
               placeholder="Tìm theo khóa cài đặt (key) hoặc mô tả..."
               value={settingsSearch}
-              onChange={(e) => setSettingsSearch(e.target.value)}
+              onChange={(e) => {
+                setSettingsSearch(e.target.value)
+                setPage(1)
+              }}
               className="pl-9 h-9 text-xs"
             />
           </div>
@@ -187,7 +233,10 @@ export function SystemSettingsTab({
             <select
               aria-label="Lọc theo kiểu dữ liệu tham số"
               value={settingTypeFilter}
-              onChange={(e) => setSettingTypeFilter(e.target.value as any)}
+              onChange={(e) => {
+                setSettingTypeFilter(e.target.value as 'ALL' | SettingValueType)
+                setPage(1)
+              }}
               className="h-9 rounded-lg border border-border bg-card px-2.5 text-xs text-foreground focus:outline-hidden focus:ring-2 focus:ring-ring"
             >
               <option value="ALL">Tất cả kiểu dữ liệu</option>
@@ -201,7 +250,14 @@ export function SystemSettingsTab({
       </Card>
 
       {/* Settings Table */}
-      {isLoadingSettings ? (
+      {error ? (
+        <p role="alert" className="text-sm text-destructive">
+          {errorMessage(error)}{' '}
+          <Button variant="outline" onClick={() => void refetch()}>
+            Thử lại
+          </Button>
+        </p>
+      ) : isLoadingSettings ? (
         <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
           <RefreshCw className="h-8 w-8 animate-spin" />
           <p className="mt-3 text-sm">Đang tải danh sách tham số hệ thống...</p>
@@ -209,7 +265,9 @@ export function SystemSettingsTab({
       ) : !settingsData?.list || settingsData.list.length === 0 ? (
         <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border py-16 text-center">
           <Sliders className="h-10 w-10 text-muted-foreground mb-2" />
-          <h3 className="text-base font-semibold text-foreground">Không tìm thấy cấu hình nào</h3>
+          <h3 className="text-base font-semibold text-foreground">
+            Không tìm thấy cấu hình nào
+          </h3>
           <p className="text-xs text-muted-foreground mt-1 max-w-sm">
             Chưa có tham số cài đặt nào hoặc không khớp với từ khóa tìm kiếm.
           </p>
@@ -230,7 +288,10 @@ export function SystemSettingsTab({
               </thead>
               <tbody className="divide-y divide-border">
                 {settingsData.list.map((setting) => (
-                  <tr key={setting.id} className="hover:bg-muted/30 transition-colors">
+                  <tr
+                    key={setting.id}
+                    className="hover:bg-muted/30 transition-colors"
+                  >
                     <td className="px-4 py-3.5">
                       <div className="font-mono font-semibold text-xs text-primary">
                         {setting.key}
@@ -240,26 +301,37 @@ export function SystemSettingsTab({
                       </div>
                     </td>
                     <td className="px-4 py-3.5">
-                      <Badge variant="outline" className="text-[10px] font-mono">
+                      <Badge
+                        variant="outline"
+                        className="text-[10px] font-mono"
+                      >
                         {setting.valueType}
                       </Badge>
                     </td>
                     <td className="px-4 py-3.5 text-xs">
-                      {formatSettingValueDisplay(setting.value, setting.valueType)}
+                      {formatSettingValueDisplay(
+                        setting.value,
+                        setting.valueType,
+                      )}
                     </td>
                     <td className="px-4 py-3.5 text-xs font-mono text-muted-foreground">
                       v{setting.version}
                     </td>
                     <td className="px-4 py-3.5 text-xs text-muted-foreground">
                       <div>{setting.updatedBy?.fullName || 'Hệ thống'}</div>
-                      <div className="text-[10px]">{formatDate(setting.updatedAt)}</div>
+                      <div className="text-[10px]">
+                        {formatDate(setting.updatedAt)}
+                      </div>
                     </td>
                     <td className="px-4 py-3.5 text-right">
                       <div className="flex items-center justify-end gap-1.5">
                         {/* Revisions */}
                         <button
                           type="button"
-                          onClick={() => setViewingRevisionsKey(setting.key)}
+                          onClick={() => {
+                            setViewingRevisionsKey(setting.key)
+                            setRevisionsPage(1)
+                          }}
                           className="rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground cursor-pointer"
                           title="Xem lịch sử chỉnh sửa phiên bản"
                         >
@@ -277,7 +349,9 @@ export function SystemSettingsTab({
                                   ? JSON.stringify(setting.value, null, 2)
                                   : String(setting.value ?? ''),
                               )
-                              setEditSettingDescription(setting.description || '')
+                              setEditSettingDescription(
+                                setting.description || '',
+                              )
                               setEditSettingIsPublic(setting.isPublic)
                               setEditSettingError(null)
                             }}
@@ -321,6 +395,15 @@ export function SystemSettingsTab({
       )}
 
       {/* ==================================================== */}
+      {settingsData && !error && (
+        <Pagination
+          page={page}
+          totalPages={settingsData.totalPages}
+          onPage={setPage}
+          disabled={isFetching}
+        />
+      )}
+
       {/* MODALS: CREATE SYSTEM SETTING                       */}
       {/* ==================================================== */}
       <Dialog
@@ -333,7 +416,8 @@ export function SystemSettingsTab({
             Khởi tạo tham số cài đặt mới
           </DialogTitle>
           <DialogDescription className="text-sm text-muted-foreground">
-            Định nghĩa cấu hình hệ thống toàn quán (khóa định danh dạng dot.notation)
+            Định nghĩa cấu hình hệ thống toàn quán (khóa định danh dạng
+            dot.notation)
           </DialogDescription>
         </DialogHeader>
 
@@ -351,12 +435,16 @@ export function SystemSettingsTab({
             if (createSettingData.valueType === 'NUMBER') {
               parsedVal = Number(createSettingData.value)
             } else if (createSettingData.valueType === 'BOOLEAN') {
-              parsedVal = createSettingData.value === 'true' || createSettingData.value === true
+              parsedVal =
+                createSettingData.value === 'true' ||
+                createSettingData.value === true
             } else if (createSettingData.valueType === 'JSON') {
               try {
                 parsedVal = JSON.parse(String(createSettingData.value))
               } catch (err: any) {
-                setCreateSettingError(`Định dạng JSON không hợp lệ: ${err.message}`)
+                setCreateSettingError(
+                  `Định dạng JSON không hợp lệ: ${err.message}`,
+                )
                 return
               }
             }
@@ -388,7 +476,9 @@ export function SystemSettingsTab({
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="text-xs font-medium text-foreground">Kiểu dữ liệu</label>
+              <label className="text-xs font-medium text-foreground">
+                Kiểu dữ liệu
+              </label>
               <select
                 aria-label="Chọn kiểu dữ liệu"
                 value={createSettingData.valueType}
@@ -415,7 +505,10 @@ export function SystemSettingsTab({
                 placeholder="Nhập giá trị"
                 value={String(createSettingData.value)}
                 onChange={(e) =>
-                  setCreateSettingData({ ...createSettingData, value: e.target.value })
+                  setCreateSettingData({
+                    ...createSettingData,
+                    value: e.target.value,
+                  })
                 }
                 required
                 className="mt-1 font-mono text-xs"
@@ -424,13 +517,18 @@ export function SystemSettingsTab({
           </div>
 
           <div>
-            <label className="text-xs font-medium text-foreground">Mô tả tác dụng</label>
+            <label className="text-xs font-medium text-foreground">
+              Mô tả tác dụng
+            </label>
             <Input
               type="text"
               placeholder="Giải thích ý nghĩa và phạm vi áp dụng của tham số"
               value={createSettingData.description || ''}
               onChange={(e) =>
-                setCreateSettingData({ ...createSettingData, description: e.target.value })
+                setCreateSettingData({
+                  ...createSettingData,
+                  description: e.target.value,
+                })
               }
               className="mt-1"
             />
@@ -473,7 +571,8 @@ export function SystemSettingsTab({
                 Cập nhật cấu hình: {editingSetting.key}
               </DialogTitle>
               <DialogDescription className="text-sm text-muted-foreground">
-                Phiên bản hiện tại: <span className="font-mono">v{editingSetting.version}</span>
+                Phiên bản hiện tại:{' '}
+                <span className="font-mono">v{editingSetting.version}</span>
               </DialogDescription>
             </DialogHeader>
 
@@ -496,7 +595,9 @@ export function SystemSettingsTab({
                   try {
                     parsedVal = JSON.parse(editSettingValue)
                   } catch (err: any) {
-                    setEditSettingError(`Định dạng JSON không hợp lệ: ${err.message}`)
+                    setEditSettingError(
+                      `Định dạng JSON không hợp lệ: ${err.message}`,
+                    )
                     return
                   }
                 }
@@ -526,7 +627,9 @@ export function SystemSettingsTab({
               </div>
 
               <div>
-                <label className="text-xs font-medium text-foreground">Mô tả</label>
+                <label className="text-xs font-medium text-foreground">
+                  Mô tả
+                </label>
                 <Input
                   type="text"
                   value={editSettingDescription}
@@ -551,7 +654,9 @@ export function SystemSettingsTab({
                   disabled={updateSettingMutation.isPending}
                   className="bg-primary text-primary-foreground hover:bg-primary/90"
                 >
-                  {updateSettingMutation.isPending ? 'Đang lưu...' : 'Lưu thay đổi'}
+                  {updateSettingMutation.isPending
+                    ? 'Đang lưu...'
+                    : 'Lưu thay đổi'}
                 </Button>
               </DialogFooter>
             </form>
@@ -578,23 +683,38 @@ export function SystemSettingsTab({
                 Lịch sử phiên bản: {viewingRevisionsKey}
               </DialogTitle>
               <DialogDescription className="text-sm text-muted-foreground">
-                Theo dõi toàn bộ lịch sử điều chỉnh cấu hình và nhân sự thực hiện
+                Theo dõi toàn bộ lịch sử điều chỉnh cấu hình và nhân sự thực
+                hiện
               </DialogDescription>
             </DialogHeader>
 
             <div className="mt-4 flex-1 overflow-y-auto pr-1 space-y-2">
-              {isLoadingRevisions ? (
+              {revisionsError ? (
+                <p role="alert" className="text-sm text-destructive">
+                  {errorMessage(revisionsError)}{' '}
+                  <Button
+                    variant="outline"
+                    onClick={() => void refetchRevisions()}
+                  >
+                    Thử lại
+                  </Button>
+                </p>
+              ) : isLoadingRevisions ? (
                 <div className="py-12 text-center text-muted-foreground">
                   Đang tải lịch sử phiên bản...
                 </div>
-              ) : !settingRevisionsData?.list || settingRevisionsData.list.length === 0 ? (
+              ) : !settingRevisionsData?.list ||
+                settingRevisionsData.list.length === 0 ? (
                 <div className="py-12 text-center text-muted-foreground">
                   Chưa có phiên bản cũ nào được ghi nhận.
                 </div>
               ) : (
                 <div className="divide-y divide-border">
                   {settingRevisionsData.list.map((rev) => (
-                    <div key={rev.id} className="py-2.5 flex items-start justify-between gap-4">
+                    <div
+                      key={rev.id}
+                      className="py-2.5 flex items-start justify-between gap-4"
+                    >
                       <div>
                         <div className="flex items-center gap-2">
                           <span className="font-mono font-bold text-xs bg-muted px-1.5 py-0.5 rounded">
@@ -610,7 +730,8 @@ export function SystemSettingsTab({
                           </div>
                         )}
                         <div className="text-[11px] text-muted-foreground mt-1">
-                          Cập nhật bởi: {rev.employee?.fullName || 'Hệ thống'} • {formatDate(rev.createdAt)}
+                          Cập nhật bởi: {rev.employee?.fullName || 'Hệ thống'} •{' '}
+                          {formatDate(rev.createdAt)}
                         </div>
                       </div>
                     </div>
@@ -619,6 +740,14 @@ export function SystemSettingsTab({
               )}
             </div>
 
+            {settingRevisionsData && !revisionsError && (
+              <Pagination
+                page={revisionsPage}
+                totalPages={settingRevisionsData.totalPages}
+                onPage={setRevisionsPage}
+                disabled={isFetchingRevisions}
+              />
+            )}
             <DialogFooter className="mt-6 flex justify-end pt-3 border-t border-border">
               <Button
                 type="button"

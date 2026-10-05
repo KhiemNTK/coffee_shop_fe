@@ -11,7 +11,15 @@ import {
 import { type DashboardReport } from '../reports.api'
 import { formatPrice } from '../../menu/menu.api'
 import { errorMessage } from '../../../shared/api/client'
-import { Card, CardContent, CardHeader, CardTitle, Button, Badge, cn } from '../../../shared/ui'
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  Button,
+  Badge,
+  cn,
+} from '../../../shared/ui'
 
 interface FinancialOverviewTabProps {
   report?: DashboardReport
@@ -66,7 +74,9 @@ export function FinancialOverviewTab({
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-medium text-muted-foreground">Thực thu thuần</span>
+              <span className="text-xs font-medium text-muted-foreground">
+                Thực thu thuần
+              </span>
               <DollarSign className="h-4 w-4 text-emerald-600" />
             </div>
             <p className="mt-2 text-xl font-bold text-foreground">
@@ -89,20 +99,26 @@ export function FinancialOverviewTab({
             <p className="mt-2 text-xl font-bold text-primary">
               {formatPrice(String(report.profitability.estimatedGrossProfit))}
             </p>
-            <p className="text-[11px] text-muted-foreground">Sau trừ NVL & hao hụt</p>
+            <p className="text-[11px] text-muted-foreground">
+              Sau trừ NVL & hao hụt
+            </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-medium text-muted-foreground">Số đơn đã TT</span>
+              <span className="text-xs font-medium text-muted-foreground">
+                Số đơn đã TT
+              </span>
               <Receipt className="h-4 w-4 text-primary" />
             </div>
             <p className="mt-2 text-xl font-bold text-foreground">
               {report.summary.paidInvoiceCount}
             </p>
-            <p className="text-[11px] text-muted-foreground">Hóa đơn hoàn tất</p>
+            <p className="text-[11px] text-muted-foreground">
+              Hóa đơn hoàn tất
+            </p>
           </CardContent>
         </Card>
 
@@ -117,14 +133,18 @@ export function FinancialOverviewTab({
             <p className="mt-2 text-xl font-bold text-foreground">
               {formatPrice(String(report.summary.averageTicket))}
             </p>
-            <p className="text-[11px] text-muted-foreground">Trung bình / hóa đơn</p>
+            <p className="text-[11px] text-muted-foreground">
+              Trung bình / hóa đơn
+            </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-medium text-muted-foreground">Giá vốn NVL (COGS)</span>
+              <span className="text-xs font-medium text-muted-foreground">
+                Giá vốn NVL (COGS)
+              </span>
               <PackageX className="h-4 w-4 text-amber-600" />
             </div>
             <p className="mt-2 text-xl font-bold text-amber-600">
@@ -144,7 +164,9 @@ export function FinancialOverviewTab({
         >
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-medium text-muted-foreground">Chênh lệch ca</span>
+              <span className="text-xs font-medium text-muted-foreground">
+                Chênh lệch ca
+              </span>
               <Wallet className="h-4 w-4 text-muted-foreground" />
             </div>
             <p
@@ -165,6 +187,80 @@ export function FinancialOverviewTab({
           </CardContent>
         </Card>
       </div>
+
+      {report.cashRisk.overview && (
+        <section className="space-y-3 border-y py-4">
+          <h2 className="text-base font-semibold">Rủi ro kiểm soát tiền mặt</h2>
+          <dl className="grid grid-cols-2 gap-4 lg:grid-cols-4 text-sm">
+            {(
+              [
+                [
+                  'Thiếu tiền đầu ca',
+                  report.cashRisk.overview.openingShortageAmount,
+                ],
+                [
+                  'Chi tiền chờ duyệt',
+                  report.cashRisk.overview.currentPendingExpenseRequestAmount,
+                ],
+                [
+                  'Bàn giao chờ duyệt',
+                  report.cashRisk.overview.currentPendingHandoverAmount,
+                ],
+                [
+                  'Nộp ngân hàng quá hạn',
+                  report.cashRisk.overview.overdueBankSettlementAmount,
+                ],
+                [
+                  'Sao kê lệch chưa xử lý',
+                  report.cashRisk.overview
+                    .currentMismatchedBankStatementEntryAmount,
+                ],
+              ] as const
+            ).map(([label, amount]) => (
+              <div key={label} className="min-w-0">
+                <dt className="text-muted-foreground">{label}</dt>
+                <dd className="break-words font-semibold">
+                  {amount == null ? '—' : formatPrice(amount)}
+                </dd>
+              </div>
+            ))}
+            <div>
+              <dt className="text-muted-foreground">
+                Nhân viên thiếu tiền lặp lại
+              </dt>
+              <dd className="font-semibold">
+                {report.cashRisk.overview.repeatShortageEmployeeCount ?? '—'}
+              </dd>
+            </div>
+          </dl>
+          {Boolean(report.cashRisk.employees?.length) && (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm">
+                <thead>
+                  <tr>
+                    <th className="py-2">Nhân viên</th>
+                    <th>Số ca thiếu</th>
+                    <th className="text-right">Tổng thiếu</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {report.cashRisk.employees?.map((row) => (
+                    <tr key={row.employeeId} className="border-t">
+                      <td className="py-2">{row.employeeName}</td>
+                      <td>
+                        {row.shortageShiftCount} / {row.closedShiftCount}
+                      </td>
+                      <td className="text-right">
+                        {formatPrice(row.totalShortageAmount)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      )}
 
       {/* Charts & Distributions Row */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
@@ -212,7 +308,10 @@ export function FinancialOverviewTab({
                 <div className="flex h-56 items-end gap-1.5 border-b border-border pb-2 pt-6">
                   {report.trend.map((item, idx) => {
                     const rev = Number(item.netRevenue) || 0
-                    const heightPct = Math.max(Math.round((rev / maxTrendRevenue) * 100), 4)
+                    const heightPct = Math.max(
+                      Math.round((rev / maxTrendRevenue) * 100),
+                      4,
+                    )
                     return (
                       <div
                         key={idx}
@@ -220,7 +319,9 @@ export function FinancialOverviewTab({
                       >
                         {/* Tooltip */}
                         <div className="absolute -top-12 z-20 hidden whitespace-nowrap rounded-md bg-foreground px-2 py-1 text-[11px] text-background shadow-md group-hover:flex flex-col items-center">
-                          <span className="font-semibold">{formatPrice(String(item.netRevenue))}</span>
+                          <span className="font-semibold">
+                            {formatPrice(String(item.netRevenue))}
+                          </span>
                           <span className="text-[10px] text-muted">
                             {item.bucket} ({item.paidInvoiceCount} đơn)
                           </span>
@@ -241,7 +342,8 @@ export function FinancialOverviewTab({
                   })}
                 </div>
                 <p className="text-[11px] text-muted-foreground text-center">
-                  Di chuột lên cột để xem chi tiết doanh thu và số lượng đơn hàng tương ứng.
+                  Di chuột lên cột để xem chi tiết doanh thu và số lượng đơn
+                  hàng tương ứng.
                 </p>
               </div>
             )}
@@ -316,7 +418,10 @@ export function FinancialOverviewTab({
                 </thead>
                 <tbody className="divide-y divide-border">
                   {report.topItems.map((item, index) => (
-                    <tr key={item.menuItemId} className="hover:bg-muted/30 transition-colors">
+                    <tr
+                      key={item.menuItemId}
+                      className="hover:bg-muted/30 transition-colors"
+                    >
                       <td className="px-4 py-3 text-center font-bold text-muted-foreground">
                         {index + 1}
                       </td>
@@ -338,7 +443,10 @@ export function FinancialOverviewTab({
                   ))}
                   {!report.topItems.length && (
                     <tr>
-                      <td colSpan={5} className="py-8 text-center text-xs text-muted-foreground">
+                      <td
+                        colSpan={5}
+                        className="py-8 text-center text-xs text-muted-foreground"
+                      >
                         Chưa có dữ liệu bán hàng trong kỳ này.
                       </td>
                     </tr>
@@ -368,7 +476,10 @@ export function FinancialOverviewTab({
                 </thead>
                 <tbody className="divide-y divide-border">
                   {report.lowStockItems.map((item) => (
-                    <tr key={item.id} className="hover:bg-muted/30 transition-colors">
+                    <tr
+                      key={item.id}
+                      className="hover:bg-muted/30 transition-colors"
+                    >
                       <td className="px-4 py-3 text-xs font-semibold text-foreground">
                         {item.name}
                       </td>
@@ -381,7 +492,10 @@ export function FinancialOverviewTab({
                   ))}
                   {!report.lowStockItems.length && (
                     <tr>
-                      <td colSpan={2} className="py-8 text-center text-xs text-emerald-600">
+                      <td
+                        colSpan={2}
+                        className="py-8 text-center text-xs text-emerald-600"
+                      >
                         Tất cả nguyên liệu đều ở mức an toàn.
                       </td>
                     </tr>

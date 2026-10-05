@@ -33,15 +33,42 @@ const authorization = {
 }
 
 const mockPositions = [
-  { id: '20000000-0000-4000-8000-000000000001', name: 'Chủ sở hữu', salary: '20000000' },
-  { id: '20000000-0000-4000-8000-000000000002', name: 'Quản lý quán', salary: '15000000' },
-  { id: '20000000-0000-4000-8000-000000000003', name: 'Barista', salary: '8000000' },
+  {
+    id: '20000000-0000-4000-8000-000000000001',
+    name: 'Chủ sở hữu',
+    salary: '20000000',
+  },
+  {
+    id: '20000000-0000-4000-8000-000000000002',
+    name: 'Quản lý quán',
+    salary: '15000000',
+  },
+  {
+    id: '20000000-0000-4000-8000-000000000003',
+    name: 'Barista',
+    salary: '8000000',
+  },
 ]
 
 const mockRoles = [
-  { id: '30000000-0000-4000-8000-000000000001', name: 'OWNER', description: 'Chủ cửa hàng', isSystemRole: true },
-  { id: '30000000-0000-4000-8000-000000000002', name: 'MANAGER', description: 'Quản lý cửa hàng', isSystemRole: true },
-  { id: '30000000-0000-4000-8000-000000000003', name: 'CASHIER', description: 'Thu ngân ca', isSystemRole: true },
+  {
+    id: '30000000-0000-4000-8000-000000000001',
+    name: 'OWNER',
+    description: 'Chủ cửa hàng',
+    isSystemRole: true,
+  },
+  {
+    id: '30000000-0000-4000-8000-000000000002',
+    name: 'MANAGER',
+    description: 'Quản lý cửa hàng',
+    isSystemRole: true,
+  },
+  {
+    id: '30000000-0000-4000-8000-000000000003',
+    name: 'CASHIER',
+    description: 'Thu ngân ca',
+    isSystemRole: true,
+  },
 ]
 
 const mockEmployees = [
@@ -85,7 +112,9 @@ const mockEmployees = [
 
 test.describe('Staff Employees and Roles Management', () => {
   test.beforeEach(async ({ page }) => {
-    await page.route('**/api/v1/auth/me', (route) => route.fulfill({ json: envelope(employee) }))
+    await page.route('**/api/v1/auth/me', (route) =>
+      route.fulfill({ json: envelope(employee) }),
+    )
     await page.route('**/api/v1/auth/me/permissions', (route) =>
       route.fulfill({ json: envelope(authorization) }),
     )
@@ -115,26 +144,33 @@ test.describe('Staff Employees and Roles Management', () => {
     )
   })
 
-  test('loads employees list with stats and filters', async ({ page }) => {
-    await page.route('**/api/v1/employees**', (route) =>
-      route.fulfill({
+  test('loads employees with the server total and server-side status filters', async ({
+    page,
+  }) => {
+    await page.route('**/api/v1/employees**', (route) => {
+      const active = new URL(route.request().url()).searchParams.get('isActive')
+      const employees = mockEmployees.filter(
+        (item) => active === null || String(item.isActive) === active,
+      )
+      return route.fulfill({
         json: envelope({
-          list: mockEmployees,
+          list: employees,
           totalPages: 1,
-          totalItems: mockEmployees.length,
+          totalItems: employees.length,
           currentPage: 1,
         }),
-      }),
-    )
+      })
+    })
 
     await page.goto('/staff/employees')
 
-    await expect(page.getByRole('heading', { name: 'Quản lý Nhân sự & Phân quyền' })).toBeVisible()
+    await expect(
+      page.getByRole('heading', { name: 'Quản lý Nhân sự & Phân quyền' }),
+    ).toBeVisible()
 
-    // Metric numbers (scoped to KPI section or first match to avoid badge collision)
-    await expect(page.getByText('3', { exact: true }).first()).toBeVisible() // Total
-    await expect(page.getByText('2', { exact: true }).first()).toBeVisible() // Active
-    await expect(page.getByText('1', { exact: true }).first()).toBeVisible() // Inactive
+    await expect(
+      page.getByRole('button', { name: /Danh sách Nhân sự/ }),
+    ).toContainText('3')
 
     // Employee names
     await expect(page.getByText('Trần Văn Chủ Quán')).toBeVisible()
@@ -189,17 +225,27 @@ test.describe('Staff Employees and Roles Management', () => {
     await page.goto('/staff/employees')
 
     await page.getByRole('button', { name: 'Thêm nhân viên' }).click()
-    await expect(page.getByRole('heading', { name: 'Thêm nhân viên mới' })).toBeVisible()
+    await expect(
+      page.getByRole('heading', { name: 'Thêm nhân viên mới' }),
+    ).toBeVisible()
 
     await page.getByPlaceholder('Ví dụ: Nguyễn Văn An').fill('Hoàng Đức Anh')
-    await page.getByPlaceholder('nhanvien@example.com').fill('ducanh@example.test')
+    await page
+      .getByPlaceholder('nhanvien@example.com')
+      .fill('ducanh@example.test')
     await page.getByPlaceholder('nguyenvanan').fill('ducanh')
     await page.getByPlaceholder('Tối thiểu 12 ký tự').fill('Password123!Long')
-    await page.getByLabel('Chọn vị trí công việc').selectOption({ label: 'Barista' })
+    await page
+      .getByLabel('Chọn vị trí công việc')
+      .selectOption({ label: 'Barista' })
 
-    await page.getByRole('button', { name: 'Lưu nhân viên' }).click({ force: true })
+    await page
+      .getByRole('button', { name: 'Lưu nhân viên' })
+      .click({ force: true })
 
-    await expect(page.getByText('Đã thêm nhân viên "Hoàng Đức Anh" thành công')).toBeVisible()
+    await expect(
+      page.getByText('Đã thêm nhân viên "Hoàng Đức Anh" thành công'),
+    ).toBeVisible()
     await expect(page.getByText('Hoàng Đức Anh', { exact: true })).toBeVisible()
   })
 
@@ -234,14 +280,20 @@ test.describe('Staff Employees and Roles Management', () => {
 
     // Click edit on Lê Thị Thu Ngân (index 1)
     await page.getByTitle('Chỉnh sửa thông tin').nth(1).click({ force: true })
-    await expect(page.getByRole('heading', { name: 'Cập nhật thông tin nhân viên' })).toBeVisible()
+    await expect(
+      page.getByRole('heading', { name: 'Cập nhật thông tin nhân viên' }),
+    ).toBeVisible()
 
     const nameInput = page.locator('input[value="Lê Thị Thu Ngân"]')
     await nameInput.fill('Lê Thị Thu Ngân (Trưởng ca)')
-    await page.getByRole('button', { name: 'Lưu thay đổi' }).click({ force: true })
+    await page
+      .getByRole('button', { name: 'Lưu thay đổi' })
+      .click({ force: true })
 
     await expect(
-      page.getByText('Đã cập nhật thông tin nhân viên "Lê Thị Thu Ngân (Trưởng ca)"'),
+      page.getByText(
+        'Đã cập nhật thông tin nhân viên "Lê Thị Thu Ngân (Trưởng ca)"',
+      ),
     ).toBeVisible()
   })
 
@@ -285,13 +337,19 @@ test.describe('Staff Employees and Roles Management', () => {
 
     // Use getByTitle for robust button selection on mobile & desktop
     await page.getByTitle('Phân quyền vai trò').nth(1).click({ force: true })
-    await expect(page.getByRole('heading', { name: /Phân vai trò: Lê Thị Thu Ngân/ })).toBeVisible()
+    await expect(
+      page.getByRole('heading', { name: /Phân vai trò: Lê Thị Thu Ngân/ }),
+    ).toBeVisible()
 
     // Select MANAGER role
     await page.getByText('MANAGER').click()
-    await page.getByRole('button', { name: 'Lưu vai trò' }).click({ force: true })
+    await page
+      .getByRole('button', { name: 'Lưu vai trò' })
+      .click({ force: true })
 
-    await expect(page.getByText('Đã cập nhật phân quyền vai trò cho nhân viên')).toBeVisible()
+    await expect(
+      page.getByText('Đã cập nhật phân quyền vai trò cho nhân viên'),
+    ).toBeVisible()
   })
 
   test('switches tabs to positions and roles', async ({ page }) => {

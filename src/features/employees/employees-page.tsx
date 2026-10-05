@@ -1,10 +1,8 @@
-import { useState, useMemo } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useState } from 'react'
+import { useIsFetching, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useOutletContext } from 'react-router-dom'
 import {
   Users,
-  UserCheck,
-  UserX,
   Briefcase,
   Shield,
   Plus,
@@ -14,20 +12,17 @@ import {
 import {
   getEmployees,
   getPositionsDropdown,
-  getRoles,
+  getAllRoles,
 } from '@/features/employees/employees.api'
 import type { Session } from '@/features/auth/session'
-import {
-  Button,
-  Badge,
-  Card,
-  CardContent,
-} from '@/shared/ui'
+import { Button, Badge } from '@/shared/ui'
 import { EmployeesListTab } from './components/employees-list-tab'
 import { PositionsTab } from './components/positions-tab'
 import { RolesTab } from './components/roles-tab'
+import { errorMessage } from '../../shared/api/client'
 
 export function EmployeesPage() {
+  const client = useQueryClient()
   const { authorization } = useOutletContext<Session>()
   const permissions = authorization.permissionKeys
 
@@ -38,7 +33,8 @@ export function EmployeesPage() {
   const canDeleteEmployee = permissions.includes('/employees_delete')
   const canManageEmployeeRoles =
     permissions.includes('/employees_roles_read') &&
-    permissions.includes('/employees_roles_update')
+    permissions.includes('/employees_roles_update') &&
+    permissions.includes('/roles_read')
 
   const canReadPositions = permissions.includes('/positions_read')
   const canCreatePosition = permissions.includes('/positions_create')
@@ -51,7 +47,9 @@ export function EmployeesPage() {
     permissions.includes('/roles_permissions_update')
 
   // Active Tab
-  const [activeTab, setActiveTab] = useState<'employees' | 'positions' | 'roles'>('employees')
+  const [activeTab, setActiveTab] = useState<
+    'employees' | 'positions' | 'roles'
+  >(canReadEmployees ? 'employees' : canReadPositions ? 'positions' : 'roles')
 
   // Notification Toast
   const [toastMessage, setToastMessage] = useState<string | null>(null)
@@ -61,21 +59,13 @@ export function EmployeesPage() {
   const [isCreatePositionOpen, setIsCreatePositionOpen] = useState(false)
 
   // Queries
-  const {
-    data: employeesData,
-    isLoading: isLoadingEmployees,
-    refetch: refetchEmployees,
-  } = useQuery({
-    queryKey: ['private', 'employees', 'summary-kpi'],
-    queryFn: ({ signal }) =>
-      getEmployees({ page: 1, itemPerPage: 100 }, signal),
+  const { data: employeesData } = useQuery({
+    queryKey: ['private', 'employees', 'total'],
+    queryFn: ({ signal }) => getEmployees({ page: 1, itemPerPage: 1 }, signal),
     enabled: canReadEmployees,
   })
 
-  const {
-    data: positionsDropdown = [],
-    refetch: refetchPositionsDropdown,
-  } = useQuery({
+  const { data: positionsDropdown = [] } = useQuery({
     queryKey: ['private', 'positions-dropdown'],
     queryFn: ({ signal }) => getPositionsDropdown(signal),
     enabled: canReadPositions,
@@ -84,28 +74,28 @@ export function EmployeesPage() {
   const {
     data: rolesData,
     isLoading: isLoadingRoles,
+    error: rolesError,
     refetch: refetchRoles,
   } = useQuery({
     queryKey: ['private', 'roles'],
-    queryFn: ({ signal }) => getRoles({ page: 1, itemPerPage: 50 }, signal),
+    queryFn: ({ signal }) => getAllRoles(signal),
     enabled: canReadRoles,
   })
 
-  // KPIs
-  const stats = useMemo(() => {
-    const list = employeesData?.list ?? []
-    const total = list.length
-    const active = list.filter((e) => e.isActive).length
-    const inactive = total - active
-    const positionsCount = positionsDropdown.length
-    return { total, active, inactive, positionsCount }
-  }, [employeesData?.list, positionsDropdown.length])
+  const stats = {
+    total: employeesData?.totalItems ?? '—',
+    positionsCount: positionsDropdown.length,
+  }
 
   const handleRefresh = () => {
-    void refetchEmployees()
-    void refetchPositionsDropdown()
-    void refetchRoles()
+    void client.invalidateQueries({ queryKey: ['private', activeTab] })
+    if (canReadPositions && activeTab !== 'roles') {
+      void client.invalidateQueries({
+        queryKey: ['private', 'positions-dropdown'],
+      })
+    }
   }
+  const refreshing = useIsFetching({ queryKey: ['private', activeTab] }) > 0
 
   return (
     <div className="mx-auto max-w-7xl space-y-6 p-4 sm:p-6 lg:p-8 w-full">
@@ -138,7 +128,8 @@ export function EmployeesPage() {
                 Quản lý Nhân sự & Phân quyền
               </h1>
               <p className="text-sm text-muted-foreground">
-                Hồ sơ nhân viên, chức danh vị trí công việc và ma trận phân quyền bảo mật
+                Hồ sơ nhân viên, chức danh vị trí công việc và ma trận phân
+                quyền bảo mật
               </p>
             </div>
           </div>
@@ -149,7 +140,9 @@ export function EmployeesPage() {
             variant="outline"
             size="sm"
             onClick={handleRefresh}
-            disabled={isLoadingEmployees}
+            disabled={refreshing}
+            aria-label="Làm mới"
+            title="Làm mới"
             className="gap-2"
           >
             <RefreshCw className="h-4 w-4" />
@@ -180,90 +173,24 @@ export function EmployeesPage() {
         </div>
       </div>
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4">
-        {/* Total Employees */}
-        <Card className="border border-border/80 shadow-xs">
-          <CardContent className="p-4 sm:p-5">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                Tổng nhân sự
-              </span>
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-muted text-muted-foreground">
-                <Users className="h-4 w-4" />
-              </div>
-            </div>
-            <div className="mt-2 flex items-baseline gap-2">
-              <span className="text-2xl font-bold text-foreground">{stats.total}</span>
-              <span className="text-xs text-muted-foreground">thành viên</span>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Active Employees */}
-        <Card className="border border-emerald-200/80 bg-emerald-50/30 dark:border-emerald-900/40 dark:bg-emerald-950/10 shadow-xs">
-          <CardContent className="p-4 sm:p-5">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-medium text-emerald-800 dark:text-emerald-300 uppercase tracking-wider">
-                Đang làm việc
-              </span>
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-100 text-emerald-700 dark:bg-emerald-900/60 dark:text-emerald-300">
-                <UserCheck className="h-4 w-4" />
-              </div>
-            </div>
-            <div className="mt-2 flex items-baseline gap-2">
-              <span className="text-2xl font-bold text-emerald-700 dark:text-emerald-400">
-                {stats.active}
-              </span>
-              <span className="text-xs text-emerald-600 dark:text-emerald-400/80">hoạt động</span>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Inactive Employees */}
-        <Card className="border border-border/80 bg-muted/20 shadow-xs">
-          <CardContent className="p-4 sm:p-5">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                Tạm khóa
-              </span>
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-muted text-muted-foreground">
-                <UserX className="h-4 w-4" />
-              </div>
-            </div>
-            <div className="mt-2 flex items-baseline gap-2">
-              <span className="text-2xl font-bold text-foreground">{stats.inactive}</span>
-              <span className="text-xs text-muted-foreground">ngừng quyền truy cập</span>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Positions Count */}
-        <Card className="border border-blue-200/80 bg-blue-50/30 dark:border-blue-900/40 dark:bg-blue-950/10 shadow-xs">
-          <CardContent className="p-4 sm:p-5">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-medium text-blue-800 dark:text-blue-300 uppercase tracking-wider">
-                Vị trí công việc
-              </span>
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-100 text-blue-700 dark:bg-blue-900/60 dark:text-blue-300">
-                <Briefcase className="h-4 w-4" />
-              </div>
-            </div>
-            <div className="mt-2 flex items-baseline gap-2">
-              <span className="text-2xl font-bold text-blue-700 dark:text-blue-400">
-                {stats.positionsCount}
-              </span>
-              <span className="text-xs text-blue-600 dark:text-blue-400/80">chức danh</span>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
+      {rolesError && canReadRoles && (
+        <p role="alert" className="text-sm text-destructive">
+          {errorMessage(rolesError)}{' '}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => void refetchRoles()}
+          >
+            Thử tải vai trò
+          </Button>
+        </p>
+      )}
       {/* Tabs Navigation */}
       <div className="flex border-b border-border">
         <button
           type="button"
           onClick={() => setActiveTab('employees')}
+          disabled={!canReadEmployees}
           className={`flex items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-semibold transition-colors cursor-pointer ${
             activeTab === 'employees'
               ? 'border-blue-600 text-blue-600 dark:border-blue-400 dark:text-blue-400'
@@ -312,10 +239,11 @@ export function EmployeesPage() {
       </div>
 
       {/* Tab Panels */}
-      {activeTab === 'employees' && (
+      {activeTab === 'employees' && canReadEmployees && (
         <EmployeesListTab
           positionsDropdown={positionsDropdown}
-          roles={rolesData?.list ?? []}
+          roles={rolesData ?? []}
+          rolesLoaded={Boolean(rolesData) && !isLoadingRoles}
           canCreate={canCreateEmployee}
           canUpdate={canUpdateEmployee}
           canDelete={canDeleteEmployee}
@@ -338,7 +266,7 @@ export function EmployeesPage() {
 
       {activeTab === 'roles' && (
         <RolesTab
-          roles={rolesData?.list ?? []}
+          roles={rolesData ?? []}
           isLoadingRoles={isLoadingRoles}
           canManagePermissions={canManageRolePermissions}
           onToast={(msg) => setToastMessage(msg)}

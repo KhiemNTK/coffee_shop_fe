@@ -7,7 +7,10 @@ const employee = {
   username: 'admin',
   fullName: 'Quản trị viên Hệ thống',
   isActive: true,
-  position: { id: '20000000-0000-4000-8000-000000000001', name: 'Quản trị viên' },
+  position: {
+    id: '20000000-0000-4000-8000-000000000001',
+    name: 'Quản trị viên',
+  },
 }
 
 const authorization = {
@@ -185,7 +188,9 @@ const mockExceptionsFeedbackList = [
 
 test.describe('Settings, Equipment and Exceptions Management', () => {
   test.beforeEach(async ({ page }) => {
-    await page.route('**/api/v1/auth/me', (route) => route.fulfill({ json: envelope(employee) }))
+    await page.route('**/api/v1/auth/me', (route) =>
+      route.fulfill({ json: envelope(employee) }),
+    )
     await page.route('**/api/v1/auth/me/permissions', (route) =>
       route.fulfill({ json: envelope(authorization) }),
     )
@@ -300,14 +305,18 @@ test.describe('Settings, Equipment and Exceptions Management', () => {
       if (req.method() === 'PATCH') {
         const body = req.postDataJSON()
         const defaultSetting = mockSettings[0]!
-        const settingKey = url.split('/system-settings/')[1]?.split('?')[0] || defaultSetting.key
-        const existing = mockSettings.find((s) => s.key === settingKey) || defaultSetting
+        const settingKey =
+          url.split('/system-settings/')[1]?.split('?')[0] || defaultSetting.key
+        const existing =
+          mockSettings.find((s) => s.key === settingKey) || defaultSetting
         return route.fulfill({
           json: envelope({
             ...existing,
             value: body.value !== undefined ? body.value : existing.value,
             description:
-              body.description !== undefined ? body.description : existing.description,
+              body.description !== undefined
+                ? body.description
+                : existing.description,
             version: existing.version + 1,
           }),
         })
@@ -362,17 +371,22 @@ test.describe('Settings, Equipment and Exceptions Management', () => {
     })
   })
 
-  test('loads equipment dashboard with metrics and item list', async ({ page }) => {
+  test('loads equipment list without treating page-local status counts as totals', async ({
+    page,
+  }) => {
     await page.goto('/staff/settings')
 
     // Page header
-    await expect(page.getByRole('heading', { name: /Cài đặt & Thiết bị/ })).toBeVisible()
+    await expect(
+      page.getByRole('heading', { name: /Cài đặt & Thiết bị/ }),
+    ).toBeVisible()
 
-    // KPI cards
-    await expect(page.getByText('Tổng thiết bị')).toBeVisible()
-    await expect(page.getByText('Đang hoạt động').first()).toBeVisible()
-    await expect(page.getByText('Đang bảo trì').first()).toBeVisible()
-    await expect(page.getByText('Hỏng / Thanh lý')).toBeVisible()
+    await expect(page.getByText('Tổng thiết bị', { exact: true })).toHaveCount(
+      0,
+    )
+    await expect(
+      page.getByText('Hỏng / Thanh lý', { exact: true }),
+    ).toHaveCount(0)
 
     // Equipment items in table
     await expect(page.getByText('Máy Pha Cà Phê La Marzocco')).toBeVisible()
@@ -384,7 +398,9 @@ test.describe('Settings, Equipment and Exceptions Management', () => {
   test('filters equipment by search keyword', async ({ page }) => {
     await page.goto('/staff/settings')
 
-    const searchInput = page.getByPlaceholder('Tìm theo tên thiết bị, mã tài sản, serial number...')
+    const searchInput = page.getByPlaceholder(
+      'Tìm theo tên thiết bị, mã tài sản, serial number...',
+    )
     await searchInput.fill('Marzocco')
 
     await expect(searchInput).toHaveValue('Marzocco')
@@ -393,14 +409,24 @@ test.describe('Settings, Equipment and Exceptions Management', () => {
   test('creates new equipment successfully', async ({ page }) => {
     await page.goto('/staff/settings')
 
-    await page.getByRole('button', { name: 'Thêm thiết bị mới' }).click({ force: true })
-    await expect(page.getByRole('heading', { name: /Thêm thiết bị/ })).toBeVisible()
+    await page
+      .getByRole('button', { name: 'Thêm thiết bị mới' })
+      .click({ force: true })
+    await expect(
+      page.getByRole('heading', { name: /Thêm thiết bị/ }),
+    ).toBeVisible()
 
     await page.locator('input[placeholder="VD: EQ-ESP-01"]').fill('EQ-WATER-01')
-    await page.locator('input[placeholder="VD: Máy pha cà phê La Marzocco Linea PB 2 Group"]').fill('Máy Lọc Nước Công Nghiệp')
+    await page
+      .locator(
+        'input[placeholder="VD: Máy pha cà phê La Marzocco Linea PB 2 Group"]',
+      )
+      .fill('Máy Lọc Nước Công Nghiệp')
     await page.locator('input[placeholder="250000000"]').fill('15000000')
 
-    await page.getByRole('button', { name: 'Lưu thiết bị' }).click({ force: true })
+    await page
+      .getByRole('button', { name: 'Lưu thiết bị' })
+      .click({ force: true })
 
     await expect(
       page.getByText('Đã thêm thiết bị "Máy Lọc Nước Công Nghiệp" thành công'),
@@ -411,37 +437,61 @@ test.describe('Settings, Equipment and Exceptions Management', () => {
     await page.goto('/staff/settings')
 
     // Click transition button for first item
-    await page.getByTitle('Chuyển trạng thái thiết bị').first().click({ force: true })
+    await page
+      .getByTitle('Chuyển trạng thái thiết bị')
+      .first()
+      .click({ force: true })
     await expect(
-      page.getByRole('heading', { name: /Chuyển trạng thái: Máy Pha Cà Phê La Marzocco/ }),
+      page.getByRole('heading', {
+        name: /Chuyển trạng thái: Máy Pha Cà Phê La Marzocco/,
+      }),
     ).toBeVisible()
 
     // Fill reason and submit
-    await page.locator('input[placeholder="VD: Thay gioăng cao su định kỳ, sửa bơm nước..."]').fill('Bảo trì khẩn cấp')
-    await page.getByRole('button', { name: 'Xác nhận chuyển' }).click({ force: true })
+    await page
+      .locator(
+        'input[placeholder="VD: Thay gioăng cao su định kỳ, sửa bơm nước..."]',
+      )
+      .fill('Bảo trì khẩn cấp')
+    await page
+      .getByRole('button', { name: 'Xác nhận chuyển' })
+      .click({ force: true })
 
     await expect(
-      page.getByText('Đã chuyển trạng thái thiết bị "Máy Pha Cà Phê La Marzocco" thành công'),
+      page.getByText(
+        'Đã chuyển trạng thái thiết bị "Máy Pha Cà Phê La Marzocco" thành công',
+      ),
     ).toBeVisible()
   })
 
   test('views equipment maintenance lifecycle history', async ({ page }) => {
     await page.goto('/staff/settings')
 
-    await page.getByTitle('Xem lịch sử bảo trì & vòng đời').first().click({ force: true })
+    await page
+      .getByTitle('Xem lịch sử bảo trì & vòng đời')
+      .first()
+      .click({ force: true })
     await expect(
-      page.getByRole('heading', { name: /Lịch sử.*Máy Pha Cà Phê La Marzocco/ }),
+      page.getByRole('heading', {
+        name: /Lịch sử.*Máy Pha Cà Phê La Marzocco/,
+      }),
     ).toBeVisible()
 
-    await expect(page.getByText('Thay gioăng cao su và vệ sinh van áp suất')).toBeVisible()
+    await expect(
+      page.getByText('Thay gioăng cao su và vệ sinh van áp suất'),
+    ).toBeVisible()
     await expect(page.getByText('Chi phí: 500.000 ₫')).toBeVisible()
   })
 
-  test('switches to system settings tab and views settings list', async ({ page }) => {
+  test('switches to system settings tab and views settings list', async ({
+    page,
+  }) => {
     await page.goto('/staff/settings')
 
     // Switch tab
-    await page.getByRole('button', { name: /Cấu hình Tham số Quán/ }).click({ force: true })
+    await page
+      .getByRole('button', { name: /Cấu hình Tham số Quán/ })
+      .click({ force: true })
 
     await expect(page.getByText('store.vat_rate')).toBeVisible()
     await expect(page.getByText('store.name')).toBeVisible()
@@ -451,28 +501,46 @@ test.describe('Settings, Equipment and Exceptions Management', () => {
   test('edits a system setting successfully', async ({ page }) => {
     await page.goto('/staff/settings')
 
-    await page.getByRole('button', { name: /Cấu hình Tham số Quán/ }).click({ force: true })
+    await page
+      .getByRole('button', { name: /Cấu hình Tham số Quán/ })
+      .click({ force: true })
 
     // Click edit for store.name
     await page.getByTitle('Sửa giá trị cài đặt').nth(1).click({ force: true })
-    await expect(page.getByRole('heading', { name: /Cập nhật cấu hình: store\.name/ })).toBeVisible()
+    await expect(
+      page.getByRole('heading', { name: /Cập nhật cấu hình: store\.name/ }),
+    ).toBeVisible()
 
-    await page.getByRole('button', { name: 'Lưu thay đổi' }).click({ force: true })
-    await expect(page.getByText('Đã cập nhật cấu hình "store.name" thành công')).toBeVisible()
+    await page
+      .getByRole('button', { name: 'Lưu thay đổi' })
+      .click({ force: true })
+    await expect(
+      page.getByText('Đã cập nhật cấu hình "store.name" thành công'),
+    ).toBeVisible()
   })
 
-  test('switches to management exceptions tab and displays queue', async ({ page }) => {
+  test('switches to management exceptions tab and displays queue', async ({
+    page,
+  }) => {
     await page.goto('/staff/settings')
 
     // Switch tab
-    await page.getByRole('button', { name: /Hàng đợi Ngoại lệ/ }).click({ force: true })
+    await page
+      .getByRole('button', { name: /Hàng đợi Ngoại lệ/ })
+      .click({ force: true })
 
     await expect(page.getByText('Đối soát Cổng TT')).toBeVisible()
-    await expect(page.getByText('Lệch tiền cổng PayOS - Mã đơn #ORD-8821')).toBeVisible()
+    await expect(
+      page.getByText('Lệch tiền cổng PayOS - Mã đơn #ORD-8821'),
+    ).toBeVisible()
 
     // Switch exception sub-kind to FEEDBACK
     await page.getByText('Khiếu nại khách').first().click()
-    await expect(page.getByText('Cà phê bị nguội khi giao tới nơi').first()).toBeVisible()
-    await expect(page.getByText('Đóng gói bị đổ ra ngoài ly').first()).toBeVisible()
+    await expect(
+      page.getByText('Cà phê bị nguội khi giao tới nơi').first(),
+    ).toBeVisible()
+    await expect(
+      page.getByText('Đóng gói bị đổ ra ngoài ly').first(),
+    ).toBeVisible()
   })
 })

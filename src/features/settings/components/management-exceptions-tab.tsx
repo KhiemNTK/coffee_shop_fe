@@ -1,177 +1,101 @@
 import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
-import {
-  Receipt,
-  Coins,
-  UserCheck,
-  MessageSquareWarning,
-  RefreshCw,
-  CheckCircle2,
-} from 'lucide-react'
-import {
-  settingsApi,
-  type ManagementExceptionsSummary,
-} from '@/features/settings/settings.api'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Link, useOutletContext } from 'react-router-dom'
+import { CheckCircle2, RefreshCw, ExternalLink } from 'lucide-react'
+import { settingsApi, type ManagementExceptionsSummary, type ManagementExceptionItem } from '../settings.api'
+import type { Session } from '../../auth/session'
+import { closeIncident, resolveFeedback } from '../../reconciliation/reconciliation.api'
+import { reconcilePaymentAttempt } from '../../invoices/invoices.api'
+import { errorMessage } from '@/shared/api/client'
 import { formatVnd, formatDate } from '@/shared/lib/format'
-import {
-  Button,
-  Badge,
-  Card,
-} from '@/shared/ui'
+import { Button, Badge, Dialog, Input } from '@/shared/ui'
+import { Pagination } from '@/shared/ui/pagination'
 
-export interface ManagementExceptionsTabProps {
-  summary?: ManagementExceptionsSummary
-}
+const kinds = [
+  { id: 'PAYMENT', label: 'Đối soát Cổng TT' }, { id: 'CASH_EXPENSE', label: 'Chi quỹ tiền mặt' },
+  { id: 'CASH_HANDOVER', label: 'Bàn giao ca' }, { id: 'FEEDBACK', label: 'Khiếu nại khách' },
+] as const
+type Kind = typeof kinds[number]['id']
 
-export function ManagementExceptionsTab({ summary }: ManagementExceptionsTabProps) {
-  const [exceptionKind, setExceptionKind] = useState<
-    'PAYMENT' | 'CASH_EXPENSE' | 'CASH_HANDOVER' | 'FEEDBACK'
-  >('PAYMENT')
-
-  const {
-    data: exceptionsListData,
-    isLoading: isLoadingExceptions,
-  } = useQuery({
-    queryKey: ['management-exceptions-list', exceptionKind],
-    queryFn: ({ signal }) =>
-      settingsApi.getManagementExceptions({ kind: exceptionKind, itemPerPage: 20 }, signal),
+export function ManagementExceptionsTab({ summary }: { summary?: ManagementExceptionsSummary }) {
+  const { employee, authorization } = useOutletContext<Session>()
+  const can = (key: string) => authorization.permissionKeys.includes(key)
+  const client = useQueryClient()
+  const [kind, setKind] = useState<Kind>('PAYMENT')
+  const [page, setPage] = useState(1)
+  const [selected, setSelected] = useState<ManagementExceptionItem | null>(null)
+  const [note, setNote] = useState('')
+  const [confirm, setConfirm] = useState<'RESOLVE' | 'IGNORE' | null>(null)
+  const query = useQuery({
+    queryKey: ['management-exceptions-list', employee.id, kind, page],
+    queryFn: ({ signal }) => settingsApi.getManagementExceptions({ kind, page, itemPerPage: 20 }, signal),
   })
-
-  return (
-    <div className="space-y-4">
-      {/* Summary Cards */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:gap-4">
-        <Card
-          onClick={() => setExceptionKind('PAYMENT')}
-          className={`border p-4 shadow-xs cursor-pointer transition-all ${
-            exceptionKind === 'PAYMENT'
-              ? 'border-primary ring-2 ring-primary/20 bg-primary/5'
-              : 'border-border/80 hover:bg-muted/30'
-          }`}
-        >
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-foreground">Đối soát Cổng TT</span>
-            <Receipt className="h-4 w-4 text-blue-600" />
-          </div>
-          <div className="mt-2 text-2xl font-bold text-foreground">
-            {summary?.counts.PAYMENT ?? 0}
-          </div>
-          <p className="mt-0.5 text-xs text-muted-foreground">sự cố lệch thanh toán</p>
-        </Card>
-
-        <Card
-          onClick={() => setExceptionKind('CASH_EXPENSE')}
-          className={`border p-4 shadow-xs cursor-pointer transition-all ${
-            exceptionKind === 'CASH_EXPENSE'
-              ? 'border-primary ring-2 ring-primary/20 bg-primary/5'
-              : 'border-border/80 hover:bg-muted/30'
-          }`}
-        >
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-foreground">Chi quỹ tiền mặt</span>
-            <Coins className="h-4 w-4 text-amber-600" />
-          </div>
-          <div className="mt-2 text-2xl font-bold text-foreground">
-            {summary?.counts.CASH_EXPENSE ?? 0}
-          </div>
-          <p className="mt-0.5 text-xs text-muted-foreground">phiếu chi cần duyệt</p>
-        </Card>
-
-        <Card
-          onClick={() => setExceptionKind('CASH_HANDOVER')}
-          className={`border p-4 shadow-xs cursor-pointer transition-all ${
-            exceptionKind === 'CASH_HANDOVER'
-              ? 'border-primary ring-2 ring-primary/20 bg-primary/5'
-              : 'border-border/80 hover:bg-muted/30'
-          }`}
-        >
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-foreground">Bàn giao ca</span>
-            <UserCheck className="h-4 w-4 text-emerald-600" />
-          </div>
-          <div className="mt-2 text-2xl font-bold text-foreground">
-            {summary?.counts.CASH_HANDOVER ?? 0}
-          </div>
-          <p className="mt-0.5 text-xs text-muted-foreground">chờ quản lý xác nhận</p>
-        </Card>
-
-        <Card
-          onClick={() => setExceptionKind('FEEDBACK')}
-          className={`border p-4 shadow-xs cursor-pointer transition-all ${
-            exceptionKind === 'FEEDBACK'
-              ? 'border-primary ring-2 ring-primary/20 bg-primary/5'
-              : 'border-border/80 hover:bg-muted/30'
-          }`}
-        >
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-foreground">Khiếu nại khách</span>
-            <MessageSquareWarning className="h-4 w-4 text-destructive" />
-          </div>
-          <div className="mt-2 text-2xl font-bold text-destructive">
-            {summary?.counts.FEEDBACK ?? 0}
-          </div>
-          <p className="mt-0.5 text-xs text-muted-foreground">đánh giá thấp &lt;= 2 sao</p>
-        </Card>
-      </div>
-
-      {/* Exceptions List */}
-      {isLoadingExceptions ? (
-        <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
-          <RefreshCw className="h-8 w-8 animate-spin" />
-          <p className="mt-3 text-sm">Đang tải danh sách ngoại lệ quản trị...</p>
-        </div>
-      ) : !exceptionsListData?.list || exceptionsListData.list.length === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border py-16 text-center">
-          <CheckCircle2 className="h-10 w-10 text-emerald-600 mb-2" />
-          <h3 className="text-base font-semibold text-foreground">
-            Không có ngoại lệ tồn đọng
-          </h3>
-          <p className="text-xs text-muted-foreground mt-1 max-w-sm">
-            Tất cả các nghiệp vụ trong mục {exceptionKind} đều đang ở trạng thái chuẩn mực, không
-            có phát sinh cần can thiệp.
-          </p>
-        </div>
-      ) : (
-        <Card className="border border-border/80 overflow-hidden shadow-xs">
-          <div className="divide-y divide-border">
-            {exceptionsListData.list.map((item: any, idx) => (
-              <div
-                key={item.id || idx}
-                className="p-4 hover:bg-muted/30 transition-colors flex items-start justify-between gap-4"
-              >
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-semibold text-sm text-foreground">
-                      {item.title ||
-                        item.description ||
-                        item.comment ||
-                        (item.rating ? `Đánh giá ${item.rating} sao` : undefined) ||
-                        item.reason ||
-                        `Sự cố #${idx + 1}`}
-                    </span>
-                    <Badge variant="outline" className="text-[10px]">
-                      {item.status || (item.rating ? `${item.rating} ⭐` : 'PENDING')}
-                    </Badge>
-                  </div>
-                  <div className="mt-1 text-xs text-muted-foreground flex flex-wrap gap-3">
-                    {item.comment && item.title ? <span>{item.comment}</span> : null}
-                    {item.amount ? <span>Số tiền: {formatVnd(item.amount)}</span> : null}
-                    {item.invoiceId ? <span>Hóa đơn: {item.invoiceId}</span> : null}
-                    {item.paymentAttemptId ? <span>Cổng TT: {item.paymentAttemptId}</span> : null}
-                  </div>
-                  <div className="mt-1.5 text-[11px] text-muted-foreground font-mono">
-                    Thời điểm: {formatDate(item.createdAt || item.detectedAt)}
-                  </div>
-                </div>
-
-                <Button size="sm" variant="outline" className="text-xs h-7">
-                  Chi tiết
-                </Button>
-              </div>
-            ))}
-          </div>
-        </Card>
-      )}
+  const action = useMutation({
+    mutationFn: async (command: 'RESOLVE' | 'IGNORE' | 'RECONCILE') => {
+      if (!selected) throw new Error('Chưa chọn ngoại lệ.')
+      if (command === 'RECONCILE' && selected.paymentAttemptId) return reconcilePaymentAttempt(selected.paymentAttemptId)
+      if (kind === 'FEEDBACK') return resolveFeedback(selected.id, note.trim())
+      return closeIncident(selected.id, command === 'IGNORE' ? 'IGNORE' : 'RESOLVE', note.trim())
+    },
+    onSuccess: (_data, command) => {
+      setConfirm(null)
+      if (command !== 'RECONCILE') setSelected(null)
+      void client.invalidateQueries({ queryKey: ['management-exceptions-list'] })
+      void client.invalidateQueries({ queryKey: ['management-exceptions-summary'] })
+      void client.invalidateQueries({ queryKey: ['private', employee.id, 'reconciliation'] })
+    },
+  })
+  const close = () => { if (!action.isPending) { setSelected(null); setConfirm(null) } }
+  return <section className="space-y-4">
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      {kinds.map(entry => <button key={entry.id} type="button" aria-pressed={kind === entry.id}
+        onClick={() => { setKind(entry.id); setPage(1); setSelected(null) }}
+        className={'rounded-lg border p-4 text-left ' + (kind === entry.id ? 'border-primary bg-primary/5' : 'border-border')}>
+        <span className="block text-sm font-semibold">{entry.label}</span>
+        <span className="text-2xl">{summary ? summary.counts[entry.id] : '—'}</span>
+      </button>)}
     </div>
-  )
+    {query.isError ? <div role="alert" className="space-y-2 border-l-4 border-destructive p-4">
+      <p>{errorMessage(query.error)}</p><Button variant="outline" onClick={() => void query.refetch()}><RefreshCw className="h-4 w-4" />Thử lại</Button>
+    </div> : query.isPending ? <p role="status">Đang tải danh sách ngoại lệ quản trị...</p> :
+      query.data.list.length === 0 ? <div className="flex items-center gap-2 py-8"><CheckCircle2 className="h-5 w-5" />Không có ngoại lệ tồn đọng</div> :
+        <div className="divide-y border-y">{query.data.list.map(item => <div key={item.id} className="flex items-start justify-between gap-3 py-4">
+          <div className="min-w-0">
+            <p className="break-words font-semibold">{item.title || item.description || item.comment || 'Phiếu ' + item.id}</p>
+            <Badge variant="outline">{item.status || (item.rating ? item.rating + ' sao' : 'PENDING')}</Badge>
+            <p className="text-sm text-muted-foreground">{formatDate(item.createdAt || item.detectedAt)}</p>
+            {item.amount !== undefined && <p>{formatVnd(item.amount)}</p>}
+          </div>
+          <Button variant="outline" onClick={() => { setSelected(item); setNote(''); setConfirm(null); action.reset() }}>Chi tiết</Button>
+        </div>)}</div>}
+    {query.data && <Pagination page={page} totalPages={query.data.totalPages} onPage={setPage} disabled={query.isFetching} />}
+    {selected && <Dialog open onClose={close} label="Chi tiết ngoại lệ">
+      <div className="space-y-4 p-5">
+        <h2 id="exception-title" className="pr-8 text-lg font-semibold">Chi tiết ngoại lệ</h2>
+        <p className="break-words">{selected.title || selected.description || selected.comment || selected.id}</p>
+        <dl className="grid grid-cols-[auto_1fr] gap-2 text-sm">
+          <dt>Mã phiếu</dt><dd className="break-all">{selected.id}</dd>
+          {selected.amount !== undefined && <><dt>Số tiền</dt><dd>{formatVnd(selected.amount)}</dd></>}
+          {selected.varianceAmount !== undefined && <><dt>Chênh lệch</dt><dd>{formatVnd(selected.varianceAmount)}</dd></>}
+          {selected.shiftId && <><dt>Ca</dt><dd className="break-all">{selected.shiftId}</dd></>}
+          {selected.paymentAttemptId && <><dt>Payment attempt</dt><dd className="break-all">{selected.paymentAttemptId}</dd></>}
+          {selected.invoiceId && <><dt>Hóa đơn</dt><dd className="break-all">{selected.invoiceId}</dd></>}
+        </dl>
+        {action.isError && <p role="alert" className="text-destructive">{errorMessage(action.error)}</p>}
+        {action.isSuccess && <p role="status">Đã kiểm tra lại trạng thái thanh toán.</p>}
+        {kind === 'PAYMENT' && can('/payment-reconciliation_manage') && <Button variant="outline" disabled={action.isPending}
+          onClick={() => action.mutate('RECONCILE')}><RefreshCw className="h-4 w-4" />Đối soát lại payment</Button>}
+        {((kind === 'PAYMENT' && can('/payment-reconciliation_manage')) || (kind === 'FEEDBACK' && can('/feedback_resolve'))) &&
+          <><label className="block text-sm">Ghi chú xử lý<Input value={note} maxLength={500} disabled={action.isPending}
+            onChange={e => { setNote(e.target.value); setConfirm(null) }} /></label>
+          {confirm ? <div className="space-y-2 border-t pt-3"><p>Xác nhận {confirm === 'IGNORE' ? 'bỏ qua' : 'đóng'} ngoại lệ này?</p>
+            <Button disabled={action.isPending || note.trim().length < 3} onClick={() => action.mutate(confirm)}><CheckCircle2 className="h-4 w-4" />Xác nhận</Button>
+            <Button variant="outline" disabled={action.isPending} onClick={() => setConfirm(null)}>Quay lại</Button>
+          </div> : <div className="flex gap-2"><Button disabled={note.trim().length < 3 || action.isPending} onClick={() => setConfirm('RESOLVE')}>Đánh dấu đã xử lý</Button>
+            {kind === 'PAYMENT' && <Button variant="outline" disabled={note.trim().length < 3 || action.isPending} onClick={() => setConfirm('IGNORE')}>Bỏ qua có lý do</Button>}</div>}</>}
+        {((kind === 'CASH_EXPENSE' && can('/cashier-shifts_expenses-review')) || (kind === 'CASH_HANDOVER' && can('/cash-handovers_read'))) && <Link className="inline-flex items-center gap-2 underline" to={'/staff/shifts?tab=' + (kind === 'CASH_EXPENSE' ? 'expenses' : 'handovers')}><ExternalLink className="h-4 w-4" />Mở nghiệp vụ ca và quỹ</Link>}
+        {kind === 'PAYMENT' && can('/payment-reconciliation_read') && <Link className="block underline" to="/staff/reconciliation">Mở danh sách đối soát</Link>}
+      </div>
+    </Dialog>}
+  </section>
 }

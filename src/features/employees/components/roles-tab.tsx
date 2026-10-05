@@ -1,216 +1,343 @@
-import { useState } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Shield, ShieldCheck, Lock, AlertCircle } from 'lucide-react'
+import { useRef, useState } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useOutletContext } from 'react-router-dom'
+import { Pencil, Plus, ShieldCheck, Trash2, RefreshCw } from 'lucide-react'
 import {
+  deleteRole,
+  getAllPermissions,
   getRolePermissions,
   replaceRolePermissions,
-  getPermissions,
+  saveRole,
   type Role,
-  type Permission,
-} from '@/features/employees/employees.api'
+} from '../employees.api'
+import type { Session } from '../../auth/session'
 import { errorMessage } from '@/shared/api/client'
-import {
-  Button,
-  Badge,
-  Card,
-  Dialog,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-} from '@/shared/ui'
-
-export interface RolesTabProps {
-  roles: Role[]
-  isLoadingRoles: boolean
-  canManagePermissions: boolean
-  onToast: (msg: string) => void
-}
+import { Button, Badge, Dialog, Input } from '@/shared/ui'
 
 export function RolesTab({
   roles,
   isLoadingRoles,
   canManagePermissions,
   onToast,
-}: RolesTabProps) {
-  const queryClient = useQueryClient()
-
-  const [managingRole, setManagingRole] = useState<Role | null>(null)
-  const [selectedPermissionIds, setSelectedPermissionIds] = useState<string[]>([])
-  const [rolePermissionError, setRolePermissionError] = useState<string | null>(null)
-
-  const { data: allPermissionsData } = useQuery({
-    queryKey: ['private', 'permissions'],
-    queryFn: ({ signal }) => getPermissions({ page: 1, itemPerPage: 200 }, signal),
-    enabled: canManagePermissions && !!managingRole,
-  })
-
-  const invalidateQueries = () => {
-    void queryClient.invalidateQueries({ queryKey: ['private', 'roles'] })
-  }
-
-  const saveRolePermissionsMutation = useMutation({
-    mutationFn: async () => {
-      if (!managingRole) return
-      return replaceRolePermissions(managingRole.id, selectedPermissionIds)
-    },
+}: {
+  roles: Role[]
+  isLoadingRoles: boolean
+  canManagePermissions: boolean
+  onToast: (message: string) => void
+}) {
+  const { authorization } = useOutletContext<Session>()
+  const can = (key: string) => authorization.permissionKeys.includes(key)
+  const client = useQueryClient()
+  const [permissionsFor, setPermissionsFor] = useState<Role | null>(null)
+  const [editing, setEditing] = useState<Role | 'new' | null>(null)
+  const [deleting, setDeleting] = useState<Role | null>(null)
+  const remove = useMutation({
+    mutationFn: (id: string) => deleteRole(id),
     onSuccess: () => {
-      invalidateQueries()
-      onToast('Đã cập nhật danh sách quyền cho vai trò')
-      setManagingRole(null)
-      setSelectedPermissionIds([])
-      setRolePermissionError(null)
+      setDeleting(null)
+      onToast('Đã xóa vai trò')
+      void client.invalidateQueries({ queryKey: ['private'] })
     },
-    onError: (err) => setRolePermissionError(errorMessage(err)),
   })
-
-  const handleOpenRolePermissions = async (role: Role) => {
-    setManagingRole(role)
-    setRolePermissionError(null)
-    try {
-      const res = await getRolePermissions(role.id)
-      const currentPermIds = res.rolePermissions?.map((rp) => rp.permission.id) ?? []
-      setSelectedPermissionIds(currentPermIds)
-    } catch {
-      setSelectedPermissionIds([])
-    }
-  }
-
   return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {isLoadingRoles ? (
-          <div className="col-span-full py-12 text-center text-muted-foreground">
-            Đang tải danh sách vai trò...
-          </div>
-        ) : (
-          roles.map((role) => (
-            <Card key={role.id} className="border border-border/80 p-5 shadow-xs">
-              <div className="flex items-start justify-between">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <Shield className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-                    <h3 className="font-semibold text-base text-foreground">{role.name}</h3>
-                  </div>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {role.description || 'Không có mô tả chi tiết'}
-                  </p>
-                </div>
-                {role.isSystemRole && (
-                  <Badge variant="outline" className="border-border text-[10px]">
-                    Hệ thống
-                  </Badge>
-                )}
+    <section className="space-y-4">
+      {can('/roles_create') && (
+        <Button onClick={() => setEditing('new')}>
+          <Plus size={16} />
+          Thêm vai trò
+        </Button>
+      )}
+      {isLoadingRoles ? (
+        <p role="status">Đang tải vai trò...</p>
+      ) : roles.length === 0 ? (
+        <p>Chưa có vai trò.</p>
+      ) : (
+        <div className="divide-y border-y">
+          {roles.map((role) => (
+            <div
+              key={role.id}
+              className="flex flex-wrap items-center justify-between gap-3 py-4"
+            >
+              <div className="min-w-0">
+                <h3 className="break-words font-semibold">{role.name}</h3>
+                <p className="break-words text-sm text-muted-foreground">
+                  {role.description}
+                </p>
+                {role.isSystemRole && <Badge variant="outline">Hệ thống</Badge>}
               </div>
-
-              <div className="mt-4 pt-3 border-t border-border flex items-center justify-between">
-                <span className="text-xs text-muted-foreground font-mono">
-                  ID: {role.id.slice(0, 8)}
-                </span>
-                {canManagePermissions && (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => void handleOpenRolePermissions(role)}
-                    className="text-xs h-7 px-2.5 gap-1.5 text-blue-700 border-blue-200 hover:bg-blue-50 dark:text-blue-300 dark:border-blue-800"
-                  >
-                    <ShieldCheck className="h-3.5 w-3.5" />
-                    Phân quyền
-                  </Button>
-                )}
-              </div>
-            </Card>
-          ))
-        )}
-      </div>
-
-      {/* MODAL: ROLE PERMISSIONS CHECKLIST */}
-      <Dialog
-        open={!!managingRole}
-        onOpenChange={(open) => !open && setManagingRole(null)}
-        maxWidth="lg"
-        className="max-h-[85vh] flex flex-col"
-      >
-        {managingRole && (
-          <>
-            <DialogHeader>
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-500/10 text-blue-600 mb-2">
-                <Lock className="h-5 w-5" />
-              </div>
-              <DialogTitle className="text-lg font-bold text-foreground">
-                Phân quyền vai trò: {managingRole.name}
-              </DialogTitle>
-              <DialogDescription className="text-sm text-muted-foreground">
-                Cấp quyền truy cập các module chức năng hệ thống cho vai trò này
-              </DialogDescription>
-            </DialogHeader>
-
-            {rolePermissionError && (
-              <div className="mt-4 flex items-start gap-2 rounded-xl border border-destructive/20 bg-destructive/5 p-3 text-xs text-destructive">
-                <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
-                <span>{rolePermissionError}</span>
-              </div>
-            )}
-
-            <div className="mt-4 flex-1 overflow-y-auto pr-1 space-y-2">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {allPermissionsData?.list?.map((perm: Permission) => {
-                  const isChecked = selectedPermissionIds.includes(perm.id)
-
-                  return (
-                    <label
-                      key={perm.id}
-                      className="flex items-start gap-2.5 rounded-lg border border-border/70 p-2.5 hover:bg-muted/40 cursor-pointer text-xs transition-colors"
+              {!role.isSystemRole && (
+                <div className="flex flex-wrap gap-2">
+                  {canManagePermissions && can('/permissions_read') && (
+                    <Button
+                      variant="outline"
+                      onClick={() => setPermissionsFor(role)}
                     >
-                      <input
-                        type="checkbox"
-                        checked={isChecked}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            setSelectedPermissionIds([...selectedPermissionIds, perm.id])
-                          } else {
-                            setSelectedPermissionIds(
-                              selectedPermissionIds.filter((id) => id !== perm.id),
-                            )
-                          }
-                        }}
-                        className="rounded border-border text-blue-600 focus:ring-blue-500 mt-0.5"
-                      />
-                      <div className="flex-1">
-                        <div className="font-semibold text-foreground">{perm.name}</div>
-                        <div className="font-mono text-[10px] text-muted-foreground">
-                          {perm.key}
-                        </div>
-                      </div>
-                    </label>
-                  )
-                })}
-              </div>
+                      <ShieldCheck size={16} />
+                      Phân quyền
+                    </Button>
+                  )}
+                  {can('/roles_update') && (
+                    <Button
+                      variant="outline"
+                      aria-label={'Sửa vai trò ' + role.name}
+                      title="Sửa vai trò"
+                      onClick={() => setEditing(role)}
+                    >
+                      <Pencil size={16} />
+                    </Button>
+                  )}
+                  {can('/roles_delete') && (
+                    <Button
+                      variant="outline"
+                      aria-label={'Xóa vai trò ' + role.name}
+                      title="Xóa vai trò"
+                      onClick={() => {
+                        setDeleting(role)
+                        remove.reset()
+                      }}
+                    >
+                      <Trash2 size={16} />
+                    </Button>
+                  )}
+                </div>
+              )}
             </div>
+          ))}
+        </div>
+      )}
+      {permissionsFor && (
+        <RolePermissions
+          key={permissionsFor.id}
+          role={permissionsFor}
+          onClose={() => setPermissionsFor(null)}
+          onToast={onToast}
+        />
+      )}
+      {editing && (
+        <RoleForm
+          key={editing === 'new' ? 'new' : editing.id}
+          role={editing === 'new' ? undefined : editing}
+          onClose={() => setEditing(null)}
+          onToast={onToast}
+        />
+      )}
+      {deleting && (
+        <Dialog
+          open
+          onClose={() => {
+            if (!remove.isPending) setDeleting(null)
+          }}
+        >
+          <h2 className="pr-8 text-lg font-semibold">
+            Xóa vai trò {deleting.name}?
+          </h2>
+          <p className="my-3 text-sm">
+            Xóa vai trò sẽ gỡ toàn bộ quyền của vai trò và gỡ vai trò này khỏi
+            tất cả nhân viên đang được gán.
+          </p>
+          {remove.isError && <p role="alert">{errorMessage(remove.error)}</p>}
+          <Button
+            variant="destructive"
+            disabled={remove.isPending}
+            onClick={() => remove.mutate(deleting.id)}
+          >
+            <Trash2 size={16} />
+            Xác nhận xóa
+          </Button>
+        </Dialog>
+      )}
+    </section>
+  )
+}
 
-            <DialogFooter className="mt-6 flex justify-end gap-2 pt-3 border-t border-border">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => setManagingRole(null)}
-                disabled={saveRolePermissionsMutation.isPending}
-              >
-                Hủy
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                onClick={() => saveRolePermissionsMutation.mutate()}
-                disabled={saveRolePermissionsMutation.isPending}
-                className="bg-blue-600 hover:bg-blue-700 text-white"
-              >
-                {saveRolePermissionsMutation.isPending ? 'Đang lưu...' : 'Lưu danh sách quyền'}
-              </Button>
-            </DialogFooter>
-          </>
-        )}
-      </Dialog>
-    </div>
+function RoleForm({
+  role,
+  onClose,
+  onToast,
+}: {
+  role?: Role
+  onClose: () => void
+  onToast: (message: string) => void
+}) {
+  const client = useQueryClient()
+  const mutation = useMutation({
+    mutationFn: (data: { name: string; description: string }) =>
+      saveRole(role?.id, data),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: ['private', 'roles'] })
+      onToast('Đã lưu vai trò')
+      onClose()
+    },
+  })
+  return (
+    <Dialog
+      open
+      onClose={() => {
+        if (!mutation.isPending) onClose()
+      }}
+    >
+      <form
+        className="space-y-4"
+        onSubmit={(event) => {
+          event.preventDefault()
+          if (mutation.isPending) return
+          const data = new FormData(event.currentTarget)
+          mutation.mutate({
+            name: String(data.get('name')).trim(),
+            description: String(data.get('description')).trim(),
+          })
+        }}
+      >
+        <h2 className="pr-8 text-lg font-semibold">
+          {role ? 'Sửa vai trò' : 'Thêm vai trò'}
+        </h2>
+        <fieldset disabled={mutation.isPending} className="space-y-3">
+          <label className="block">
+            Tên vai trò
+            <Input
+              name="name"
+              defaultValue={role?.name}
+              required
+              maxLength={100}
+            />
+          </label>
+          <label className="block">
+            Mô tả
+            <Input
+              name="description"
+              defaultValue={role?.description ?? ''}
+              maxLength={500}
+            />
+          </label>
+        </fieldset>
+        {mutation.isError && <p role="alert">{errorMessage(mutation.error)}</p>}
+        <Button type="submit" disabled={mutation.isPending}>
+          Lưu vai trò
+        </Button>
+      </form>
+    </Dialog>
+  )
+}
+
+function RolePermissions({
+  role,
+  onClose,
+  onToast,
+}: {
+  role: Role
+  onClose: () => void
+  onToast: (message: string) => void
+}) {
+  const { employee } = useOutletContext<Session>()
+  const client = useQueryClient()
+  const flight = useRef(false)
+  const [selected, setSelected] = useState<string[] | null>(null)
+  const query = useQuery({
+    queryKey: ['private', employee.id, 'role-permissions', role.id],
+    queryFn: ({ signal }) => getRolePermissions(role.id, signal),
+    retry: false,
+    refetchOnWindowFocus: false,
+  })
+  const catalog = useQuery({
+    queryKey: ['private', employee.id, 'permissions'],
+    queryFn: ({ signal }) => getAllPermissions(signal),
+    retry: false,
+  })
+  const ids =
+    selected ??
+    query.data?.rolePermissions?.map((item) => item.permission.id) ??
+    []
+  const ready =
+    query.isSuccess &&
+    catalog.isSuccess &&
+    !query.isFetching &&
+    !catalog.isFetching
+  const mutation = useMutation({
+    mutationFn: (permissionIds: string[]) =>
+      replaceRolePermissions(role.id, permissionIds),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: ['private'] })
+      onToast('Đã cập nhật danh sách quyền cho vai trò')
+      onClose()
+    },
+    onSettled: () => {
+      flight.current = false
+    },
+  })
+  return (
+    <Dialog
+      open
+      maxWidth="lg"
+      onClose={() => {
+        if (!mutation.isPending) onClose()
+      }}
+    >
+      <h2 className="pr-8 text-lg font-semibold">
+        Phân quyền vai trò: {role.name}
+      </h2>
+      {(query.isPending || catalog.isPending) && (
+        <p role="status">Đang tải quyền hiện tại...</p>
+      )}
+      {(query.isError || catalog.isError) && (
+        <div role="alert" className="space-y-2 py-3">
+          <p>{errorMessage(query.error || catalog.error)}</p>
+          <Button
+            variant="outline"
+            onClick={() => {
+              void query.refetch()
+              void catalog.refetch()
+            }}
+          >
+            <RefreshCw size={16} />
+            Thử tải lại
+          </Button>
+        </div>
+      )}
+      <fieldset
+        disabled={!ready || mutation.isPending}
+        className="my-4 grid max-h-80 grid-cols-1 gap-2 overflow-auto sm:grid-cols-2"
+      >
+        {catalog.data?.map((permission) => (
+          <label
+            key={permission.id}
+            className="flex min-w-0 items-start gap-2 border-b py-2 text-sm"
+          >
+            <input
+              type="checkbox"
+              checked={ids.includes(permission.id)}
+              onChange={(event) =>
+                setSelected(
+                  event.target.checked
+                    ? [...ids, permission.id]
+                    : ids.filter((id) => id !== permission.id),
+                )
+              }
+            />
+            <span className="min-w-0 break-words">
+              {permission.name}
+              <span className="block break-all text-xs text-muted-foreground">
+                {permission.key}
+              </span>
+            </span>
+          </label>
+        ))}
+      </fieldset>
+      {mutation.isError && <p role="alert">{errorMessage(mutation.error)}</p>}
+      <Button
+        disabled={!ready || mutation.isPending}
+        onClick={() => {
+          if (!ready || flight.current) return
+          if (
+            !ids.length &&
+            !window.confirm('Thu hồi toàn bộ quyền của vai trò này?')
+          )
+            return
+          flight.current = true
+          mutation.mutate(ids)
+        }}
+      >
+        Lưu danh sách quyền
+      </Button>
+    </Dialog>
   )
 }
