@@ -1,12 +1,8 @@
-import { useState, useEffect } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useEffect, useRef, useState } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useOutletContext } from 'react-router-dom'
-import {
-  AlertCircle,
-  CheckCircle2,
-  RefreshCw,
-} from 'lucide-react'
-import { type Session } from '../auth/session'
+import { AlertCircle, CheckCircle2, RefreshCw } from 'lucide-react'
+import type { Session } from '../auth/session'
 import {
   getPendingOnlineOrders,
   getFulfillmentOnlineOrders,
@@ -14,278 +10,277 @@ import {
   rejectOnlineOrder,
   cancelAcceptedOnlineOrder,
   markOnlineOrderNoShow,
-  type PendingOrder,
+  onlineOrderKeys,
   type FulfillmentOrder,
 } from './online-orders.api'
+import { kitchenKeys } from '../kitchen/kitchen.api'
 import { errorMessage } from '../../shared/api/client'
-import {
-  Badge,
-  Button,
-  Tabs,
-  TabsList,
-  TabsTrigger,
-} from '../../shared/ui'
+import { Button, Tabs, TabsList, TabsTrigger } from '../../shared/ui'
+import { Pagination } from '../../shared/ui/pagination'
 import { StaffPendingOrdersTab } from './components/staff-pending-orders-tab'
 import { PickupCollectionPanel } from './components/pickup-panels'
 import { StaffFulfillmentOrdersTab } from './components/staff-fulfillment-orders-tab'
-import {
-  RejectOrderDialog,
-  CollectOrderModal,
-  CancelAcceptedDialog,
-} from './components/staff-order-modals'
+import { CollectOrderModal, OrderReviewDialog } from './components/staff-order-modals'
+
+type ReviewAction =
+  | { kind: 'accept' | 'no-show'; id: string }
+  | { kind: 'reject' | 'cancel'; id: string; reason: string }
+type ReviewTarget = { kind: 'reject' | 'cancel' | 'no-show'; id: string; name: string }
 
 export default function StaffOnlineOrdersPage() {
-  const { authorization } = useOutletContext<Session>()
-  const queryClient = useQueryClient()
-
-  const canReview = authorization.permissionKeys.includes(
-    '/online-orders_review',
-  )
+  const { employee, authorization } = useOutletContext<Session>()
+  const client = useQueryClient()
+  const permissions = authorization.permissionKeys
+  const canRead = permissions.includes('/online-orders_read')
+  const canReview = permissions.includes('/online-orders_review')
   const canCollect =
-    authorization.permissionKeys.includes('/invoices_create') &&
-    authorization.permissionKeys.includes('/orders_items_handoff')
-
+    permissions.includes('/invoices_create') && permissions.includes('/orders_items_handoff')
   const [activeTab, setActiveTab] = useState<'pending' | 'fulfillment'>('pending')
   const [overdueOnly, setOverdueOnly] = useState(false)
   const [page, setPage] = useState(1)
   const [nowMs, setNowMs] = useState(() => Date.now())
+  const [target, setTarget] = useState<ReviewTarget | null>(null)
+  const [collecting, setCollecting] = useState<FulfillmentOrder | null>(null)
+  const [actionError, setActionError] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
+  const [reviewRequired, setReviewRequired] = useState(false)
+  const flight = useRef(false)
 
   useEffect(() => {
     const timer = window.setInterval(() => setNowMs(Date.now()), 15_000)
     return () => window.clearInterval(timer)
   }, [])
 
-  // Dialog states
-  const [rejectingOrder, setRejectingOrder] = useState<PendingOrder | null>(null)
-  const [collectingOrder, setCollectingOrder] = useState<FulfillmentOrder | null>(null)
-  const [cancellingOrder, setCancellingOrder] = useState<FulfillmentOrder | null>(null)
-  const [actionError, setActionError] = useState<string | null>(null)
-  const [successNotice, setSuccessNotice] = useState<string | null>(null)
-
-  // Queries
-  const pendingQuery = useQuery({
-    queryKey: ['online-orders', 'pending', page],
+  const pending = useQuery({
+    queryKey: [...onlineOrderKeys.all(employee.id), 'pending', page],
     queryFn: ({ signal }) => getPendingOnlineOrders({ page, itemPerPage: 20 }, signal),
+    enabled: canRead && activeTab === 'pending',
     refetchInterval: 10_000,
   })
-
-  const fulfillmentQuery = useQuery({
-    queryKey: ['online-orders', 'fulfillment', { page, overdueOnly }],
+  const fulfillment = useQuery({
+    queryKey: [...onlineOrderKeys.all(employee.id), 'fulfillment', page, overdueOnly],
     queryFn: ({ signal }) =>
       getFulfillmentOnlineOrders({ page, itemPerPage: 20, overdueOnly }, signal),
+    enabled: canRead && activeTab === 'fulfillment',
     refetchInterval: 10_000,
   })
-
-  // Mutations
-  const acceptMutation = useMutation({
-    mutationFn: (id: string) => acceptOnlineOrder(id),
-    onSuccess: () => {
-      setActionError(null)
-      setSuccessNotice('Đã tiếp nhận đơn hàng và chuyển sang bếp/pha chế.')
-      void queryClient.invalidateQueries({ queryKey: ['online-orders'] })
-      setTimeout(() => setSuccessNotice(null), 3500)
+  const current = activeTab === 'pending' ? pending : fulfillment
+  function invalidate() {
+    for (const key of [
+      onlineOrderKeys.all(employee.id),
+      kitchenKeys.all(employee.id),
+      ['private', employee.id, 'orders'],
+      ['private', employee.id, 'invoices'],
+      ['private', employee.id, 'cashier-shift'],
+      ['private', employee.id, 'inventory-waste'],
+      ['private', 'funds'],
+    ])
+      void client.invalidateQueries({ queryKey: key })
+  }
+  const mutation = useMutation({
+    retry: false,
+    mutationFn: async (action: ReviewAction) => {
+      switch (action.kind) {
+        case 'accept':
+          await acceptOnlineOrder(action.id)
+          break
+        case 'reject':
+          await rejectOnlineOrder(action.id, action.reason)
+          break
+        case 'cancel':
+          await cancelAcceptedOnlineOrder(action.id, action.reason)
+          break
+        case 'no-show':
+          await markOnlineOrderNoShow(action.id)
+          break
+      }
     },
-    onError: (err) => {
-      setActionError(errorMessage(err))
+    onSuccess: (_, action) => {
+      setTarget(null)
+      setActionError(null)
+      setNotice(
+        {
+          accept: 'Đã tiếp nhận đơn và chuyển sang bếp.',
+          reject: 'Đã từ chối đơn.',
+          cancel: 'Đã hủy đơn mang đi.',
+          'no-show': 'Đã ghi nhận khách vắng mặt.',
+        }[action.kind],
+      )
+    },
+    onError: (error) => {
+      setReviewRequired(true)
+      setActionError(errorMessage(error))
+    },
+    onSettled: () => {
+      flight.current = false
+      invalidate()
     },
   })
-
-  const rejectMutation = useMutation({
-    mutationFn: ({ id, reason }: { id: string; reason: string }) =>
-      rejectOnlineOrder(id, reason),
-    onSuccess: () => {
-      setRejectingOrder(null)
+  const blocked = mutation.isPending || reviewRequired || current.isFetching || !current.isSuccess
+  function submit(action: ReviewAction) {
+    if (!canReview || flight.current || blocked) return
+    flight.current = true
+    setActionError(null)
+    setNotice(null)
+    mutation.mutate(action)
+  }
+  async function refresh() {
+    if (flight.current) return
+    const result = await current.refetch()
+    if (result.isSuccess) {
+      setReviewRequired(false)
       setActionError(null)
-      setSuccessNotice('Đã từ chối đơn hàng.')
-      void queryClient.invalidateQueries({ queryKey: ['online-orders'] })
-      setTimeout(() => setSuccessNotice(null), 3500)
-    },
-    onError: (err) => {
-      setActionError(errorMessage(err))
-    },
-  })
-
-  const cancelAcceptedMutation = useMutation({
-    mutationFn: ({ id, reason }: { id: string; reason: string }) =>
-      cancelAcceptedOnlineOrder(id, reason),
-    onSuccess: () => {
-      setCancellingOrder(null)
-      setActionError(null)
-      setSuccessNotice('Đã hủy đơn hàng mang đi.')
-      void queryClient.invalidateQueries({ queryKey: ['online-orders'] })
-      setTimeout(() => setSuccessNotice(null), 3500)
-    },
-    onError: (err) => {
-      setActionError(errorMessage(err))
-    },
-  })
-
-  const noShowMutation = useMutation({
-    mutationFn: (id: string) => markOnlineOrderNoShow(id),
-    onSuccess: () => {
-      setActionError(null)
-      setSuccessNotice('Đã ghi nhận khách vắng mặt (No-show).')
-      void queryClient.invalidateQueries({ queryKey: ['online-orders'] })
-      setTimeout(() => setSuccessNotice(null), 3500)
-    },
-    onError: (err) => {
-      setActionError(errorMessage(err))
-    },
-  })
-
-  const pendingCount = pendingQuery.data?.totalItems ?? 0
-  const fulfillmentCount = fulfillmentQuery.data?.totalItems ?? 0
-
+      setTarget(null)
+    }
+  }
   return (
-    <div className="space-y-6">
-      {authorization.permissionKeys.includes('/orders_items_handoff') && <PickupCollectionPanel />}
-      {/* Page Header */}
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <p className="text-xs font-bold uppercase tracking-wider text-[#68776f]">
-            QUẢN LÝ ĐƠN HÀNG
-          </p>
-          <h1 className="text-2xl font-bold tracking-tight text-[#1a2723] mt-1">
-            Đơn mang đi (Online)
-          </h1>
-        </div>
-
+    <div className="space-y-5">
+      {permissions.includes('/orders_items_handoff') && <PickupCollectionPanel />}
+      <header className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-2xl font-semibold">Đơn mang đi (Online)</h1>
         <Button
           variant="outline"
           size="sm"
-          onClick={() => {
-            void pendingQuery.refetch()
-            void fulfillmentQuery.refetch()
-          }}
-          disabled={pendingQuery.isFetching || fulfillmentQuery.isFetching}
+          disabled={current.isFetching || mutation.isPending}
+          onClick={() => void refresh()}
         >
-          <RefreshCw
-            size={14}
-            className={
-              pendingQuery.isFetching || fulfillmentQuery.isFetching
-                ? 'animate-spin'
-                : ''
-            }
-          />
+          <RefreshCw size={16} aria-hidden="true" />
           Làm mới
         </Button>
-      </div>
-
-      {/* Global Alerts */}
-      {successNotice && (
-        <div
-          role="status"
-          className="flex items-center gap-2.5 rounded-lg border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-800"
-        >
-          <CheckCircle2 size={18} />
-          <span>{successNotice}</span>
+      </header>
+      {notice && (
+        <p role="status" className="flex items-center gap-2 text-sm text-emerald-700">
+          <CheckCircle2 size={18} aria-hidden="true" />
+          {notice}
+        </p>
+      )}
+      {actionError && !target && (
+        <div role="alert" className="flex flex-wrap items-center gap-2 text-sm text-destructive">
+          <AlertCircle size={18} aria-hidden="true" />
+          <p>{actionError}</p>
+          {reviewRequired && (
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={current.isFetching}
+              onClick={() => void refresh()}
+            >
+              <RefreshCw size={16} aria-hidden="true" />
+              Đối chiếu danh sách
+            </Button>
+          )}
         </div>
       )}
-
-      {actionError && (
-        <div
-          role="alert"
-          className="flex items-center gap-2.5 rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm font-medium text-red-800"
-        >
-          <AlertCircle size={18} />
-          <span>{actionError}</span>
-        </div>
-      )}
-
-      {/* Tabs */}
       <Tabs
         value={activeTab}
-        onValueChange={(val) => {
-          setActiveTab(val as 'pending' | 'fulfillment')
+        onValueChange={(value) => {
+          setActiveTab(value as typeof activeTab)
           setPage(1)
         }}
       >
         <TabsList className="w-full sm:w-auto">
-          <TabsTrigger value="pending" className="gap-2">
-            <span>Chờ duyệt</span>
-            {pendingCount > 0 && (
-              <Badge variant="warning">{pendingCount}</Badge>
-            )}
-          </TabsTrigger>
-          <TabsTrigger value="fulfillment" className="gap-2">
-            <span>Đang chế biến & Chờ nhận</span>
-            {fulfillmentCount > 0 && (
-              <Badge variant="secondary">{fulfillmentCount}</Badge>
-            )}
-          </TabsTrigger>
+          <TabsTrigger value="pending">Chờ duyệt</TabsTrigger>
+          <TabsTrigger value="fulfillment">Đang chế biến & Chờ nhận</TabsTrigger>
         </TabsList>
       </Tabs>
-
-      {/* TAB 1: PENDING ORDERS */}
-      {activeTab === 'pending' && (
-        <StaffPendingOrdersTab
-          orders={pendingQuery.data?.list ?? []}
-          isLoading={pendingQuery.isLoading}
-          isError={pendingQuery.isError}
-          error={pendingQuery.error}
-          onRefetch={() => void pendingQuery.refetch()}
-          nowMs={nowMs}
-          canReview={canReview}
-          isAcceptPending={acceptMutation.isPending}
-          onAccept={(id) => acceptMutation.mutate(id)}
-          onReject={(order) => setRejectingOrder(order)}
-        />
-      )}
-
-      {/* TAB 2: FULFILLMENT ORDERS */}
-      {activeTab === 'fulfillment' && (
+      {activeTab === 'pending' ? (
+        <>
+          {pending.isSuccess && (
+            <p className="text-sm text-muted-foreground">
+              Tổng: {pending.data.totalItems} đơn chờ duyệt
+            </p>
+          )}
+          <StaffPendingOrdersTab
+            orders={pending.data?.list ?? []}
+            isLoading={pending.isPending}
+            isError={pending.isError}
+            error={pending.error}
+            onRefetch={() => void refresh()}
+            nowMs={nowMs}
+            canReview={canReview}
+            isBlocked={blocked}
+            isAcceptPending={mutation.isPending}
+            onAccept={(id) => submit({ kind: 'accept', id })}
+            onReject={(order) => {
+              if (!blocked) setTarget({ kind: 'reject', id: order.id, name: order.pickupName })
+            }}
+          />
+        </>
+      ) : (
         <StaffFulfillmentOrdersTab
-          orders={fulfillmentQuery.data?.list ?? []}
-          totalItems={fulfillmentCount}
-          isLoading={fulfillmentQuery.isLoading}
-          isError={fulfillmentQuery.isError}
-          error={fulfillmentQuery.error}
-          onRefetch={() => void fulfillmentQuery.refetch()}
+          orders={fulfillment.data?.list ?? []}
+          totalItems={fulfillment.data?.totalItems}
+          isLoading={fulfillment.isPending}
+          isError={fulfillment.isError}
+          error={fulfillment.error}
+          onRefetch={() => void refresh()}
           overdueOnly={overdueOnly}
-          setOverdueOnly={setOverdueOnly}
-          canCollect={canCollect}
-          onCollect={(order) => setCollectingOrder(order)}
-          onNoShow={(id) => noShowMutation.mutate(id)}
-          isNoShowPending={noShowMutation.isPending}
-          onCancel={(order) => setCancellingOrder(order)}
-        />
-      )}
-
-      {/* MODAL 1: REJECT ORDER DIALOG */}
-      {rejectingOrder && (
-        <RejectOrderDialog
-          order={rejectingOrder}
-          onClose={() => setRejectingOrder(null)}
-          onConfirm={(reason) =>
-            rejectMutation.mutate({ id: rejectingOrder.id, reason })
-          }
-          isPending={rejectMutation.isPending}
-        />
-      )}
-
-      {/* MODAL 2: COLLECT ORDER & CASH PAYMENT MODAL */}
-      {collectingOrder && (
-        <CollectOrderModal
-          order={collectingOrder}
-          onClose={() => setCollectingOrder(null)}
-          onSuccess={() => {
-            setCollectingOrder(null)
-            setSuccessNotice('Thu tiền & giao món thành công!')
-            void queryClient.invalidateQueries({ queryKey: ['online-orders'] })
-            setTimeout(() => setSuccessNotice(null), 3500)
+          setOverdueOnly={(value) => {
+            setOverdueOnly(value)
+            setPage(1)
+          }}
+          canReview={canReview}
+          canCollect={canCollect && !blocked}
+          onCollect={setCollecting}
+          isNoShowPending={blocked}
+          onNoShow={(id) => {
+            const order = fulfillment.data?.list.find((value) => value.id === id)
+            if (order && !blocked) setTarget({ kind: 'no-show', id, name: order.pickupName })
+          }}
+          onCancel={(order) => {
+            if (!blocked) setTarget({ kind: 'cancel', id: order.id, name: order.pickupName })
           }}
         />
       )}
-
-      {/* MODAL 3: CANCEL ACCEPTED ORDER DIALOG */}
-      {cancellingOrder && (
-        <CancelAcceptedDialog
-          order={cancellingOrder}
-          onClose={() => setCancellingOrder(null)}
+      {current.isSuccess && (
+        <>
+          {(current.data.totalPages > 1 || page > 1) && (
+            <Pagination
+              page={page}
+              totalPages={current.data.totalPages}
+              disabled={current.isFetching || mutation.isPending}
+              onPage={setPage}
+            />
+          )}
+          {page > Math.max(1, current.data.totalPages) && (
+            <Button variant="outline" onClick={() => setPage(1)}>
+              Về trang đầu
+            </Button>
+          )}
+        </>
+      )}
+      {canReview && target && (
+        <OrderReviewDialog
+          key={target.kind + target.id}
+          kind={target.kind}
+          name={target.name}
+          isPending={mutation.isPending}
+          blocked={blocked}
+          error={actionError}
+          onReview={() => void refresh()}
+          onClose={() => {
+            if (!flight.current) setTarget(null)
+          }}
           onConfirm={(reason) =>
-            cancelAcceptedMutation.mutate({ id: cancellingOrder.id, reason })
+            submit(
+              target.kind === 'no-show'
+                ? { kind: 'no-show', id: target.id }
+                : { kind: target.kind, id: target.id, reason },
+            )
           }
-          isPending={cancelAcceptedMutation.isPending}
+        />
+      )}
+      {canCollect && collecting && (
+        <CollectOrderModal
+          key={collecting.id}
+          order={collecting}
+          onClose={() => setCollecting(null)}
+          onSettled={invalidate}
+          onSuccess={() => {
+            setCollecting(null)
+            setNotice('Thu tiền và giao món thành công.')
+            invalidate()
+          }}
         />
       )}
     </div>

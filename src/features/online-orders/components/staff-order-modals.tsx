@@ -1,13 +1,10 @@
-import { useState } from 'react'
+import { useId, useRef, useState, type FormEvent } from 'react'
 import { useMutation } from '@tanstack/react-query'
-import { Check } from 'lucide-react'
-import {
-  type FulfillmentOrder,
-  type PendingOrder,
-  collectOnlineOrder,
-} from '../online-orders.api'
-import { formatPrice } from '../../menu/menu.api'
-import { errorMessage } from '../../../shared/api/client'
+import { Check, RefreshCw } from 'lucide-react'
+import { collectOnlineOrder, trackOnlineOrder, type FulfillmentOrder } from '../online-orders.api'
+import { decimalAmount, minorAmount } from '../cart'
+import { formatPrice } from '../../../shared/lib/format'
+import { ApiError, errorMessage } from '../../../shared/api/client'
 import {
   Button,
   Dialog,
@@ -19,237 +16,83 @@ import {
   Textarea,
 } from '../../../shared/ui'
 
-// ============================================================================
-// REJECT DIALOG COMPONENT
-// ============================================================================
-
-export function RejectOrderDialog({
-  order,
+export function OrderReviewDialog({
+  kind,
+  name,
   onClose,
   onConfirm,
   isPending,
+  blocked,
+  error,
+  onReview,
 }: {
-  order: PendingOrder
+  kind: 'reject' | 'cancel' | 'no-show'
+  name: string
   onClose: () => void
   onConfirm: (reason: string) => void
   isPending: boolean
+  blocked: boolean
+  error: string | null
+  onReview: () => void
 }) {
   const [reason, setReason] = useState('')
-  const quickReasons = [
-    'Quán đang quá tải giờ cao điểm',
-    'Hết nguyên liệu pha chế',
-    'Quán sắp đóng cửa',
-    'Không liên hệ được khách hàng',
+  const id = useId()
+  const title = { reject: 'Từ chối đơn', cancel: 'Hủy đơn', 'no-show': 'Ghi nhận khách vắng mặt' }[
+    kind
   ]
-
   return (
-    <Dialog open={true} onClose={onClose}>
+    <Dialog open onClose={onClose}>
       <DialogHeader>
-        <DialogTitle className="text-red-700">
-          Từ chối đơn của {order.pickupName}
+        <DialogTitle className="break-words">
+          {title} của {name}?
         </DialogTitle>
-        <DialogDescription>
-          Vui lòng chọn hoặc nhập lý do từ chối để thông báo cho khách hàng:
-        </DialogDescription>
       </DialogHeader>
-
-      <div className="space-y-3 my-4">
-        <div className="flex flex-wrap gap-1.5">
-          {quickReasons.map((r) => (
-            <Button
-              key={r}
-              type="button"
-              variant={reason === r ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => setReason(r)}
-              className="text-xs h-7"
-            >
-              {r}
-            </Button>
-          ))}
-        </div>
-
-        <Textarea
-          rows={3}
-          required
-          placeholder="Nhập lý do cụ thể (tối thiểu 2 ký tự)..."
-          value={reason}
-          onChange={(e) => setReason(e.target.value)}
-          maxLength={200}
-        />
-      </div>
-
-      <DialogFooter>
-        <Button variant="outline" onClick={onClose}>
-          Quay lại
-        </Button>
-        <Button
-          variant="destructive"
-          disabled={reason.trim().length < 2 || isPending}
-          isLoading={isPending}
-          onClick={() => onConfirm(reason.trim())}
-        >
-          Xác nhận từ chối
-        </Button>
-      </DialogFooter>
-    </Dialog>
-  )
-}
-
-// ============================================================================
-// COLLECT ORDER MODAL (CUSTOMER TOKEN VERIFICATION + CASH TENDERED)
-// ============================================================================
-
-export function CollectOrderModal({
-  order,
-  onClose,
-  onSuccess,
-}: {
-  order: FulfillmentOrder
-  onClose: () => void
-  onSuccess: () => void
-}) {
-  const [accessToken, setAccessToken] = useState('')
-  const [amountTendered, setAmountTendered] = useState(() =>
-    String(Math.ceil(Number(order.quotedSubtotal))),
-  )
-  const [modalError, setModalError] = useState<string | null>(null)
-
-  const totalNumber = Number(order.quotedSubtotal)
-  const tenderedNumber = Number(amountTendered) || 0
-  const changeAmount = Math.max(0, tenderedNumber - totalNumber)
-
-  const collectMutation = useMutation({
-    mutationFn: () =>
-      collectOnlineOrder(order.id, {
-        accessToken: accessToken.trim().toLowerCase(),
-        amountTendered: Number(amountTendered).toFixed(2),
-      }),
-    onSuccess: () => {
-      onSuccess()
-    },
-    onError: (err) => {
-      setModalError(errorMessage(err))
-    },
-  })
-
-  function handleCollectSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    setModalError(null)
-
-    const cleanToken = accessToken.trim().toLowerCase()
-    if (!/^[0-9a-f]{64}$/.test(cleanToken)) {
-      setModalError(
-        'Mã xác thực khách hàng (Access Token) phải là chuỗi 64 ký tự hex.',
-      )
-      return
-    }
-
-    if (tenderedNumber < totalNumber) {
-      setModalError('Tiền khách đưa không được nhỏ hơn tổng tiền đơn hàng.')
-      return
-    }
-
-    collectMutation.mutate()
-  }
-
-  return (
-    <Dialog open={true} onClose={onClose} className="max-w-md">
-      <DialogHeader>
-        <DialogTitle>Bàn giao món & Thu tiền mặt</DialogTitle>
-        <DialogDescription>
-          Khách hàng: {order.pickupName} ({order.phoneNumber})
-        </DialogDescription>
-      </DialogHeader>
-
-      <form onSubmit={handleCollectSubmit} className="space-y-4 my-2">
-        <div>
-          <label className="block text-xs font-semibold text-[#202d29] mb-1">
-            Mã xác thực khách hàng (Access Token 64 hex) <span className="text-red-600">*</span>
-          </label>
-          <Input
-            type="text"
-            required
-            placeholder="Dán hoặc nhập mã 64 ký tự từ màn hình khách..."
-            value={accessToken}
-            onChange={(e) => setAccessToken(e.target.value)}
-            className="font-mono text-xs"
-          />
-          <span className="text-[11px] text-[#68776f] mt-1 block">
-            Khách hàng bấm nút sao chép mã nhận hàng trên điện thoại để cung cấp.
-          </span>
-        </div>
-
-        <div className="rounded-lg border border-[#dce5df] bg-[#f8faf9] p-3.5 space-y-3 text-sm">
-          <div className="flex justify-between items-baseline">
-            <span className="text-[#68776f]">Cần thanh toán:</span>
-            <strong className="text-lg text-[#174f3f]">
-              {formatPrice(order.quotedSubtotal)}
-            </strong>
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-[#202d29] mb-1">
-              Tiền khách đưa (VNĐ)
-            </label>
-            <Input
-              type="number"
-              step="1000"
-              min={totalNumber}
+      <form
+        className="space-y-3"
+        onSubmit={(event) => {
+          event.preventDefault()
+          if (!isPending && !blocked && (kind === 'no-show' || reason.trim().length >= 2))
+            onConfirm(reason.trim())
+        }}
+      >
+        {kind !== 'no-show' ? (
+          <label htmlFor={id} className="block space-y-2">
+            Lý do
+            <Textarea
+              id={id}
               required
-              value={amountTendered}
-              onChange={(e) => setAmountTendered(e.target.value)}
-              className="text-base font-bold"
+              minLength={2}
+              maxLength={200}
+              value={reason}
+              disabled={isPending || blocked}
+              onChange={(event) => setReason(event.target.value)}
             />
-          </div>
-
-          <div className="flex gap-1.5 flex-wrap">
-            {[totalNumber, 50000, 100000, 200000, 500000]
-              .filter((amt) => amt >= totalNumber)
-              .map((amt) => (
-                <Button
-                  key={amt}
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setAmountTendered(String(amt))}
-                  className="h-7 text-xs"
-                >
-                  {formatPrice(String(amt))}
-                </Button>
-              ))}
-          </div>
-
-          <div className="flex justify-between items-baseline border-t border-dashed border-[#cbd7cf] pt-2">
-            <span className="text-xs text-[#4b6155]">Tiền thối lại:</span>
-            <strong
-              className={`text-base ${
-                changeAmount > 0 ? 'text-amber-700' : 'text-[#174f3f]'
-              }`}
-            >
-              {formatPrice(String(changeAmount))}
-            </strong>
-          </div>
-        </div>
-
-        {modalError && (
-          <div className="text-xs text-red-600 bg-red-50 p-2.5 rounded border border-red-200">
-            {modalError}
-          </div>
+          </label>
+        ) : (
+          <p className="text-sm">Đơn sẽ bị hủy; món đã chế biến được ghi nhận hao hụt.</p>
         )}
-
+        {error && (
+          <p role="alert" className="text-sm text-destructive">
+            {error}
+          </p>
+        )}
+        {blocked && error && (
+          <Button type="button" variant="outline" onClick={onReview}>
+            <RefreshCw size={16} aria-hidden="true" />
+            Đối chiếu danh sách
+          </Button>
+        )}
         <DialogFooter>
-          <Button variant="outline" type="button" onClick={onClose}>
-            Hủy
+          <Button type="button" variant="outline" disabled={isPending} onClick={onClose}>
+            Quay lại
           </Button>
           <Button
-            variant="success"
             type="submit"
-            disabled={collectMutation.isPending}
-            isLoading={collectMutation.isPending}
+            variant="destructive"
+            className="h-auto min-h-10 whitespace-normal"
+            disabled={isPending || blocked || (kind !== 'no-show' && reason.trim().length < 2)}
           >
-            <Check size={16} />
-            Xác nhận thu tiền & Giao
+            {isPending ? 'Đang xử lý…' : `Xác nhận ${title.toLowerCase()}`}
           </Button>
         </DialogFooter>
       </form>
@@ -257,58 +100,218 @@ export function CollectOrderModal({
   )
 }
 
-// ============================================================================
-// CANCEL ACCEPTED DIALOG COMPONENT
-// ============================================================================
-
-export function CancelAcceptedDialog({
+export function CollectOrderModal({
   order,
   onClose,
-  onConfirm,
-  isPending,
+  onSuccess,
+  onSettled,
 }: {
   order: FulfillmentOrder
   onClose: () => void
-  onConfirm: (reason: string) => void
-  isPending: boolean
+  onSuccess: () => void
+  onSettled: () => void
 }) {
-  const [reason, setReason] = useState('')
-
+  const id = useId()
+  const flight = useRef(false)
+  const errorRef = useRef<HTMLParagraphElement>(null)
+  const [accessToken, setAccessToken] = useState('')
+  const [amountTendered, setAmountTendered] = useState(() =>
+    decimalAmount(minorAmount(order.quotedSubtotal)),
+  )
+  const [submitted, setSubmitted] = useState<{
+    accessToken: string
+    amountTendered: string
+  } | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const validAmount = /^(0|[1-9]\d{0,15})(\.\d{1,2})?$/.test(amountTendered.trim())
+  const change = validAmount
+    ? minorAmount(amountTendered.trim()) - minorAmount(order.quotedSubtotal)
+    : 0n
+  function showError(value: string) {
+    setError(value)
+    requestAnimationFrame(() => errorRef.current?.focus())
+  }
+  const mutation = useMutation({
+    gcTime: 0,
+    retry: false,
+    mutationFn: (payload: { accessToken: string; amountTendered: string }) =>
+      collectOnlineOrder(order.id, payload),
+    onError: (error) => {
+      if (error instanceof ApiError && error.status < 500 && ![408, 409].includes(error.status))
+        setSubmitted(null)
+      showError(errorMessage(error))
+    },
+    onSettled: () => {
+      flight.current = false
+      onSettled()
+    },
+  })
+  const recovery = useMutation({
+    gcTime: 0,
+    retry: false,
+    mutationFn: () => trackOnlineOrder(order.id, submitted!.accessToken),
+    onError: (error) => showError(errorMessage(error)),
+    onSettled: () => {
+      flight.current = false
+    },
+  })
+  const resolved =
+    recovery.isSuccess &&
+    (['REJECTED', 'CANCELLED', 'EXPIRED'].includes(recovery.data.status) ||
+      recovery.data.fulfillmentStatus === 'COLLECTED')
+  function close() {
+    if (!flight.current && (!submitted || resolved)) onClose()
+  }
+  function submit(event: FormEvent) {
+    event.preventDefault()
+    if (flight.current || mutation.isSuccess || resolved) return
+    let payload = submitted
+    if (!payload) {
+      const token = accessToken.trim().toLowerCase()
+      if (!/^[0-9a-f]{64}$/.test(token)) {
+        showError('Mã xác thực phải gồm 64 ký tự hex.')
+        return
+      }
+      if (!validAmount || change < 0n) {
+        showError('Tiền khách đưa phải hợp lệ và không nhỏ hơn tổng đơn.')
+        return
+      }
+      payload = {
+        accessToken: token,
+        amountTendered: decimalAmount(minorAmount(amountTendered.trim())),
+      }
+      setSubmitted(payload)
+    }
+    flight.current = true
+    setError(null)
+    recovery.reset()
+    // The existing idempotency client recovers the key for this exact frozen body.
+    mutation.mutate(payload)
+  }
   return (
-    <Dialog open={true} onClose={onClose}>
+    <Dialog open onClose={mutation.isSuccess ? onSuccess : close} maxWidth="sm">
       <DialogHeader>
-        <DialogTitle className="text-red-700">
-          Hủy đơn hàng #{order.id.slice(0, 8)}?
-        </DialogTitle>
-        <DialogDescription>
-          Nhập lý do hủy đơn (VD: Khách gọi điện báo hủy, sự cố pha chế...):
+        <DialogTitle>Bàn giao món & Thu tiền mặt</DialogTitle>
+        <DialogDescription className="break-words">
+          {order.pickupName} ({order.phoneNumber})
         </DialogDescription>
       </DialogHeader>
-
-      <div className="my-3">
-        <Textarea
-          rows={3}
-          required
-          placeholder="Nhập lý do..."
-          value={reason}
-          onChange={(e) => setReason(e.target.value)}
-          maxLength={200}
-        />
-      </div>
-
-      <DialogFooter>
-        <Button variant="outline" onClick={onClose}>
-          Quay lại
-        </Button>
-        <Button
-          variant="destructive"
-          disabled={reason.trim().length < 2 || isPending}
-          isLoading={isPending}
-          onClick={() => onConfirm(reason.trim())}
-        >
-          Xác nhận hủy
-        </Button>
-      </DialogFooter>
+      {mutation.isSuccess ? (
+        <div className="space-y-3">
+          <p role="status">Đã thu tiền và bàn giao. Hóa đơn {mutation.data.invoiceNumber}</p>
+          <dl className="space-y-2 text-sm">
+            <div className="flex flex-wrap justify-between gap-2">
+              <dt>Tổng thanh toán</dt>
+              <dd>{formatPrice(mutation.data.totalAmount)}</dd>
+            </div>
+            <div className="flex flex-wrap justify-between gap-2">
+              <dt>Tiền khách đưa</dt>
+              <dd>
+                {mutation.data.amountTendered == null
+                  ? 'Chưa xác nhận'
+                  : formatPrice(mutation.data.amountTendered)}
+              </dd>
+            </div>
+            <div className="flex flex-wrap justify-between gap-2">
+              <dt>Tiền thối lại</dt>
+              <dd>
+                {mutation.data.changeAmount == null
+                  ? 'Chưa xác nhận'
+                  : formatPrice(mutation.data.changeAmount)}
+              </dd>
+            </div>
+          </dl>
+          <Button onClick={onSuccess}>Hoàn tất</Button>
+        </div>
+      ) : (
+        <form className="space-y-4" onSubmit={submit}>
+          <p className="text-sm">
+            Cần thanh toán: <strong>{formatPrice(order.quotedSubtotal)}</strong>
+          </p>
+          <fieldset disabled={mutation.isPending || Boolean(submitted)} className="space-y-3">
+            <label htmlFor={`${id}-token`} className="block space-y-1">
+              Mã xác thực khách hàng
+              <Input
+                id={`${id}-token`}
+                type="password"
+                autoComplete="off"
+                required
+                maxLength={64}
+                value={accessToken}
+                onChange={(event) => setAccessToken(event.target.value)}
+              />
+            </label>
+            <label htmlFor={`${id}-amount`} className="block space-y-1">
+              Tiền khách đưa (VNĐ)
+              <Input
+                id={`${id}-amount`}
+                type="number"
+                required
+                min="0"
+                step="0.01"
+                value={amountTendered}
+                onChange={(event) => setAmountTendered(event.target.value)}
+              />
+            </label>
+          </fieldset>
+          <p className="text-sm">
+            Dự kiến tiền thối: {formatPrice(decimalAmount(change > 0n ? change : 0n))}
+          </p>
+          {error && (
+            <p ref={errorRef} tabIndex={-1} role="alert" className="text-sm text-destructive">
+              {error}
+            </p>
+          )}
+          {submitted && !mutation.isPending && (
+            <>
+              <p className="text-sm">
+                {resolved
+                  ? 'Đơn đã kết thúc trên hệ thống. Đối chiếu hóa đơn trước khi giao hoặc thu tiền thêm.'
+                  : 'Chưa xác nhận kết quả. Giữ nguyên nội dung để kiểm tra lại lần thu tiền này.'}
+              </p>
+              <Button
+                type="button"
+                variant="outline"
+                className="h-auto min-h-10 max-w-full whitespace-normal"
+                disabled={recovery.isPending}
+                onClick={() => {
+                  if (!flight.current) {
+                    flight.current = true
+                    recovery.mutate()
+                  }
+                }}
+              >
+                <RefreshCw size={16} aria-hidden="true" />
+                Đối chiếu trạng thái đơn
+              </Button>
+            </>
+          )}
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={
+                mutation.isPending || recovery.isPending || (Boolean(submitted) && !resolved)
+              }
+              onClick={close}
+            >
+              Quay lại
+            </Button>
+            <Button
+              type="submit"
+              className="h-auto min-h-10 whitespace-normal"
+              disabled={mutation.isPending || recovery.isPending || resolved}
+            >
+              <Check size={16} aria-hidden="true" className="shrink-0" />
+              {mutation.isPending
+                ? 'Đang xử lý…'
+                : submitted
+                  ? 'Kiểm tra lại cùng lần thu tiền'
+                  : 'Xác nhận thu tiền & Giao'}
+            </Button>
+          </DialogFooter>
+        </form>
+      )}
     </Dialog>
   )
 }

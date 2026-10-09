@@ -35,6 +35,7 @@ export default function PaymentReturnPage() {
     : !result.data.attempt ? 'Không tìm thấy giao dịch.'
     : status === 'SUCCEEDED' ? 'Server đã ghi nhận thanh toán thành công.'
     : status === 'PENDING' ? 'Đang chờ ngân hàng xác nhận. Chưa cần thanh toán lại.'
+    : status === 'EXPIRED' ? 'Liên kết đã hết hạn nhưng kết quả thanh toán chưa được xác minh. Liên hệ cửa hàng để đối soát, không thanh toán lại ngay.'
     : status === 'REQUIRES_REVIEW' ? 'Giao dịch cần được cửa hàng đối soát.'
     : 'Phiên thanh toán đã kết thúc. Vui lòng liên hệ cửa hàng để kiểm tra.'
 

@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
 import { defaultMockAdminAuth, defaultMockAdminEmployee, envelope } from './helpers.js'
+import { decimalAmount, minorAmount } from '../src/shared/lib/money.js'
 
 const now = new Date('2026-10-04T08:00:00Z')
 const sessionId = '60000000-0000-4000-8000-000000000001'
@@ -74,13 +75,58 @@ test('created link survives reads without paymentUrl and paid UI waits for the i
   await expect(page.getByText('Tổng hóa đơn:', { exact: false })).toContainText('Đã thanh toán')
 })
 
-test('unresolved online attempt blocks manual collection and invoice cancellation', async ({ page }) => {
-  await setup(page, { permissions: [...permissions, '/invoices_update'], attempts: () => [{ ...attempt, status: 'REQUIRES_REVIEW' }] })
+for (const status of ['PENDING', 'EXPIRED', 'REQUIRES_REVIEW']) {
+test(`${status} blocks manual collection and invoice cancellation`, async ({ page }) => {
+  await setup(page, { permissions: [...permissions, '/invoices_update'], attempts: () => [{ ...attempt, status }] })
   await page.goto('/staff/invoices')
   await page.getByTitle('Xem chi tiết & Thanh toán').click()
   await page.getByRole('button', { name: 'Xác nhận tiền mặt / Thẻ', exact: true }).click()
   await expect(page.getByRole('button', { name: /^Xác nhận đã thanh toán/ })).toBeDisabled()
   await expect(page.getByRole('button', { name: 'Hủy hóa đơn', exact: true })).toBeDisabled()
+})
+}
+
+test('an expired attempt offers reconciliation instead of a second payment', async ({ page }) => {
+  await setup(page, { permissions: [...permissions, '/payment-reconciliation_manage'], attempts: () => [{ ...attempt, status: 'EXPIRED' }] })
+  await openGateway(page)
+  await expect(page.getByRole('button', { name: 'Tạo phiên VNPAY', exact: true })).toBeDisabled()
+  await expect(page.getByRole('button', { name: 'Đối soát VNPAY', exact: true })).toBeEnabled()
+  await expect(page.getByRole('link', { name: /^Mở thanh toán/ })).toHaveCount(0)
+})
+
+test('an unknown refund freezes the intent and replays the original key', async ({ page }) => {
+  const bodies: Record<string, unknown>[] = []
+  const refund = { id: 'refund-1', paymentAttemptId: attempt.id, amount: '10000.25', reason: 'Customer refund', status: 'SUCCEEDED', type: 'PARTIAL', createdAt: now.toISOString() }
+  await setup(page, { permissions: [...permissions, '/payment-refunds_read', '/payment-refunds_create'], paid: () => true, attempts: () => [{ ...attempt, status: 'SUCCEEDED' }] })
+  await page.route('**/api/v1/payment-attempts/attempt-gateway/refunds?*', route => route.fulfill({ json: envelope(paged([])) }))
+  await page.route('**/api/v1/payment-attempts/attempt-gateway/refunds', route => {
+    bodies.push(route.request().postDataJSON())
+    return bodies.length === 1 ? route.abort() : route.fulfill({ json: envelope(refund) })
+  })
+  await page.goto('/staff/invoices')
+  await page.getByTitle('Xem chi tiết & Thanh toán').click()
+  await page.getByLabel('Số tiền hoàn (VND)').fill('10000.25')
+  await page.getByLabel('Lý do hoàn tiền').fill('Customer refund')
+  await page.getByRole('button', { name: 'Yêu cầu hoàn tiền', exact: true }).click()
+  await page.getByRole('button', { name: 'Xác nhận hoàn tiền', exact: true }).click()
+  await expect(page.getByRole('status').filter({ hasText: 'Chưa xác nhận được yêu cầu' })).toBeVisible()
+  await expect(page.getByLabel('Số tiền hoàn (VND)')).toBeDisabled()
+  await expect(page.getByRole('button', { name: 'Đóng', exact: true })).toBeDisabled()
+  await expect(page.getByRole('button', { name: 'Hủy', exact: true })).toBeDisabled()
+  expect(bodies).toHaveLength(1)
+  await page.getByRole('button', { name: 'Kiểm tra lại yêu cầu hoàn tiền', exact: true }).click()
+  await expect.poll(() => bodies.length).toBe(2)
+  expect(bodies[1]).toEqual(bodies[0])
+  await expect(page.getByRole('button', { name: 'Đóng', exact: true })).toBeEnabled()
+})
+
+test('failed refund history reads do not expose a fresh refund command', async ({ page }) => {
+  await setup(page, { permissions: [...permissions, '/payment-refunds_read', '/payment-refunds_create'], paid: () => true, attempts: () => [{ ...attempt, status: 'SUCCEEDED' }] })
+  await page.route('**/api/v1/payment-attempts/attempt-gateway/refunds?*', route => route.fulfill({ status: 500, json: { message: 'Unavailable' } }))
+  await page.goto('/staff/invoices')
+  await page.getByTitle('Xem chi tiết & Thanh toán').click()
+  await expect(page.getByRole('button', { name: 'Yêu cầu hoàn tiền', exact: true })).toBeDisabled()
+  await expect(page.getByRole('button', { name: 'Làm mới lịch sử hoàn tiền', exact: true })).toBeVisible()
 })
 
 test('uncertain manual collection keeps the original method and tender', async ({ page }) => {
@@ -209,18 +255,67 @@ test('unsafe gateway URL is rejected before link or QR rendering', async ({ page
   await expect(page.getByRole('img', { name: 'Mã QR thanh toán' })).toHaveCount(0)
 })
 
-async function openPos(page: Page) {
+async function openPos(page: Page, { checkout = true, unitPrice = '35000', menuItems = [] }: {
+  checkout?: boolean; unitPrice?: string; menuItems?: unknown[]
+} = {}) {
   await page.route('**/api/v1/orders/sessions/' + sessionId, route => route.fulfill({ json: envelope({
     id: sessionId, sessionStatus: 'ACTIVE', guestCount: null, table: null, employee: defaultMockAdminEmployee,
-    createdAt: now.toISOString(), orderItems: [{ id: itemId, quantity: 1, priceAtTime: '35000', serveStatus: 'READY',
-      isPaid: false, menuItem: { id: menuId, name: 'Coffee gateway', price: '35000' } }],
+    createdAt: now.toISOString(), orderItems: [{ id: itemId, quantity: 1, priceAtTime: unitPrice, serveStatus: 'READY',
+      isPaid: false, menuItem: { id: menuId, name: 'Coffee gateway', price: unitPrice } }],
   }) }))
   await page.route('**/api/v1/menu/public/categories', route => route.fulfill({ json: envelope([]) }))
-  await page.route('**/api/v1/menu/public/items?*', route => route.fulfill({ json: envelope(paged([])) }))
+  await page.route('**/api/v1/menu/public/items?*', route => route.fulfill({ json: envelope(paged(menuItems)) }))
   await page.route('**/api/v1/recommendations/pos/*', route => route.fulfill({ json: envelope({ recommendations: [] }) }))
   await page.goto('/staff/pos/sessions/' + sessionId)
-  await page.getByRole('button', { name: /^Thanh toán \(/ }).first().click()
+  if (checkout) await page.getByRole('button', { name: /^Thanh toán \(/ }).first().click()
 }
+
+test('POS cash change is exact to the cent', async ({ page }) => {
+  await setup(page, { permissions: ['/invoices_create', '/orders_sessions_read'] })
+  await openPos(page, { unitPrice: '35000.25' })
+  await page.getByLabel('Khách đưa (₫)').fill('35000.30')
+  await expect(page.getByRole('dialog').getByText('0,05 ₫', { exact: true })).toBeVisible()
+})
+
+test('money arithmetic preserves two decimals and values beyond Number precision', () => {
+  expect(decimalAmount(minorAmount('9999999999999999.99'))).toBe('9999999999999999.99')
+  expect(decimalAmount(minorAmount('35000.30') - minorAmount('35000.25'))).toBe('0.05')
+})
+
+test('an unknown POS submission freezes the draft and replays the same item batch', async ({ page }) => {
+  const bodies: Record<string, unknown>[] = []
+  const menu = { id: menuId, name: 'New Coffee', price: '35000.25', category: { id: menuId, name: 'Coffee' }, optionGroups: [] }
+  await setup(page, { permissions: ['/orders_sessions_read', '/orders_items_create', '/invoices_create'] })
+  await page.route(`**/api/v1/orders/sessions/${sessionId}/items`, route => {
+    bodies.push(route.request().postDataJSON())
+    return bodies.length === 1 ? route.abort() : route.fulfill({ json: envelope({
+      id: sessionId, sessionStatus: 'ACTIVE', createdAt: now.toISOString(), table: null, employee: defaultMockAdminEmployee, orderItems: [],
+    }) })
+  })
+  await openPos(page, { checkout: false, menuItems: [menu] })
+  await page.getByRole('button', { name: /New Coffee/ }).click()
+  await page.getByRole('button', { name: 'Gửi order vào bếp', exact: true }).click()
+  await expect(page.getByRole('status').filter({ hasText: 'Chưa xác nhận được lần gửi món' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Tăng số lượng' })).toBeDisabled()
+  await expect(page.getByRole('button', { name: 'Xóa tất cả' })).toBeDisabled()
+  await expect(page.getByRole('button', { name: /^Thanh toán \(/ })).toBeDisabled()
+  expect(bodies).toHaveLength(1)
+  await page.reload()
+  await expect(page.getByRole('status').filter({ hasText: 'Chưa xác nhận được lần gửi món' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Tăng số lượng' })).toBeDisabled()
+  await expect(page.getByRole('button', { name: /^Thanh toán \(/ })).toBeDisabled()
+  await page.evaluate(async () => {
+    for (const key of Object.keys(sessionStorage)) if (key.startsWith('coffee_pos_draft_')) sessionStorage.removeItem(key)
+    const path = '/src/shared/api/idempotency.ts'
+    const { clearPrivatePendingOperations } = await import(/* @vite-ignore */ path)
+    clearPrivatePendingOperations()
+  })
+  await page.reload()
+  await page.getByRole('button', { name: 'Kiểm tra lại cùng batch', exact: true }).click()
+  await expect.poll(() => bodies.length).toBe(2)
+  expect(bodies[1]).toEqual(bodies[0])
+  expect(bodies[0]?.idempotencyKey).toBeTruthy()
+})
 
 test('POS reuses the gateway panel after reviewing an actual invoice', async ({ page }) => {
   let posts = 0
@@ -254,9 +349,18 @@ test('uncertain POS cash checkout cannot change its tender or method', async ({ 
   await expect(page.getByRole('button', { name: 'Quét mã QR', exact: true })).toBeDisabled()
   await page.getByRole('button', { name: 'Xác nhận thanh toán tiền mặt', exact: true }).click()
   await expect(page.getByRole('alert')).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(page.getByRole('dialog')).toBeVisible()
   await expect(page.getByLabel('Khách đưa (₫)')).toBeDisabled()
   await expect(page.getByRole('button', { name: 'Quẹt thẻ POS', exact: true })).toBeDisabled()
   await page.getByRole('button', { name: 'Kiểm tra lại thanh toán tiền mặt', exact: true }).click()
   await expect.poll(() => bodies.length).toBe(2)
   expect(bodies[1]).toEqual(bodies[0])
+})
+
+test('POS closes an untouched checkout on Escape', async ({ page }) => {
+  await setup(page, { permissions: ['/invoices_create', '/orders_sessions_read'] })
+  await openPos(page)
+  await page.keyboard.press('Escape')
+  await expect(page.getByRole('dialog')).toHaveCount(0)
 })

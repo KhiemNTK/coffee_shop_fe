@@ -3,22 +3,12 @@ import { useQuery } from '@tanstack/react-query'
 import { useOutletContext } from 'react-router-dom'
 import type { Session } from '../auth/session'
 import { PaymentGatewayPanel } from '../invoices/components/payment-gateway-panel'
-import {
-  AlertCircle,
-  CheckCircle2,
-  CreditCard,
-  DollarSign,
-  QrCode,
-} from 'lucide-react'
+import { AlertCircle, CheckCircle2, CreditCard, DollarSign, QrCode } from 'lucide-react'
 import { ApiError, errorMessage } from '../../shared/api/client'
-import { formatPrice } from '../menu/menu.api'
-import {
-  checkoutInvoice,
-  quoteInvoice,
-  type Invoice,
-  type SessionItem,
-} from './pos.api'
-import { getActivePromotions } from '../promotions/promotions.api'
+import { formatPrice, moneySchema } from '../menu/menu.api'
+import { decimalAmount, minorAmount } from '../../shared/lib/money'
+import { checkoutInvoice, quoteInvoice, type Invoice, type SessionItem } from './pos.api'
+import { getActivePromotions, promotionKeys } from '../promotions/promotions.api'
 import { OrderOptions } from '../../shared/ui/order-options'
 import { createUnpaidInvoice, getInvoices } from '../invoices/invoices.api'
 import {
@@ -47,41 +37,52 @@ export function CheckoutModal({
   onCompleted: (invoice: Invoice) => void
 }) {
   const [billableItems] = useState(items)
-  const [selectedIds, setSelectedIds] = useState(() =>
-    items.map((item) => item.id),
-  )
+  const [selectedIds, setSelectedIds] = useState(() => items.map((item) => item.id))
   const [promotionId, setPromotionId] = useState('')
   const { employee, authorization } = useOutletContext<Session>()
-  const customInvoice =
-    Boolean(promotionId) || selectedIds.length !== billableItems.length
+  const [pending, setPending] = useState(false)
+  const [activeInvoiceId, setActiveInvoiceId] = useState<string | null>(null)
+  const [submittedDirect, setSubmittedDirect] = useState<
+    Parameters<typeof checkoutInvoice>[0] | null
+  >(null)
+  const [digitalUncertain, setDigitalUncertain] = useState(false)
+  const [gatewayLocked, setGatewayLocked] = useState(false)
+  const paymentLocked =
+    pending || Boolean(activeInvoiceId) || Boolean(submittedDirect) || digitalUncertain || gatewayLocked
+  const customInvoice = Boolean(promotionId) || selectedIds.length !== billableItems.length
   const quote = useQuery({
-    queryKey: ['pos-quote', employee.id, sessionId, selectedIds, promotionId],
+    queryKey: ['private', employee.id, 'pos-quote', sessionId, selectedIds, promotionId],
     queryFn: () =>
       quoteInvoice({
         orderSessionId: sessionId,
         orderItemIds: selectedIds,
         promotionId: promotionId || null,
       }),
-    enabled: customInvoice && selectedIds.length > 0,
+    enabled: customInvoice && selectedIds.length > 0 && !paymentLocked,
     retry: false,
     staleTime: 0,
   })
   const promotions = useQuery({
-    queryKey: ['checkout-promotions', employee.id],
+    queryKey: promotionKeys.active(employee.id),
     queryFn: ({ signal }) => getActivePromotions({}, signal),
-    enabled: authorization.permissionKeys.includes('/promotions_read'),
+    enabled: authorization.permissionKeys.includes('/promotions_read') && !paymentLocked,
     retry: false,
+    staleTime: 0,
   })
-  const payableTotal = customInvoice
-    ? (quote.data?.totalAmount ?? '0')
-    : totalAmount
+  const promotionAvailable =
+    !promotionId ||
+    (promotions.isSuccess &&
+      !promotions.isFetching &&
+      authorization.permissionKeys.includes('/promotions_read') &&
+      promotions.data.list.some((promotion) => promotion.id === promotionId))
+  const payableTotal = customInvoice ? (quote.data?.totalAmount ?? '0') : totalAmount
   const quoteReady =
+    promotionAvailable &&
     (!billableItems.length || selectedIds.length > 0) &&
     (!customInvoice || (quote.isSuccess && !quote.isFetching))
-  const numericTotal = Number(payableTotal) || 0
+  const totalMinor = minorAmount(payableTotal)
   const [method, setMethod] = useState<'CASH' | 'CARD' | 'DIGITAL'>('CASH')
   const [tendered, setTendered] = useState(totalAmount)
-  const [pending, setPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [invoice, setInvoice] = useState<Invoice | null>(null)
 
@@ -91,29 +92,22 @@ export function CheckoutModal({
     '/payment-attempts_create',
     '/payment-attempts_read',
   ].every((key) => authorization.permissionKeys.includes(key))
-  const [activeInvoiceId, setActiveInvoiceId] = useState<string | null>(null)
-  const [submittedDirect, setSubmittedDirect] = useState<
-    Parameters<typeof checkoutInvoice>[0] | null
-  >(null)
   const flight = useRef(false)
-  const [digitalUncertain, setDigitalUncertain] = useState(false)
   const completed = useRef(false)
-  const numericTendered = Number(tendered) || 0
-  const change = Math.max(0, numericTendered - numericTotal)
+  const parsedTendered = moneySchema.safeParse(tendered.trim())
+  const tenderedMinor = parsedTendered.success ? minorAmount(parsedTendered.data) : null
+  const tenderedEnough = tenderedMinor !== null && tenderedMinor >= totalMinor
+  const change = tenderedEnough ? tenderedMinor - totalMinor : 0n
   const quickDenominations = [
-    numericTotal,
-    Math.ceil(numericTotal / 50000) * 50000,
-    Math.ceil(numericTotal / 100000) * 100000,
-    500000,
-  ].filter((val, idx, arr) => val >= numericTotal && arr.indexOf(val) === idx)
+    totalMinor,
+    ((totalMinor + 4_999_999n) / 5_000_000n) * 5_000_000n,
+    ((totalMinor + 9_999_999n) / 10_000_000n) * 10_000_000n,
+    50_000_000n,
+  ].filter((val, idx, arr) => val >= totalMinor && arr.indexOf(val) === idx)
 
   async function handleDirectCheckout(payMethod: 'CASH' | 'CARD') {
     if (flight.current || (!submittedDirect && !quoteReady)) return
-    if (
-      !submittedDirect &&
-      payMethod === 'CASH' &&
-      numericTendered < numericTotal
-    ) {
+    if (!submittedDirect && payMethod === 'CASH' && !tenderedEnough) {
       setError('Tiền khách đưa không đủ thanh toán')
       return
     }
@@ -151,8 +145,7 @@ export function CheckoutModal({
   }
 
   async function handlePrepareDigitalPayment() {
-    if (flight.current || !canDigital || (!digitalUncertain && !quoteReady))
-      return
+    if (flight.current || !canDigital || (!digitalUncertain && !quoteReady)) return
     flight.current = true
     setError(null)
     setPending(true)
@@ -167,9 +160,7 @@ export function CheckoutModal({
             (candidate) =>
               (candidate.promotionId ?? null) === (promotionId || null) &&
               candidate.orderItems.length === selectedIds.length &&
-              candidate.orderItems.every((item) =>
-                selectedIds.includes(item.id),
-              ),
+              candidate.orderItems.every((item) => selectedIds.includes(item.id)),
           )
         : existing.list[0]
       if (!matching) setDigitalUncertain(true)
@@ -184,8 +175,7 @@ export function CheckoutModal({
         setInvoice(unpaid)
         completed.current = true
         onCompleted(unpaid)
-      } else if (unpaid.paymentStatus === 'UNPAID')
-        setActiveInvoiceId(unpaid.id)
+      } else if (unpaid.paymentStatus === 'UNPAID') setActiveInvoiceId(unpaid.id)
       else setError('Hóa đơn không còn chờ thanh toán. Vui lòng kiểm tra lại.')
     } catch (err) {
       setError(errorMessage(err))
@@ -207,8 +197,7 @@ export function CheckoutModal({
     <Dialog
       open
       onOpenChange={(open) => {
-        if (!open && !flight.current && !submittedDirect && !digitalUncertain)
-          onClose()
+        if (!open && !flight.current && !submittedDirect && !digitalUncertain && !gatewayLocked) onClose()
       }}
       maxWidth={invoice ? 'sm' : 'md'}
     >
@@ -221,8 +210,7 @@ export function CheckoutModal({
             Thanh toán thành công!
           </DialogTitle>
           <DialogDescription className="mt-1 text-center text-sm text-muted-foreground">
-            Hóa đơn số:{' '}
-            <strong className="text-foreground">{invoice.invoiceNumber}</strong>
+            Hóa đơn số: <strong className="text-foreground">{invoice.invoiceNumber}</strong>
           </DialogDescription>
 
           <div className="my-5 rounded-lg border border-border bg-muted/40 p-4 text-left text-sm space-y-2.5">
@@ -238,37 +226,26 @@ export function CheckoutModal({
             </div>
             <div className="flex justify-between text-muted-foreground">
               <span>Tổng tiền thanh toán:</span>
-              <strong className="text-foreground">
-                {formatPrice(invoice.totalAmount)}
-              </strong>
+              <strong className="text-foreground">{formatPrice(invoice.totalAmount)}</strong>
             </div>
             {invoice.paymentMethod === 'CASH' && (
               <>
                 <div className="flex justify-between text-muted-foreground">
                   <span>Tiền khách đưa:</span>
                   <span className="font-medium text-foreground">
-                    {invoice.amountTendered
-                      ? formatPrice(invoice.amountTendered)
-                      : '0 ₫'}
+                    {invoice.amountTendered ? formatPrice(invoice.amountTendered) : 'Chưa xác định'}
                   </span>
                 </div>
                 <div className="flex justify-between border-t border-dashed border-border pt-2.5 text-base font-bold text-primary">
                   <span>Tiền thừa:</span>
-                  <span>
-                    {invoice.changeAmount
-                      ? formatPrice(invoice.changeAmount)
-                      : '0 ₫'}
-                  </span>
+                  <span>{invoice.changeAmount ? formatPrice(invoice.changeAmount) : 'Chưa xác định'}</span>
                 </div>
               </>
             )}
           </div>
 
           <DialogFooter>
-            <Button
-              className="w-full cursor-pointer font-bold"
-              onClick={onClose}
-            >
+            <Button className="w-full cursor-pointer font-bold" onClick={onClose}>
               Hoàn tất & Đóng
             </Button>
           </DialogFooter>
@@ -277,8 +254,7 @@ export function CheckoutModal({
         <div>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-lg font-bold text-foreground">
-              <DollarSign className="h-5 w-5 text-primary" /> Thanh toán đơn
-              hàng
+              <DollarSign className="h-5 w-5 text-primary" /> Thanh toán đơn hàng
             </DialogTitle>
             <DialogDescription>
               Chọn phương thức thanh toán phù hợp với nhu cầu của khách hàng.
@@ -298,20 +274,14 @@ export function CheckoutModal({
           {billableItems.length > 0 && (
             <fieldset
               disabled={
-                pending ||
-                Boolean(activeInvoiceId) ||
-                Boolean(submittedDirect) ||
-                digitalUncertain
+                pending || Boolean(activeInvoiceId) || Boolean(submittedDirect) || digitalUncertain
               }
               className="mt-4 space-y-2"
             >
               <legend className="text-sm font-medium">Món trong hóa đơn</legend>
               <div className="max-h-48 overflow-y-auto divide-y">
                 {billableItems.map((item) => (
-                  <label
-                    key={item.id}
-                    className="flex items-start gap-2 py-2 text-sm"
-                  >
+                  <label key={item.id} className="flex items-start gap-2 py-2 text-sm">
                     <input
                       type="checkbox"
                       checked={selectedIds.includes(item.id)}
@@ -341,6 +311,10 @@ export function CheckoutModal({
                     onChange={(event) => setPromotionId(event.target.value)}
                   >
                     <option value="">Không áp dụng</option>
+                    {promotionId &&
+                      !promotions.data?.list.some((promotion) => promotion.id === promotionId) && (
+                        <option value={promotionId}>Khuyến mãi đã chọn (chưa xác nhận)</option>
+                      )}
                     {promotions.data?.list.map((promotion) => (
                       <option key={promotion.id} value={promotion.id}>
                         {promotion.name}
@@ -349,13 +323,23 @@ export function CheckoutModal({
                   </select>
                 </label>
               )}
+              {promotionId && !promotions.isFetching && !promotionAvailable && (
+                <div role="alert" className="space-y-2 text-sm text-destructive">
+                  <p>Khuyến mãi đã chọn chưa được xác nhận còn hiệu lực.</p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setPromotionId('')}
+                  >
+                    Bỏ khuyến mãi
+                  </Button>
+                </div>
+              )}
               {promotions.isError && (
                 <p role="alert" className="text-sm text-destructive">
                   {errorMessage(promotions.error)}{' '}
-                  <button
-                    type="button"
-                    onClick={() => void promotions.refetch()}
-                  >
+                  <button type="button" onClick={() => void promotions.refetch()}>
                     Thử lại
                   </button>
                 </p>
@@ -374,9 +358,7 @@ export function CheckoutModal({
                 </p>
               )}
               {customInvoice && quote.data && (
-                <p className="text-sm">
-                  Giảm giá: {formatPrice(quote.data.discountAmount)}
-                </p>
+                <p className="text-sm">Giảm giá: {formatPrice(quote.data.discountAmount)}</p>
               )}
             </fieldset>
           )}
@@ -397,10 +379,7 @@ export function CheckoutModal({
                 setMethod('CASH')
               }}
               disabled={
-                pending ||
-                Boolean(activeInvoiceId) ||
-                Boolean(submittedDirect) ||
-                digitalUncertain
+                pending || Boolean(activeInvoiceId) || Boolean(submittedDirect) || digitalUncertain
               }
               className={cn(
                 'flex flex-col items-center justify-center gap-1.5 rounded-xl border p-3 text-xs font-bold transition-all cursor-pointer',
@@ -419,10 +398,7 @@ export function CheckoutModal({
                 setMethod('CARD')
               }}
               disabled={
-                pending ||
-                Boolean(activeInvoiceId) ||
-                Boolean(submittedDirect) ||
-                digitalUncertain
+                pending || Boolean(activeInvoiceId) || Boolean(submittedDirect) || digitalUncertain
               }
               className={cn(
                 'flex flex-col items-center justify-center gap-1.5 rounded-xl border p-3 text-xs font-bold transition-all cursor-pointer',
@@ -438,12 +414,7 @@ export function CheckoutModal({
             <button
               type="button"
               onClick={() => setMethod('DIGITAL')}
-              disabled={
-                !canDigital ||
-                pending ||
-                Boolean(submittedDirect) ||
-                digitalUncertain
-              }
+              disabled={!canDigital || pending || Boolean(submittedDirect) || digitalUncertain}
               className={cn(
                 'flex flex-col items-center justify-center gap-1.5 rounded-xl border p-3 text-xs font-bold transition-all cursor-pointer',
                 method === 'DIGITAL'
@@ -469,8 +440,8 @@ export function CheckoutModal({
                 <Input
                   id="amountTenderedInput"
                   type="number"
-                  min={numericTotal}
-                  step="1000"
+                  min={payableTotal}
+                  step="0.01"
                   value={tendered}
                   disabled={pending || Boolean(submittedDirect)}
                   onChange={(e) => setTendered(e.target.value)}
@@ -483,33 +454,31 @@ export function CheckoutModal({
               <div className="flex flex-wrap gap-2">
                 {quickDenominations.map((val) => (
                   <button
-                    key={val}
+                    key={String(val)}
                     type="button"
-                    onClick={() => setTendered(String(val))}
+                    onClick={() => setTendered(decimalAmount(val))}
                     disabled={pending || Boolean(submittedDirect)}
                     className={cn(
                       'rounded-md border px-3 py-1.5 text-xs font-semibold transition-colors cursor-pointer',
-                      Number(tendered) === val
+                      tenderedMinor === val
                         ? 'border-primary bg-primary/10 text-primary ring-1 ring-primary'
                         : 'border-border bg-card text-foreground hover:bg-muted',
                     )}
                   >
-                    {formatPrice(String(val))}
+                    {formatPrice(decimalAmount(val))}
                   </button>
                 ))}
               </div>
 
               <div className="flex items-center justify-between border-t border-border pt-3">
-                <span className="text-sm text-muted-foreground">
-                  Tiền thừa trả khách:
-                </span>
+                <span className="text-sm text-muted-foreground">Tiền thừa trả khách:</span>
                 <span
                   className={cn(
                     'text-lg font-bold',
                     change > 0 ? 'text-primary' : 'text-foreground',
                   )}
                 >
-                  {formatPrice(String(change))}
+                  {tenderedMinor === null ? 'Chưa xác định' : formatPrice(decimalAmount(change))}
                 </span>
               </div>
             </div>
@@ -523,8 +492,8 @@ export function CheckoutModal({
                 Quẹt thẻ thanh toán trên thiết bị POS ngân hàng
               </p>
               <p className="text-xs text-muted-foreground">
-                Sau khi máy POS ngân hàng in biên lai thành công, bấm &quot;Xác
-                nhận đã thanh toán&quot; để chốt đơn.
+                Sau khi máy POS ngân hàng in biên lai thành công, bấm &quot;Xác nhận đã thanh
+                toán&quot; để chốt đơn.
               </p>
             </div>
           )}
@@ -534,6 +503,7 @@ export function CheckoutModal({
               {activeInvoiceId ? (
                 <PaymentGatewayPanel
                   invoiceId={activeInvoiceId}
+                  onLockChange={setGatewayLocked}
                   onPaid={(paid) => {
                     if (completed.current) return
                     completed.current = true
@@ -561,7 +531,7 @@ export function CheckoutModal({
               type="button"
               variant="outline"
               onClick={onClose}
-              disabled={pending || Boolean(submittedDirect) || digitalUncertain}
+              disabled={pending || Boolean(submittedDirect) || digitalUncertain || gatewayLocked}
               className="flex-1 cursor-pointer"
             >
               Hủy
@@ -573,9 +543,7 @@ export function CheckoutModal({
                 onClick={() => void handleDirectCheckout('CASH')}
                 isLoading={pending}
                 disabled={
-                  pending ||
-                  (!submittedDirect &&
-                    (!quoteReady || numericTendered < numericTotal))
+                  pending || (!submittedDirect && (!quoteReady || !tenderedEnough))
                 }
                 className="flex-2 cursor-pointer font-bold"
               >
@@ -593,9 +561,7 @@ export function CheckoutModal({
                 disabled={pending || (!submittedDirect && !quoteReady)}
                 className="flex-2 cursor-pointer font-bold"
               >
-                {submittedDirect
-                  ? 'Kiểm tra lại thanh toán thẻ'
-                  : 'Xác nhận quẹt thẻ thành công'}
+                {submittedDirect ? 'Kiểm tra lại thanh toán thẻ' : 'Xác nhận quẹt thẻ thành công'}
               </Button>
             )}
           </DialogFooter>

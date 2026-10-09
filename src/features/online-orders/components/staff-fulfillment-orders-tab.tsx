@@ -2,6 +2,8 @@ import { AlertCircle, Ban, DollarSign, Package, Phone, UserX } from 'lucide-reac
 import { type FulfillmentOrder } from '../online-orders.api'
 import { formatPrice } from '../../menu/menu.api'
 import { errorMessage } from '../../../shared/api/client'
+import { formatStoreDateTime } from '../../../shared/lib/store-time'
+import { OrderOptions } from '../../../shared/ui/order-options'
 import {
   Badge,
   Button,
@@ -14,7 +16,7 @@ import {
 
 interface StaffFulfillmentOrdersTabProps {
   orders: FulfillmentOrder[]
-  totalItems: number
+  totalItems?: number
   isLoading: boolean
   isError: boolean
   error: unknown
@@ -22,6 +24,7 @@ interface StaffFulfillmentOrdersTabProps {
   overdueOnly: boolean
   setOverdueOnly: (val: boolean) => void
   canCollect: boolean
+  canReview: boolean
   onCollect: (order: FulfillmentOrder) => void
   onNoShow: (id: string) => void
   isNoShowPending: boolean
@@ -38,6 +41,7 @@ export function StaffFulfillmentOrdersTab({
   overdueOnly,
   setOverdueOnly,
   canCollect,
+  canReview,
   onCollect,
   onNoShow,
   isNoShowPending,
@@ -46,7 +50,7 @@ export function StaffFulfillmentOrdersTab({
   return (
     <div className="space-y-4">
       {/* Filter Bar */}
-      <div className="flex items-center justify-between bg-white px-4 py-2.5 rounded-lg border border-[#dce5df] text-xs font-medium">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-y border-border py-3 text-sm">
         <label className="flex items-center gap-2 cursor-pointer select-none">
           <input
             type="checkbox"
@@ -57,9 +61,9 @@ export function StaffFulfillmentOrdersTab({
           <span>Chỉ hiển thị đơn trễ hẹn</span>
         </label>
 
-        <span className="text-[#68776f]">
-          Tổng: {totalItems} đơn đang xử lý
-        </span>
+        {!isError && !isLoading && totalItems !== undefined && (
+          <span className="text-muted-foreground">Tổng: {totalItems} đơn đang xử lý</span>
+        )}
       </div>
 
       {isLoading && (
@@ -69,29 +73,25 @@ export function StaffFulfillmentOrdersTab({
       )}
 
       {isError && (
-        <div className="flex items-center gap-3 text-sm text-red-700 bg-red-50 p-4 rounded-lg">
+        <div
+          role="alert"
+          className="flex flex-wrap items-center gap-3 text-sm text-destructive p-4"
+        >
           <AlertCircle size={16} />
           <span>{errorMessage(error)}</span>
-          <Button
-            variant="link"
-            onClick={onRefetch}
-            className="text-red-700 font-semibold"
-          >
+          <Button variant="link" onClick={onRefetch} className="text-red-700 font-semibold">
             Thử lại
           </Button>
         </div>
       )}
 
       {!isLoading && !isError && orders.length === 0 && (
-        <Card className="border-dashed p-12 text-center text-[#68776f]">
+        <div className="py-8 text-center text-muted-foreground">
           <Package size={36} className="mx-auto mb-3 text-[#9ba8a0]" />
           <p className="text-base font-semibold text-[#1a2723]">
             Không có đơn hàng nào đang chờ bàn giao
           </p>
-          <p className="text-sm mt-1 text-[#68776f]">
-            Sau khi duyệt đơn ở tab &quot;Chờ duyệt&quot;, đơn hàng sẽ hiển thị tại đây.
-          </p>
-        </Card>
+        </div>
       )}
 
       {!isLoading && !isError && orders.length > 0 && (
@@ -106,10 +106,10 @@ export function StaffFulfillmentOrdersTab({
                 }`}
               >
                 <CardHeader className="pb-3">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <CardTitle>{order.pickupName}</CardTitle>
+                  <div className="flex flex-wrap justify-between items-start gap-2">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <CardTitle className="break-words">{order.pickupName}</CardTitle>
                         <code className="text-xs bg-[#f2f6f3] px-1.5 py-0.5 rounded text-[#174f3f] font-bold">
                           #{order.id.slice(0, 8).toUpperCase()}
                         </code>
@@ -122,28 +122,25 @@ export function StaffFulfillmentOrdersTab({
 
                     <div className="flex flex-col items-end gap-1">
                       {isReady ? (
-                        <Badge variant="success">✓ Sẵn sàng lấy</Badge>
+                        <Badge variant="success">Sẵn sàng lấy</Badge>
                       ) : (
-                        <Badge variant="secondary">Đang chế biến</Badge>
+                        <Badge variant="secondary">
+                          {order.fulfillmentStatus === 'NEEDS_REVIEW'
+                            ? 'Cần đối chiếu'
+                            : order.fulfillmentStatus === 'PARTIALLY_READY'
+                              ? 'Một phần đã xong'
+                              : 'Đang chế biến'}
+                        </Badge>
                       )}
 
-                      {order.isOverdue && (
-                        <Badge variant="destructive">Trễ hẹn</Badge>
-                      )}
+                      {order.isOverdue && <Badge variant="destructive">Trễ hẹn</Badge>}
                     </div>
                   </div>
 
                   {/* Pickup Timing */}
                   <div className="mt-3 rounded-md bg-[#f8faf9] px-3 py-1.5 text-xs text-[#202d29]">
                     <span className="font-semibold">Giờ hẹn: </span>
-                    {order.pickupAt
-                      ? new Date(order.pickupAt).toLocaleTimeString([], {
-                          hour: '2-digit',
-                          minute: '2-digit',
-                          day: '2-digit',
-                          month: '2-digit',
-                        })
-                      : '⚡ Sớm nhất'}
+                    {order.pickupAt ? formatStoreDateTime(order.pickupAt) : 'Sớm nhất'}
                   </div>
                 </CardHeader>
 
@@ -152,11 +149,12 @@ export function StaffFulfillmentOrdersTab({
                     {order.orderItems.map((item) => (
                       <div
                         key={item.id}
-                        className="flex justify-between items-center"
+                        className="flex flex-wrap justify-between items-center gap-2"
                       >
-                        <span>
+                        <div className="min-w-0 break-words">
                           <strong>{item.quantity}x</strong> {item.menuItem.name}
-                        </span>
+                          <OrderOptions options={item.selectedOptions} />
+                        </div>
                         <Badge
                           variant={
                             item.serveStatus === 'READY'
@@ -166,11 +164,15 @@ export function StaffFulfillmentOrdersTab({
                                 : 'secondary'
                           }
                         >
-                          {item.serveStatus === 'READY'
-                            ? 'Đã xong'
-                            : item.serveStatus === 'COOKING'
-                              ? 'Đang làm'
-                              : 'Chờ làm'}
+                          {
+                            {
+                              PENDING: 'Chờ làm',
+                              COOKING: 'Đang làm',
+                              READY: 'Đã xong',
+                              SERVED: 'Đã giao',
+                              CANCELLED: 'Đã hủy',
+                            }[item.serveStatus]
+                          }
                         </Badge>
                       </div>
                     ))}
@@ -196,8 +198,8 @@ export function StaffFulfillmentOrdersTab({
                     Khách nhận & Thu tiền
                   </Button>
 
-                  <div className="flex w-full justify-end gap-3 text-xs">
-                    {order.isNoShowEligible && (
+                  <div className="flex w-full flex-wrap justify-end gap-3 text-xs">
+                    {canReview && order.isNoShowEligible && (
                       <Button
                         variant="ghost"
                         size="sm"
@@ -210,15 +212,18 @@ export function StaffFulfillmentOrdersTab({
                       </Button>
                     )}
 
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => onCancel(order)}
-                      className="h-auto p-0 text-red-600 hover:text-red-700"
-                    >
-                      <Ban size={13} />
-                      Hủy đơn
-                    </Button>
+                    {canReview && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => onCancel(order)}
+                        disabled={isNoShowPending}
+                        className="h-auto p-0 text-red-600 hover:text-red-700"
+                      >
+                        <Ban size={13} />
+                        Hủy đơn
+                      </Button>
+                    )}
                   </div>
                 </CardFooter>
               </Card>

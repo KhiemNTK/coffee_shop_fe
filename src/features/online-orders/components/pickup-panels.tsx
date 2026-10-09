@@ -6,6 +6,8 @@ import type { Session } from '../../auth/session'
 import { Button, Input } from '../../../shared/ui'
 import { PaymentQr } from '../../../shared/ui/payment-qr'
 import { errorMessage } from '../../../shared/api/client'
+import { onlineOrderKeys } from '../online-orders.api'
+import { kitchenKeys } from '../../kitchen/kitchen.api'
 import { collectPickupItem, getPickupStatus, issuePickupCode, parsePickupLink, pickupLink, revokePickupCode, rotatePickupCode, type PickupCredential } from '../pickup.api'
 
 export function PickupCodePanel({ invoiceId }: { invoiceId: string }) {
@@ -58,7 +60,8 @@ export function PickupCollectionPanel() {
     mutationFn: (id: string) => collectPickupItem(credential!, id),
     onSettled: () => {
       void status.refetch()
-      void client.invalidateQueries({ queryKey: ['online-orders'] })
+      void client.invalidateQueries({ queryKey: onlineOrderKeys.all(employee.id) })
+      void client.invalidateQueries({ queryKey: kitchenKeys.all(employee.id) })
     },
   })
   return <section aria-label="Bàn giao bằng mã nhận hàng" className="space-y-3 border-y border-border py-4">

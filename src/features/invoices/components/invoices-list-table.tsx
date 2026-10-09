@@ -88,7 +88,7 @@ export function InvoicesListTable({
                       page: 1,
                     }))
                   }
-                  className="rounded-full text-xs font-medium whitespace-nowrap"
+                  className="min-h-[36px] px-3.5 rounded-full text-xs font-semibold whitespace-nowrap cursor-pointer active:scale-95 transition-transform"
                 >
                   {st.label}
                 </Button>
@@ -110,7 +110,7 @@ export function InvoicesListTable({
                       page: 1,
                     }))
                   }
-                  className="rounded-full text-xs font-medium whitespace-nowrap"
+                  className="min-h-[36px] px-3.5 rounded-full text-xs font-semibold whitespace-nowrap cursor-pointer active:scale-95 transition-transform"
                 >
                   {method.label}
                 </Button>
@@ -167,8 +167,17 @@ export function InvoicesListTable({
                   displayList.map((invoice) => (
                     <tr
                       key={invoice.id}
-                      className="hover:bg-stone-50/70 transition-colors group cursor-pointer"
+                      tabIndex={0}
+                      role="button"
+                      aria-label={`Chi tiết hóa đơn ${invoice.invoiceNumber}`}
+                      className="hover:bg-stone-50/70 focus-visible:bg-stone-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 transition-colors group cursor-pointer"
                       onClick={() => onSelectInvoice(invoice.id)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault()
+                          onSelectInvoice(invoice.id)
+                        }
+                      }}
                     >
                       <td className="py-3.5 px-4 sm:px-6">
                         <code className="text-xs font-mono font-bold text-brand-900 bg-brand-50 border border-brand-200 px-2 py-0.5 rounded">
@@ -211,7 +220,7 @@ export function InvoicesListTable({
                           variant="ghost"
                           size="sm"
                           onClick={() => onSelectInvoice(invoice.id)}
-                          className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
+                          className="h-9 w-9 p-0 text-muted-foreground hover:text-foreground inline-flex items-center justify-center rounded-lg hover:bg-muted cursor-pointer"
                           title="Xem chi tiết & Thanh toán"
                         >
                           <Eye className="h-4 w-4" />

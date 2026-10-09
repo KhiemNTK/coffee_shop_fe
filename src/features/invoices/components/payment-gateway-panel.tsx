@@ -10,13 +10,14 @@ import { PaymentQr } from '../../../shared/ui/payment-qr'
 import { createPaymentAttempt, getInvoiceById, getInvoicePaymentAttempts, getPaymentProviders, reconcilePaymentAttempt,
   type CreatePaymentAttemptPayload, type Invoice, type PaymentAttempt, type PaymentProvider } from '../invoices.api'
 import { AttemptStatusBadge, PaymentStatusBadge } from './invoice-badges'
+import { isUnresolvedPayment } from '../payment-status'
 
 function stillPolling(attempt: PaymentAttempt) {
   return attempt.status === 'PENDING' && Date.now() < Date.parse(attempt.expiresAt) + 30_000
 }
 
-export function PaymentGatewayPanel({ invoiceId, onPaid }: {
-  invoiceId: string; onPaid?: (invoice: Invoice) => void
+export function PaymentGatewayPanel({ invoiceId, onPaid, onLockChange }: {
+  invoiceId: string; onPaid?: (invoice: Invoice) => void; onLockChange?: (locked: boolean) => void
 }) {
   const { employee, authorization } = useOutletContext<Session>()
   const can = (key: string) => authorization.permissionKeys.includes(key)
@@ -65,7 +66,7 @@ export function PaymentGatewayPanel({ invoiceId, onPaid }: {
     const timer = window.setTimeout(() => setNow(Date.now()), Math.max(0, nextExpiry - Date.now()) + 10)
     return () => window.clearTimeout(timer)
   }, [nextExpiry])
-  const blocking = list.some(attempt => attempt.status === 'PENDING' || attempt.status === 'REQUIRES_REVIEW')
+  const blocking = list.some(attempt => isUnresolvedPayment(attempt.status))
   const invoice = useQuery({
     queryKey: invoiceKey,
     queryFn: ({ signal }) => getInvoiceById(invoiceId, signal),
@@ -76,6 +77,7 @@ export function PaymentGatewayPanel({ invoiceId, onPaid }: {
   const reconcile = useMutation({
     mutationFn: reconcilePaymentAttempt,
     onSettled: () => {
+      flight.current = false
       void queryClient.invalidateQueries({ queryKey: attemptsKey })
       void queryClient.invalidateQueries({ queryKey: invoiceKey })
     },
@@ -85,24 +87,37 @@ export function PaymentGatewayPanel({ invoiceId, onPaid }: {
     if (terminalSnapshot) void queryClient.invalidateQueries({ queryKey: ['private', employee.id, 'invoice-detail', invoiceId] })
   }, [terminalSnapshot, invoiceId, employee.id, queryClient])
   useEffect(() => {
-    if (invoice.data?.paymentStatus === 'PAID' && !notified.current) {
+    if (!invoice.isError && invoice.data?.paymentStatus === 'PAID' && !notified.current) {
       notified.current = true
       void queryClient.invalidateQueries({ queryKey: ['private', employee.id, 'invoices'] })
       onPaid?.(invoice.data)
     }
-  }, [invoice.data, onPaid, employee.id, queryClient])
+  }, [invoice.data, invoice.isError, onPaid, employee.id, queryClient])
+
+  const unresolvedSubmission = submitted && (create.isPending || !invoice.isSuccess || invoice.isError || invoice.data.paymentStatus === 'UNPAID')
+    ? submitted : null
+  useEffect(() => {
+    onLockChange?.(create.isPending || reconcile.isPending || Boolean(unresolvedSubmission))
+    return () => onLockChange?.(false)
+  }, [create.isPending, reconcile.isPending, unresolvedSubmission, onLockChange])
 
   const busy = create.isPending || reconcile.isPending
   const failed = create.error ?? reconcile.error ?? attempts.error ?? invoice.error ?? providers.error
   const available = can('/payment-attempts_create') && can('/payment-attempts_read') &&
     invoice.data?.paymentStatus === 'UNPAID' && !attempts.isPending && !attempts.isError && !invoice.isError &&
+    !attempts.isFetching && !invoice.isFetching && !providers.isFetching &&
     Boolean(selectedProvider) && !providers.isError
   function handleCreate() {
-    if (flight.current || !available || (blocking && !submitted)) return
+    if (flight.current || reconcile.isPending || !available || (blocking && !unresolvedSubmission)) return
     flight.current = true
-    const payload = submitted ?? { provider: selectedProvider!, locale: 'vn', closeSessionAfterPayment: true }
+    const payload = unresolvedSubmission ?? { provider: selectedProvider!, locale: 'vn', closeSessionAfterPayment: true }
     setSubmitted(payload)
     create.mutate(payload)
+  }
+  function handleReconcile(attemptId: string) {
+    if (flight.current || busy) return
+    flight.current = true
+    reconcile.mutate(attemptId)
   }
 
   return <section className="space-y-4" aria-label="Cổng thanh toán">
@@ -118,19 +133,19 @@ export function PaymentGatewayPanel({ invoiceId, onPaid }: {
         {invoice.data && <p className="text-sm">Tổng hóa đơn: <strong>{formatPrice(invoice.data.totalAmount)}</strong> · <PaymentStatusBadge status={invoice.data.paymentStatus} /></p>}
         {failed && <p role="alert" className="break-words text-sm text-destructive">{errorMessage(failed)}</p>}
         {providers.data && !selectedProvider && <p role="status" className="text-sm">Chưa cấu hình cổng thanh toán. Liên hệ quản lý hoặc chọn thu tiền tại quầy.</p>}
-        {submitted && !create.isPending && <p role="status" className="text-sm">Chưa xác nhận được lần tạo phiên. Kiểm tra lại cùng yêu cầu, không đổi cổng thanh toán.</p>}
-        {blocking && !submitted && <p role="status" className="text-sm">Có phiên đang chờ hoặc cần đối soát. Kiểm tra kết quả trước khi thu tiền bằng cách khác.</p>}
+        {unresolvedSubmission && !create.isPending && <p role="status" className="text-sm">Chưa xác nhận được lần tạo phiên. Kiểm tra lại cùng yêu cầu, không đổi cổng thanh toán.</p>}
+        {blocking && !unresolvedSubmission && <p role="status" className="text-sm">Có phiên đang chờ hoặc cần đối soát. Kiểm tra kết quả trước khi thu tiền bằng cách khác.</p>}
         {can('/payment-attempts_create') && invoice.data?.paymentStatus === 'UNPAID' && <div className="space-y-3 border-y border-border py-4">
           <div className="grid grid-cols-2 gap-2" role="group" aria-label="Chọn cổng thanh toán">
             {(['VNPAY', 'MOMO'] as const).map(value => <Button key={value} type="button"
               variant={selectedProvider === value ? 'default' : 'outline'} aria-pressed={selectedProvider === value}
-              disabled={busy || Boolean(submitted) || blocking || !providers.data?.some(item => item.provider === value && item.configured)} onClick={() => setProvider(value)}>
+              disabled={busy || Boolean(unresolvedSubmission) || blocking || !providers.data?.some(item => item.provider === value && item.configured)} onClick={() => setProvider(value)}>
               {value === 'VNPAY' ? <CreditCard size={16} aria-hidden="true" /> : <QrCode size={16} aria-hidden="true" />}{value === 'VNPAY' ? 'VNPay' : 'MoMo'}
             </Button>)}
           </div>
           <Button type="button" className="w-full" isLoading={create.isPending}
-            disabled={!available || reconcile.isPending || (blocking && !submitted)} onClick={handleCreate}>
-            <QrCode size={16} aria-hidden="true" />{submitted ? 'Kiểm tra lại lần tạo phiên' : selectedProvider ? `Tạo phiên ${selectedProvider}` : 'Tạo phiên thanh toán'}
+            disabled={!available || reconcile.isPending || (blocking && !unresolvedSubmission)} onClick={handleCreate}>
+            <QrCode size={16} aria-hidden="true" />{unresolvedSubmission ? 'Kiểm tra lại lần tạo phiên' : selectedProvider ? `Tạo phiên ${selectedProvider}` : 'Tạo phiên thanh toán'}
           </Button>
         </div>}
         <h4 className="text-sm font-semibold">Các phiên thanh toán</h4>
@@ -138,7 +153,8 @@ export function PaymentGatewayPanel({ invoiceId, onPaid }: {
         {!attempts.isPending && !attempts.isError && !list.length && <p className="text-sm text-muted-foreground">Chưa có phiên thanh toán.</p>}
         {list.map(attempt => {
           const link = attempt.paymentUrl ?? (create.data?.id === attempt.id ? create.data.paymentUrl : null)
-          const linkActive = attempt.status === 'PENDING' && Date.parse(attempt.expiresAt) > now
+          const linkActive = attempt.status === 'PENDING' && Date.parse(attempt.expiresAt) > now &&
+            !attempts.isError && !invoice.isError && invoice.data?.paymentStatus === 'UNPAID'
           return <div key={attempt.id} className="space-y-3 border-b border-border py-3 text-sm">
             <div className="flex flex-wrap items-center gap-2"><strong>{attempt.provider}</strong><AttemptStatusBadge status={attempt.status} /></div>
             <p className="break-all font-mono text-xs text-muted-foreground">{attempt.merchantReference}</p>
@@ -149,9 +165,10 @@ export function PaymentGatewayPanel({ invoiceId, onPaid }: {
                 <ExternalLink size={16} aria-hidden="true" />Mở thanh toán {attempt.provider}
               </a>
             </>}
-            {attempt.status === 'PENDING' && !linkActive && <p role="status">Liên kết đã hết hạn. Cần kiểm tra kết quả trước khi tạo phiên mới.</p>}
-            {can('/payment-reconciliation_manage') && (attempt.status === 'PENDING' || attempt.status === 'REQUIRES_REVIEW') &&
-              <Button variant="outline" size="sm" disabled={busy} onClick={() => reconcile.mutate(attempt.id)}>
+            {((attempt.status === 'PENDING' && Date.parse(attempt.expiresAt) <= now) || attempt.status === 'EXPIRED') &&
+              <p role="status">Liên kết đã hết hạn. Cần kiểm tra kết quả trước khi tạo phiên mới.</p>}
+            {can('/payment-reconciliation_manage') && isUnresolvedPayment(attempt.status) &&
+              <Button variant="outline" size="sm" disabled={busy} onClick={() => handleReconcile(attempt.id)}>
                 <RefreshCw size={16} aria-hidden="true" />Đối soát {attempt.provider}
               </Button>}
           </div>

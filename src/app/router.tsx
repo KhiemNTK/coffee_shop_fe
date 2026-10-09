@@ -126,6 +126,8 @@ export function AppRouter() {
               }
             >
               <Route path="pos" element={<PosTablesPage />} />
+            </Route>
+            <Route element={<PermissionGate permission="/orders_sessions_read" />}>
               <Route path="pos/sessions/:sessionId" element={<PosSessionPage />} />
             </Route>
             <Route

@@ -75,6 +75,8 @@ const mockOpenShift = {
   },
 }
 
+const mockMovement = { movement: { id: 'movement', type: 'INCOME', amount: '50000' }, fundBalance: '1550000', expenseRequest: null }
+
 const mockClosedShift = {
   id: 'shift-closed-001',
   openedAt: '2026-10-01T08:00:00.000Z',
@@ -241,7 +243,7 @@ test.describe('Cash & Shifts Management Feature (Slice 1)', () => {
       } else if (url.includes('/current/close')) {
         await route.fulfill({ json: envelope(mockClosedShift) })
       } else if (url.includes('/current/transactions')) {
-        await route.fulfill({ json: envelope({ success: true }) })
+        await route.fulfill({ json: envelope(mockMovement) })
       } else if (url.includes('/current')) {
         await route.fulfill({ json: envelope(mockOpenShift) })
       } else if (url.includes('/expense-requests')) {
@@ -336,7 +338,7 @@ test.describe('Cash & Shifts Management Feature (Slice 1)', () => {
     await page.getByPlaceholder('Ví dụ: Mua đá lạnh khẩn cấp...').fill('Nộp thêm tiền lẻ')
     await page.getByRole('button', { name: 'Lưu giao dịch' }).click({ force: true })
 
-    await expect(page.getByText('Đã ghi nhận giao dịch tiền mặt vào ca!')).toBeVisible()
+    await expect(page.getByText('Đã tiếp nhận yêu cầu thu / chi tiền mặt!')).toBeVisible()
   })
 
   test('TC-CS-03: Closes shift with reported cash count', async ({ page }) => {
@@ -475,7 +477,96 @@ test.describe('Cash & Shifts Management Feature (Slice 1)', () => {
     await page.getByRole('button', { name: /Lịch sử ca thu ngân/i }).click({ force: true })
 
     await expect(page.getByText('Nhật ký Lịch sử Toàn bộ Ca làm việc')).toBeVisible()
-    await expect(page.getByText('Quản lý Trưởng Ca').first()).toBeVisible()
+    await expect(page.getByRole('table').getByRole('cell', { name: 'Quản lý Trưởng Ca', exact: true }).first()).toBeVisible()
     await expect(page.getByText(/Khớp/)).toBeVisible()
+  })
+
+  for (const kind of ['open', 'close', 'transactions'] as const) {
+    test(`uncertain ${kind} survives logout cleanup and reload with the same command`, async ({ page }) => {
+      const bodies: Record<string, unknown>[] = []
+      if (kind === 'open') await page.route('**/api/v1/cashier-shifts/current', route => route.fulfill({ status: 404, json: { message: 'No shift' } }))
+      await page.route(`**/api/v1/cashier-shifts/${kind === 'open' ? 'open' : `current/${kind}`}`, route => {
+        bodies.push(route.request().postDataJSON())
+        return bodies.length === 1 ? route.abort() : route.fulfill({ json: envelope(kind === 'transactions' ? mockMovement : kind === 'open' ? mockOpenShift : mockClosedShift) })
+      })
+      await page.goto('/staff/shifts')
+      if (kind === 'transactions') {
+        await page.getByRole('button', { name: 'Thêm giao dịch' }).click()
+        await page.getByPlaceholder('Ví dụ: 100000').fill('50000')
+        await page.getByPlaceholder('Ví dụ: Mua đá lạnh khẩn cấp...').fill('Frozen movement')
+        await page.getByRole('button', { name: 'Lưu giao dịch' }).click()
+      } else if (kind === 'close') {
+        await page.getByPlaceholder('Ví dụ: 2500000').fill('1450000')
+        await page.getByRole('button', { name: 'Xác nhận đóng ca & Chốt sổ' }).click()
+      } else {
+        await page.locator('main select').selectOption('f-001')
+        await page.getByRole('button', { name: 'Xác nhận mở ca thu ngân' }).click()
+      }
+      const recovery = page.getByRole('region', { name: 'Phục hồi giao dịch ca' })
+      await expect(recovery).toBeVisible()
+      await expect(recovery.getByRole('status')).toContainText('Chưa xác nhận được')
+      expect(bodies).toHaveLength(1)
+      await page.evaluate(async () => {
+        const path = '/src/shared/api/idempotency.ts'
+        const { clearPrivatePendingOperations } = await import(/* @vite-ignore */ path)
+        clearPrivatePendingOperations()
+      })
+      await page.reload()
+      await expect(recovery).toBeVisible()
+      await expect(page.getByPlaceholder('Ví dụ: 100000')).toHaveCount(0)
+      await recovery.getByRole('button', { name: 'Kiểm tra lại cùng yêu cầu' }).click()
+      await expect.poll(() => bodies.length).toBe(2)
+      expect(bodies[1]).toEqual(bodies[0])
+      expect(bodies[0]?.idempotencyKey).toBeTruthy()
+      await expect(recovery).toHaveCount(0)
+    })
+  }
+
+  test('failed current-shift reads never expose a fresh opening command', async ({ page }) => {
+    await page.route('**/api/v1/cashier-shifts/current', route => route.fulfill({ status: 503, json: { message: 'Unavailable' } }))
+    await page.goto('/staff/shifts')
+    await expect(page.getByRole('button', { name: 'Kiểm tra lại ca' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Xác nhận mở ca thu ngân' })).toHaveCount(0)
+  })
+
+  test('a rejected retry does not clear a previously uncertain cash command', async ({ page }) => {
+    let writes = 0
+    await page.route('**/api/v1/cashier-shifts/current/transactions', route => {
+      writes++
+      return writes === 1 ? route.abort() : route.fulfill({ status: 403, json: { message: 'Permission revoked' } })
+    })
+    await page.goto('/staff/shifts')
+    await page.getByRole('button', { name: 'Thêm giao dịch' }).click()
+    await page.getByPlaceholder('Ví dụ: 100000').fill('50000')
+    await page.getByPlaceholder('Ví dụ: Mua đá lạnh khẩn cấp...').fill('Uncertain movement')
+    await page.getByRole('button', { name: 'Lưu giao dịch' }).click()
+    const recovery = page.getByRole('region', { name: 'Phục hồi giao dịch ca' })
+    await recovery.getByRole('button', { name: 'Kiểm tra lại cùng yêu cầu' }).click()
+    await expect.poll(() => writes).toBe(2)
+    await page.reload()
+    await expect(recovery).toContainText('Uncertain movement')
+    await expect(page.getByPlaceholder('Ví dụ: 100000')).toHaveCount(0)
+  })
+
+  test('malformed movement success keeps the recovery command rather than claiming it was posted', async ({ page }) => {
+    await page.route('**/api/v1/cashier-shifts/current/transactions', route => route.fulfill({ json: envelope({ success: true }) }))
+    await page.goto('/staff/shifts')
+    await page.getByRole('button', { name: 'Thêm giao dịch' }).click()
+    await page.getByPlaceholder('Ví dụ: 100000').fill('50000')
+    await page.getByPlaceholder('Ví dụ: Mua đá lạnh khẩn cấp...').fill('Invalid response')
+    await page.getByRole('button', { name: 'Lưu giao dịch' }).click()
+    await expect(page.getByRole('region', { name: 'Phục hồi giao dịch ca' })).toContainText('Phản hồi không hợp lệ')
+    await expect(page.getByText('Đã tiếp nhận yêu cầu thu / chi tiền mặt!')).toHaveCount(0)
+  })
+
+  test('pending expense approval does not claim that the cash fund was debited', async ({ page }) => {
+    await page.route('**/api/v1/cashier-shifts/current/transactions', route => route.fulfill({ json: envelope({ movement: null, fundBalance: '1500000', expenseRequest: mockExpenseRequests[0] }) }))
+    await page.goto('/staff/shifts')
+    await page.getByRole('button', { name: 'Thêm giao dịch' }).click()
+    await page.getByPlaceholder('Ví dụ: 100000').fill('150000')
+    await page.getByRole('button', { name: /EXPENSE/ }).click()
+    await page.getByPlaceholder('Ví dụ: Mua đá lạnh khẩn cấp...').fill(mockExpenseRequests[0]!.description)
+    await page.getByRole('button', { name: 'Lưu giao dịch' }).click()
+    await expect(page.getByText('Đã gửi phiếu chi chờ phê duyệt; chưa trừ quỹ.')).toBeVisible()
   })
 })

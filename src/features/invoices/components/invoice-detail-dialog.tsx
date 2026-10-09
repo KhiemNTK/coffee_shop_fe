@@ -12,10 +12,12 @@ import {
   CheckCircle2,
   Coins,
   CreditCard,
+  Printer,
   QrCode,
   Receipt,
   RefreshCw,
 } from 'lucide-react'
+import { printingApi } from '../../printing/printing.api'
 import {
   getInvoiceById,
   voidInvoice,
@@ -28,6 +30,9 @@ import { formatLineAmount } from '../../../shared/lib/format'
 import { ApiError, errorMessage } from '../../../shared/api/client'
 import { Button, Dialog, Input, cn } from '../../../shared/ui'
 import { PaymentStatusBadge } from './invoice-badges'
+import { isUnresolvedPayment } from '../payment-status'
+import { moneySchema } from '../../menu/menu.api'
+import { decimalAmount, minorAmount } from '../../../shared/lib/money'
 
 interface InvoiceDetailDialogProps {
   invoiceId: string
@@ -53,6 +58,26 @@ export function InvoiceDetailDialog({
   const [submittedManual, setSubmittedManual] =
     useState<UpdateInvoicePaymentPayload | null>(null)
   const manualFlight = useRef(false)
+  const voidFlight = useRef(false)
+  const [refundLocked, setRefundLocked] = useState(false)
+  const [gatewayLocked, setGatewayLocked] = useState(false)
+  const [recoveryRequired, setRecoveryRequired] = useState(false)
+
+  // In lại hóa đơn (Reprint receipt)
+  const [reprintOpen, setReprintOpen] = useState(false)
+  const [reprintReason, setReprintReason] = useState('Khách hàng yêu cầu in lại hóa đơn')
+  const [reprintSuccess, setReprintSuccess] = useState<string | null>(null)
+
+  const reprintMutation = useMutation({
+    mutationFn: (reason: string) => printingApi.reprintReceipt(invoiceId, { reason }),
+    onSuccess: (job) => {
+      setReprintSuccess(`Đã tạo lệnh in lại hóa đơn #${job.id.slice(0, 8)} thành công.`)
+      setReprintOpen(false)
+    },
+    onError: (err) => {
+      setActionError(errorMessage(err))
+    },
+  })
 
   // Fetch invoice detail
   const invoiceQuery = useQuery({
@@ -104,22 +129,46 @@ export function InvoiceDetailDialog({
     },
     onError: (err) => {
       setActionError(errorMessage(err))
+      setVoidConfirmOpen(false)
+      setRecoveryRequired(true)
     },
+    onSettled: () => { voidFlight.current = false },
   })
 
   const inv = invoiceQuery.data
   const unresolvedOnline =
     attemptsQuery.data?.list.some(
-      (attempt) =>
-        attempt.status === 'PENDING' || attempt.status === 'REQUIRES_REVIEW',
+      (attempt) => isUnresolvedPayment(attempt.status),
     ) ?? false
   const paymentLocked =
-    (updatePaymentMutation.isPending || Boolean(submittedManual)) &&
-    inv?.paymentStatus !== 'PAID'
+    ((updatePaymentMutation.isPending || Boolean(submittedManual)) &&
+      (!inv || inv.paymentStatus === 'UNPAID' || invoiceQuery.isError)) ||
+    refundLocked || gatewayLocked || voidMutation.isPending
   const manualBlocked =
+    invoiceQuery.isPending || invoiceQuery.isError || invoiceQuery.isFetching ||
+    recoveryRequired || voidMutation.isPending || refundLocked || gatewayLocked ||
     unresolvedOnline ||
     (can('/payment-attempts_read') &&
-      (attemptsQuery.isPending || attemptsQuery.isError))
+      (attemptsQuery.isPending || attemptsQuery.isError || attemptsQuery.isFetching))
+  const parsedTendered = moneySchema.safeParse(amountTendered.trim())
+  const tenderedMinor = parsedTendered.success ? minorAmount(parsedTendered.data) : null
+  const totalMinor = inv ? minorAmount(inv.totalAmount) : null
+  const tenderedEnough = tenderedMinor !== null && totalMinor !== null && tenderedMinor >= totalMinor
+
+  async function refreshStatus() {
+    const result = await invoiceQuery.refetch()
+    if (result.isError) return
+    if (submittedManual && result.data?.paymentStatus !== 'UNPAID') {
+      setSubmittedManual(null)
+      setActiveTab('items')
+    }
+    if (can('/payment-attempts_read')) {
+      const attempts = await attemptsQuery.refetch()
+      if (attempts.isError) return
+    }
+    setRecoveryRequired(false)
+    setActionError(null)
+  }
   function confirmManualPayment() {
     if (
       manualFlight.current ||
@@ -128,10 +177,14 @@ export function InvoiceDetailDialog({
       !can('/invoices_update')
     )
       return
+    if (!submittedManual && manualMethod === 'CASH' && !tenderedEnough) {
+      setActionError('Số tiền khách đưa phải hợp lệ và đủ thanh toán.')
+      return
+    }
     const payload: UpdateInvoicePaymentPayload = submittedManual ?? {
       paymentStatus: 'PAID',
       paymentMethod: manualMethod,
-      amountTendered: amountTendered.trim() || undefined,
+      amountTendered: manualMethod === 'CASH' ? amountTendered.trim() : undefined,
       closeSessionAfterPayment: true,
     }
     manualFlight.current = true
@@ -145,11 +198,11 @@ export function InvoiceDetailDialog({
       onClose={() => {
         if (
           !manualFlight.current &&
-          (!submittedManual || inv?.paymentStatus === 'PAID')
+          !voidFlight.current && !paymentLocked
         )
           onClose()
       }}
-      showCloseButton={!paymentLocked}
+      showCloseButton={false}
       maxWidth="lg"
       label="Chi tiết hóa đơn"
     >
@@ -219,6 +272,7 @@ export function InvoiceDetailDialog({
                 {can('/invoices_update') && (
                   <button
                     type="button"
+                    disabled={paymentLocked}
                     onClick={() => setActiveTab('pay_manual')}
                     className={cn(
                       'px-4 py-2.5 text-xs font-semibold border-b-2 transition-colors flex items-center gap-1.5',
@@ -237,6 +291,11 @@ export function InvoiceDetailDialog({
 
         {/* Modal Body */}
         <div className="p-5 overflow-y-auto space-y-6 flex-1">
+          <Button type="button" variant="outline" size="sm"
+            disabled={invoiceQuery.isFetching || attemptsQuery.isFetching || updatePaymentMutation.isPending || voidMutation.isPending || refundLocked || gatewayLocked}
+            onClick={() => void refreshStatus()}>
+            <RefreshCw size={16} aria-hidden="true" />Kiểm tra trạng thái hóa đơn
+          </Button>
           {invoiceQuery.isError && (
             <p role="alert" className="text-sm text-destructive">
               {errorMessage(invoiceQuery.error)}
@@ -254,6 +313,25 @@ export function InvoiceDetailDialog({
             >
               <AlertCircle className="h-4 w-4 shrink-0" />
               <span>{actionError}</span>
+            </div>
+          )}
+
+          {reprintSuccess && (
+            <div
+              role="status"
+              className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-800 flex items-center justify-between"
+            >
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
+                <span>{reprintSuccess}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setReprintSuccess(null)}
+                className="text-[11px] text-emerald-700 hover:underline cursor-pointer"
+              >
+                Đóng
+              </button>
             </div>
           )}
 
@@ -343,12 +421,14 @@ export function InvoiceDetailDialog({
           )}
 
           {inv && activeTab === 'gateway' && (
-            <PaymentGatewayPanel invoiceId={invoiceId} />
+            <PaymentGatewayPanel invoiceId={invoiceId} onLockChange={setGatewayLocked} />
           )}
 
           {inv && (
             <RefundsPanel
               attempts={attemptsQuery.data?.list ?? []}
+              invoiceStatus={inv.paymentStatus}
+              onLockChange={setRefundLocked}
               onUpdated={() => {
                 void invoiceQuery.refetch()
                 onUpdated()
@@ -416,19 +496,16 @@ export function InvoiceDetailDialog({
                       id="invoice-amount-tendered"
                       disabled={paymentLocked || manualBlocked}
                       type="number"
+                      min={inv.totalAmount}
+                      step="0.01"
                       placeholder={`VD: ${inv.totalAmount}`}
                       value={amountTendered}
                       onChange={(e) => setAmountTendered(e.target.value)}
                     />
-                    {amountTendered &&
-                      Number(amountTendered) >= Number(inv.totalAmount) && (
+                    {tenderedEnough && (
                         <p className="text-xs text-emerald-800 font-semibold mt-1">
                           Tiền thối lại:{' '}
-                          {formatPrice(
-                            String(
-                              Number(amountTendered) - Number(inv.totalAmount),
-                            ),
-                          )}
+                          {formatPrice(decimalAmount(tenderedMinor - totalMinor))}
                         </p>
                       )}
                   </div>
@@ -439,7 +516,7 @@ export function InvoiceDetailDialog({
                   className="w-full font-bold mt-2"
                   onClick={confirmManualPayment}
                   isLoading={updatePaymentMutation.isPending}
-                  disabled={!can('/invoices_update') || manualBlocked}
+                  disabled={!can('/invoices_update') || manualBlocked || (!submittedManual && manualMethod === 'CASH' && !tenderedEnough)}
                 >
                   {submittedManual
                     ? 'Kiểm tra lại lần thu tiền'
@@ -452,7 +529,7 @@ export function InvoiceDetailDialog({
 
         {/* Modal Footer */}
         <div className="p-4 border-t border-border bg-stone-50/50 flex items-center justify-between">
-          <div>
+          <div className="flex items-center gap-2">
             {inv?.paymentStatus === 'UNPAID' && can('/invoices_update') && (
               <Button
                 type="button"
@@ -460,11 +537,28 @@ export function InvoiceDetailDialog({
                 size="sm"
                 disabled={paymentLocked || manualBlocked}
                 onClick={() => setVoidConfirmOpen(true)}
-                className="gap-1.5 text-xs font-semibold"
+                className="gap-1.5 text-xs font-semibold cursor-pointer"
               >
                 <Ban className="h-3.5 w-3.5" /> Hủy hóa đơn
               </Button>
             )}
+
+            {(inv?.paymentStatus === 'PAID' || inv?.paymentStatus === 'PARTIALLY_REFUNDED') &&
+              can('/receipts_reprint') && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setActionError(null)
+                    setReprintSuccess(null)
+                    setReprintOpen(true)
+                  }}
+                  className="gap-1.5 text-xs font-semibold cursor-pointer"
+                >
+                  <Printer className="h-3.5 w-3.5 text-primary" /> In lại hóa đơn
+                </Button>
+              )}
           </div>
 
           <Button
@@ -482,7 +576,8 @@ export function InvoiceDetailDialog({
       {/* Confirmation Dialog to void invoice */}
       <Dialog
         open={voidConfirmOpen}
-        onClose={() => setVoidConfirmOpen(false)}
+        onClose={() => { if (!voidFlight.current) setVoidConfirmOpen(false) }}
+        showCloseButton={!voidMutation.isPending}
         maxWidth="sm"
       >
         <div className="p-6 space-y-4">
@@ -498,6 +593,7 @@ export function InvoiceDetailDialog({
               type="button"
               variant="outline"
               size="sm"
+              disabled={voidMutation.isPending}
               onClick={() => setVoidConfirmOpen(false)}
             >
               Quay lại
@@ -506,13 +602,80 @@ export function InvoiceDetailDialog({
               type="button"
               variant="destructive"
               size="sm"
-              onClick={() => voidMutation.mutate()}
+              disabled={manualBlocked || inv?.paymentStatus !== 'UNPAID'}
+              onClick={() => {
+                if (voidFlight.current || manualFlight.current || manualBlocked || inv?.paymentStatus !== 'UNPAID') return
+                voidFlight.current = true
+                voidMutation.mutate()
+              }}
               isLoading={voidMutation.isPending}
             >
               Xác nhận hủy
             </Button>
           </div>
         </div>
+      </Dialog>
+
+      {/* Confirmation Dialog to reprint receipt */}
+      <Dialog
+        open={reprintOpen}
+        onClose={() => { if (!reprintMutation.isPending) setReprintOpen(false) }}
+        showCloseButton={!reprintMutation.isPending}
+        maxWidth="sm"
+      >
+        <form
+          onSubmit={(e) => {
+            e.preventDefault()
+            if (reprintReason.trim().length >= 3) {
+              reprintMutation.mutate(reprintReason.trim())
+            }
+          }}
+          className="p-6 space-y-4"
+        >
+          <div className="flex items-center gap-2.5">
+            <Printer className="h-5 w-5 text-primary" />
+            <h3 className="text-lg font-bold text-foreground">In lại hóa đơn</h3>
+          </div>
+          <p className="text-sm text-muted-foreground">
+            Lệnh in lại phiếu thu cho hóa đơn #{inv?.invoiceNumber} sẽ được gửi vào hàng đợi của thiết bị in mặc định.
+          </p>
+          <div className="space-y-1.5">
+            <label htmlFor="reprintReason" className="text-xs font-semibold text-foreground">
+              Lý do in lại <span className="text-destructive">*</span>
+            </label>
+            <Input
+              id="reprintReason"
+              type="text"
+              required
+              minLength={3}
+              maxLength={255}
+              value={reprintReason}
+              onChange={(e) => setReprintReason(e.target.value)}
+              placeholder="VD: Khách làm mất bill, yêu cầu in lại"
+              disabled={reprintMutation.isPending}
+            />
+          </div>
+          <div className="flex items-center justify-end gap-2.5 pt-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={reprintMutation.isPending}
+              onClick={() => setReprintOpen(false)}
+            >
+              Hủy
+            </Button>
+            <Button
+              type="submit"
+              size="sm"
+              disabled={reprintReason.trim().length < 3 || reprintMutation.isPending}
+              isLoading={reprintMutation.isPending}
+              className="gap-1.5 font-bold cursor-pointer"
+            >
+              <Printer className="h-4 w-4" /> Xác nhận in lại
+            </Button>
+          </div>
+        </form>
       </Dialog>
     </Dialog>
   )

@@ -1,9 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
-import {
-  defaultMockAdminAuth,
-  defaultMockAdminEmployee,
-  envelope,
-} from './helpers.js'
+import { defaultMockAdminAuth, defaultMockAdminEmployee, envelope } from './helpers.js'
 
 const id = '70000000-0000-4000-8000-000000000001'
 const itemId = '70000000-0000-4000-8000-000000000002'
@@ -15,9 +11,7 @@ const paged = (list: unknown[], page = 1, totalPages = 1) => ({
   totalPages,
   currentPage: page,
 })
-const options = [
-  { id: otherId, groupName: 'Size', name: 'Large', priceDelta: '5000' },
-]
+const options = [{ id: otherId, groupName: 'Size', name: 'Large', priceDelta: '5000' }]
 async function staff(page: Page, permissions: string[]) {
   await page.route('**/api/v1/auth/me', (route) =>
     route.fulfill({ json: envelope(defaultMockAdminEmployee) }),
@@ -27,12 +21,8 @@ async function staff(page: Page, permissions: string[]) {
   )
 }
 async function pos(page: Page) {
-  await page.route('**/api/v1/dining-tables', (route) =>
-    route.fulfill({ json: envelope([]) }),
-  )
-  await page.route('**/api/v1/orders/sessions', (route) =>
-    route.fulfill({ json: envelope([]) }),
-  )
+  await page.route('**/api/v1/dining-tables', (route) => route.fulfill({ json: envelope([]) }))
+  await page.route('**/api/v1/orders/sessions', (route) => route.fulfill({ json: envelope([]) }))
   await page.route('**/api/v1/orders/takeaway/handoff?*', (route) =>
     route.fulfill({ json: envelope(paged([])) }),
   )
@@ -112,7 +102,10 @@ async function pos(page: Page) {
             endDate: date,
             discountType: 'PERCENTAGE',
             discountValue: '10',
+            maxDiscount: null,
             status: 'ACTIVE',
+            usageCount: 0,
+            deletedAt: null,
             createdAt: date,
             updatedAt: date,
           },
@@ -193,11 +186,9 @@ test('KDS uses current table, saved options and paginated tickets; online-ready 
   await expect.poll(() => status).toBe('SERVED')
   await page.getByRole('button', { name: 'Trang sau' }).click()
   await expect(page.getByText('KDS-2')).toBeVisible()
-  expect(
-    await page.evaluate(
-      () => document.documentElement.scrollWidth <= window.innerWidth,
-    ),
-  ).toBe(true)
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
+    true,
+  )
   await page.screenshot({ path: info.outputPath('kds-options-pages.png') })
 })
 
@@ -239,22 +230,55 @@ test('partial checkout and promotion use a server quote and selected line IDs', 
   const dialog = page.getByRole('dialog')
   await dialog.getByRole('checkbox').nth(1).uncheck()
   await dialog.getByLabel('Khuyến mãi').selectOption(id)
-  await expect(
-    dialog.getByText('31.500', { exact: false }).first(),
-  ).toBeVisible()
-  await expect(
-    dialog.getByRole('button', { name: 'Xác nhận thanh toán tiền mặt' }),
-  ).toBeEnabled()
+  await expect(dialog.getByText('31.500', { exact: false }).first()).toBeVisible()
+  await expect(dialog.getByRole('button', { name: 'Xác nhận thanh toán tiền mặt' })).toBeEnabled()
   await page.screenshot({
     path: info.outputPath('partial-promotion-quote.png'),
   })
-  await dialog
-    .getByRole('button', { name: 'Xác nhận thanh toán tiền mặt' })
-    .click()
-  await expect
-    .poll(() => checkout)
-    .toMatchObject({ orderItemIds: [itemId], promotionId: id })
+  await dialog.getByRole('button', { name: 'Xác nhận thanh toán tiền mặt' }).click()
+  await expect.poll(() => checkout).toMatchObject({ orderItemIds: [itemId], promotionId: id })
   await expect(dialog.getByText('PARTIAL-001')).toBeVisible()
+})
+
+test('an uncertain promoted checkout freezes its quote and retries the same intent', async ({
+  page,
+}) => {
+  await pos(page)
+  let quotes = 0
+  await page.route('**/api/v1/invoices/quote', (route) => {
+    quotes++
+    return route.fulfill({
+      json: envelope({
+        orderItemIds: route.request().postDataJSON().orderItemIds,
+        subTotal: '55000',
+        discountAmount: '5500',
+        taxAmount: '0',
+        totalAmount: '49500',
+      }),
+    })
+  })
+  const writes: unknown[] = []
+  await page.route('**/api/v1/invoices/checkout', (route) => {
+    writes.push(route.request().postDataJSON())
+    return route.abort()
+  })
+  await page.getByRole('button', { name: /^Thanh toán \(/ }).click()
+  const dialog = page.getByRole('dialog')
+  await dialog.getByLabel('Khuyến mãi').selectOption(id)
+  await expect(dialog.getByRole('button', { name: 'Xác nhận thanh toán tiền mặt' })).toBeEnabled()
+  await dialog.getByRole('button', { name: 'Xác nhận thanh toán tiền mặt' }).click()
+  await expect(dialog.getByRole('alert')).toBeVisible()
+  const quoteCount = quotes
+  await page.evaluate(async (actorId) => {
+    const path = '/src/app/query-client.ts'
+    const { queryClient } = await import(/* @vite-ignore */ path)
+    await queryClient.invalidateQueries({ queryKey: ['private', actorId, 'pos-quote'] })
+  }, defaultMockAdminEmployee.id)
+  expect(quotes).toBe(quoteCount)
+  await expect(dialog.getByLabel('Khuyến mãi')).toBeDisabled()
+  await dialog.getByRole('button', { name: 'Kiểm tra lại thanh toán tiền mặt' }).click()
+  await expect.poll(() => writes.length).toBe(2)
+  expect(writes[1]).toEqual(writes[0])
 })
 
 test('a failed quote cannot enable partial payment', async ({ page }) => {
@@ -266,9 +290,7 @@ test('a failed quote cannot enable partial payment', async ({ page }) => {
   const dialog = page.getByRole('dialog')
   await dialog.getByRole('checkbox').nth(1).uncheck()
   await expect(dialog.getByRole('alert')).toBeVisible()
-  await expect(
-    dialog.getByRole('button', { name: 'Xác nhận thanh toán tiền mặt' }),
-  ).toBeDisabled()
+  await expect(dialog.getByRole('button', { name: 'Xác nhận thanh toán tiền mặt' })).toBeDisabled()
 })
 
 test('session cancellation needs confirmation and does not write on opening the dialog', async ({
@@ -295,12 +317,8 @@ test('walk-in handoff queue paginates and uses its dedicated confirmed command',
   await page.route('**/api/v1/cashier-shifts/current', (route) =>
     route.fulfill({ status: 404, json: { message: 'No shift' } }),
   )
-  await page.route('**/api/v1/dining-tables', (route) =>
-    route.fulfill({ json: envelope([]) }),
-  )
-  await page.route('**/api/v1/orders/sessions', (route) =>
-    route.fulfill({ json: envelope([]) }),
-  )
+  await page.route('**/api/v1/dining-tables', (route) => route.fulfill({ json: envelope([]) }))
+  await page.route('**/api/v1/orders/sessions', (route) => route.fulfill({ json: envelope([]) }))
   let handed = false
   await page.route('**/api/v1/orders/takeaway/handoff?*', (route) => {
     const p = Number(new URL(route.request().url()).searchParams.get('page'))
@@ -342,9 +360,7 @@ test('walk-in handoff queue paginates and uses its dedicated confirmed command',
   expect(handed).toBe(true)
 })
 
-test('shift history opens server reconciliation detail and paginates', async ({
-  page,
-}, info) => {
+test('shift history opens server reconciliation detail and paginates', async ({ page }, info) => {
   await staff(page, ['/cashier-shifts_read'])
   let fundReads = 0
   await page.route('**/api/v1/funds?*', (route) => {
@@ -398,24 +414,15 @@ test('shift history opens server reconciliation detail and paginates', async ({
   await page.screenshot({ path: info.outputPath('shift-detail.png') })
 })
 
-test('custom roles are created while system roles remain immutable', async ({
-  page,
-}) => {
-  await staff(page, [
-    '/roles_read',
-    '/roles_create',
-    '/roles_update',
-    '/roles_delete',
-  ])
+test('custom roles are created while system roles remain immutable', async ({ page }) => {
+  await staff(page, ['/roles_read', '/roles_create', '/roles_update', '/roles_delete'])
   let created: Record<string, unknown> | null = null
   await page.route('**/api/v1/roles?*', (route) =>
     route.fulfill({
       json: envelope(
         paged([
           { id, name: 'OWNER', isSystemRole: true },
-          ...(created
-            ? [{ id: otherId, ...created, isSystemRole: false }]
-            : []),
+          ...(created ? [{ id: otherId, ...created, isSystemRole: false }] : []),
         ]),
       ),
     }),
@@ -428,24 +435,16 @@ test('custom roles are created while system roles remain immutable', async ({
   })
   await page.goto('/staff/employees')
   await page.getByRole('button', { name: /Vai trò & Quyền hạn/ }).click()
-  await expect(
-    page.getByRole('button', { name: 'Sửa vai trò OWNER' }),
-  ).toHaveCount(0)
-  await expect(
-    page.getByRole('button', { name: 'Xóa vai trò OWNER' }),
-  ).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Sửa vai trò OWNER' })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Xóa vai trò OWNER' })).toHaveCount(0)
   await page.getByRole('button', { name: 'Thêm vai trò' }).click()
   await page.getByLabel('Tên vai trò').fill('Trưởng ca tối')
   await page.getByRole('button', { name: 'Lưu vai trò', exact: true }).click()
-  await expect(
-    page.getByRole('button', { name: 'Sửa vai trò Trưởng ca tối' }),
-  ).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Sửa vai trò Trưởng ca tối' })).toBeVisible()
   expect(created).toMatchObject({ name: 'Trưởng ca tối', description: '' })
 })
 
-test('employee assignment and malformed role-permission reads fail closed', async ({
-  page,
-}) => {
+test('employee assignment and malformed role-permission reads fail closed', async ({ page }) => {
   await staff(page, [
     '/employees_read',
     '/employees_roles_read',
@@ -476,32 +475,22 @@ test('employee assignment and malformed role-permission reads fail closed', asyn
   )
   await page.route('**/api/v1/permissions?*', (route) =>
     route.fulfill({
-      json: envelope(
-        paged([{ id, name: 'Read', key: '/orders_sessions_read' }]),
-      ),
+      json: envelope(paged([{ id, name: 'Read', key: '/orders_sessions_read' }])),
     }),
   )
   await page.goto('/staff/employees')
   await page.getByTitle('Phân quyền vai trò').click()
   await expect(page.getByRole('dialog').getByRole('alert')).toBeVisible()
-  await expect(
-    page.getByRole('button', { name: 'Lưu vai trò', exact: true }),
-  ).toBeDisabled()
+  await expect(page.getByRole('button', { name: 'Lưu vai trò', exact: true })).toBeDisabled()
   await page.keyboard.press('Escape')
   await page.getByRole('button', { name: /Vai trò & Quyền hạn/ }).click()
-  await expect(
-    page.getByRole('button', { name: 'Phân quyền', exact: true }),
-  ).toHaveCount(1)
+  await expect(page.getByRole('button', { name: 'Phân quyền', exact: true })).toHaveCount(1)
   await page.getByRole('button', { name: 'Phân quyền', exact: true }).click()
   await expect(page.getByRole('dialog').getByRole('alert')).toBeVisible()
-  await expect(
-    page.getByRole('button', { name: 'Lưu danh sách quyền' }),
-  ).toBeDisabled()
+  await expect(page.getByRole('button', { name: 'Lưu danh sách quyền' })).toBeDisabled()
 })
 
-test('station and inventory taxonomy forms post the actual backend fields', async ({
-  page,
-}) => {
+test('station and inventory taxonomy forms post the actual backend fields', async ({ page }) => {
   await staff(page, [
     '/kitchen-stations_read',
     '/kitchen-stations_manage',
@@ -546,16 +535,11 @@ test('station and inventory taxonomy forms post the actual backend fields', asyn
   await page.getByLabel('Danh mục kho').selectOption('units')
   await page.getByRole('button', { name: 'Thêm đơn vị' }).click()
   await page.getByRole('dialog').getByLabel('Tên', { exact: true }).fill('ml')
-  await page
-    .getByRole('dialog')
-    .getByRole('button', { name: 'Lưu', exact: true })
-    .click()
+  await page.getByRole('dialog').getByRole('button', { name: 'Lưu', exact: true }).click()
   await expect.poll(() => unit).toEqual({ name: 'ml' })
 })
 
-test('feedback history paginates independently and shows the summary', async ({
-  page,
-}, info) => {
+test('feedback history paginates independently and shows the summary', async ({ page }, info) => {
   await staff(page, ['/reports_read'])
   await page.route('**/api/v1/reports/**', (route) =>
     route.fulfill({ status: 503, json: { message: 'Unavailable' } }),
@@ -594,11 +578,9 @@ test('feedback history paginates independently and shows the summary', async ({
   await expect(page.getByText('20 đánh giá')).toBeVisible()
   await page.getByRole('button', { name: 'Trang sau' }).click()
   await expect(page.getByText('FB-2', { exact: false })).toBeVisible()
-  expect(
-    await page.evaluate(
-      () => document.documentElement.scrollWidth <= window.innerWidth,
-    ),
-  ).toBe(true)
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
+    true,
+  )
   await page.screenshot({ path: info.outputPath('feedback-report.png') })
 })
 

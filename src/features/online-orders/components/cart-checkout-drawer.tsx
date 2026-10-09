@@ -45,6 +45,7 @@ export function CartCheckoutDrawer({
   const [customizingItem, setCustomizingItem] = useState<MenuItem | null>(null)
   const [submittedPayload, setSubmittedPayload] = useState<CreateOnlineOrderPayload | null>(null)
   const flight = useRef(false)
+  const uncertain = useRef(false)
   const errorRef = useRef<HTMLDivElement>(null)
   const checkoutCart = [...cart, ...extras]
   const subtotal = cartSubtotal(checkoutCart)
@@ -92,8 +93,9 @@ export function CartCheckoutDrawer({
     },
     onError: (err) => {
       setFormError(errorMessage(err))
-      if (err instanceof ApiError && err.status >= 400 && err.status < 500 &&
+      if (!uncertain.current && err instanceof ApiError && err.status >= 400 && err.status < 500 &&
         err.status !== 408 && err.status !== 429) setSubmittedPayload(null)
+      else uncertain.current = true
     },
     onSettled: () => {
       setTurnstileToken('')
@@ -122,6 +124,7 @@ export function CartCheckoutDrawer({
       flight.current = true
       try {
         const pendingKey = await findPendingOperationKey('/online-orders/requests', { ...payload }, false)
+        uncertain.current ||= Boolean(pendingKey)
         if (pendingKey && pendingKey !== payload.clientRequestId) {
           setSubmittedPayload({ ...payload, clientRequestId: pendingKey })
           setFormError('Đã khôi phục lần gửi cùng nội dung chưa xác nhận. Bấm gửi lại để kiểm tra kết quả cũ.')

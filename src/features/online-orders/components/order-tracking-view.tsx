@@ -1,21 +1,13 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import { ReorderLink } from './reorder-link'
-import {
-  AlertCircle,
-  ArrowLeft,
-  Check,
-  CheckCircle2,
-  Clock,
-  Copy,
-  RefreshCw,
-} from 'lucide-react'
-import {
-  trackOnlineOrder,
-  cancelOnlineOrder,
-} from '../online-orders.api'
+import { AlertCircle, ArrowLeft, Check, CheckCircle2, Clock, Copy, RefreshCw } from 'lucide-react'
+import { trackOnlineOrder, cancelOnlineOrder } from '../online-orders.api'
 import { formatPrice } from '../../menu/menu.api'
 import { errorMessage } from '../../../shared/api/client'
+import { formatLineAmount } from '../../../shared/lib/format'
+import { formatStoreDateTime } from '../../../shared/lib/store-time'
+import { OrderOptions } from '../../../shared/ui/order-options'
 import { TelegramOrderLink } from './telegram-order-link'
 import {
   Badge,
@@ -53,6 +45,10 @@ export function OrderStatusBadge({
   if (fulfillmentStatus === 'COLLECTED') {
     return <Badge variant="success">Hoàn tất nhận hàng</Badge>
   }
+  if (fulfillmentStatus === 'NEEDS_REVIEW')
+    return <Badge variant="warning">Quán đang đối chiếu đơn</Badge>
+  if (fulfillmentStatus === 'PARTIALLY_READY')
+    return <Badge variant="default">Một phần món đã xong</Badge>
   return (
     <Badge variant="default" className="bg-sky-600 hover:bg-sky-700 text-white">
       Đã tiếp nhận - Đang pha chế
@@ -99,18 +95,13 @@ export function OrderStepTimeline({
       {steps.map((st, i) => (
         <div
           key={st.label}
-          className={cn(
-            'flex items-center',
-            i < steps.length - 1 ? 'flex-1' : 'flex-none',
-          )}
+          className={cn('flex items-center', i < steps.length - 1 ? 'flex-1' : 'flex-none')}
         >
           <div className="flex flex-col items-center gap-1.5">
             <div
               className={cn(
                 'h-6 w-6 rounded-full flex items-center justify-center text-[11px] font-bold transition-colors',
-                st.done
-                  ? 'bg-brand-800 text-white shadow-xs'
-                  : 'bg-stone-200 text-stone-500',
+                st.done ? 'bg-brand-800 text-white shadow-xs' : 'bg-stone-200 text-stone-500',
               )}
             >
               {st.done ? <Check className="h-3.5 w-3.5" /> : i + 1}
@@ -149,12 +140,16 @@ export function OrderTrackingView({
   const [copied, setCopied] = useState(false)
   const [cancelModalOpen, setCancelModalOpen] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
+  const [copyError, setCopyError] = useState(false)
+  const [reviewRequired, setReviewRequired] = useState(false)
+  const flight = useRef(false)
 
   // Query order status every 8 seconds
   const trackQuery = useQuery({
     queryKey: ['online-order', 'track', orderAuth.requestId],
-    queryFn: ({ signal }) =>
-      trackOnlineOrder(orderAuth.requestId, orderAuth.accessToken, signal),
+    gcTime: 0,
+    staleTime: 0,
+    queryFn: ({ signal }) => trackOnlineOrder(orderAuth.requestId, orderAuth.accessToken, signal),
     refetchInterval: (query) => {
       const status = query.state.data?.status
       const fulfillment = query.state.data?.fulfillmentStatus
@@ -171,24 +166,51 @@ export function OrderTrackingView({
   })
 
   const cancelMutation = useMutation({
-    mutationFn: () =>
-      cancelOnlineOrder(orderAuth.requestId, orderAuth.accessToken),
+    retry: false,
+    mutationFn: () => cancelOnlineOrder(orderAuth.requestId, orderAuth.accessToken),
     onSuccess: () => {
       setCancelModalOpen(false)
-      void trackQuery.refetch()
+      setActionError(null)
     },
     onError: (err) => {
+      setReviewRequired(true)
       setActionError(errorMessage(err))
+    },
+    onSettled: () => {
+      flight.current = false
+      void trackQuery.refetch()
     },
   })
 
-  function copyCode(text: string) {
-    void navigator.clipboard.writeText(text)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
+  async function refresh() {
+    if (flight.current) return
+    const result = await trackQuery.refetch()
+    if (result.isSuccess) {
+      setReviewRequired(false)
+      setActionError(null)
+      setCancelModalOpen(false)
+    }
+  }
+  async function copyCode(text: string) {
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopied(true)
+      setCopyError(false)
+    } catch {
+      setCopied(false)
+      setCopyError(true)
+    }
   }
 
-  const order = trackQuery.data
+  const order = trackQuery.isSuccess ? trackQuery.data : undefined
+  const canCancel = Boolean(
+    order &&
+    (order.status === 'PENDING' ||
+      (order.status === 'ACCEPTED' &&
+        !order.isPaid &&
+        order.orderItems.length > 0 &&
+        order.orderItems.every((item) => item.serveStatus === 'PENDING' && !item.isPaid))),
+  )
 
   return (
     <div className="max-w-2xl mx-auto space-y-5">
@@ -209,8 +231,8 @@ export function OrderTrackingView({
           type="button"
           variant="outline"
           size="sm"
-          onClick={() => void trackQuery.refetch()}
-          disabled={trackQuery.isFetching}
+          onClick={() => void refresh()}
+          disabled={trackQuery.isFetching || cancelMutation.isPending}
           className="gap-1.5 text-xs"
         >
           <RefreshCw className={cn('h-3.5 w-3.5', trackQuery.isFetching && 'animate-spin')} />
@@ -226,12 +248,15 @@ export function OrderTrackingView({
       )}
 
       {trackQuery.isError && (
-        <div className="p-4 bg-destructive/10 border border-destructive/20 rounded-xl text-destructive flex items-center justify-between">
+        <div
+          role="alert"
+          className="p-4 text-destructive flex flex-wrap items-center justify-between gap-2"
+        >
           <div className="flex items-center gap-2 text-sm font-medium">
             <AlertCircle className="h-4 w-4 shrink-0" />
             <span>{errorMessage(trackQuery.error)}</span>
           </div>
-          <Button variant="outline" size="sm" onClick={() => void trackQuery.refetch()}>
+          <Button variant="outline" size="sm" onClick={() => void refresh()}>
             Thử lại
           </Button>
         </div>
@@ -269,7 +294,8 @@ export function OrderTrackingView({
                       type="button"
                       variant="outline"
                       size="sm"
-                      onClick={() => copyCode(orderAuth.accessToken)}
+                      onClick={() => void copyCode(orderAuth.accessToken)}
+                      aria-label="Sao chép mã xác thực"
                       className="h-7 w-7 p-0"
                       title="Sao chép Token xác thực"
                     >
@@ -282,6 +308,11 @@ export function OrderTrackingView({
                   </div>
                 </div>
               </div>
+              {copyError && (
+                <p role="alert" className="text-sm text-destructive">
+                  Không thể sao chép mã xác thực.
+                </p>
+              )}
 
               {/* Step Timeline */}
               <OrderStepTimeline
@@ -296,13 +327,8 @@ export function OrderTrackingView({
                   <div>
                     <strong>Quán đang duyệt đơn của bạn.</strong>
                     <p className="mt-1 text-amber-800">
-                      Nhân viên sẽ sớm tiếp nhận và chuyển quầy pha chế. Đơn hàng sẽ tự động hủy
-                      nếu không kịp xác nhận trước{' '}
-                      {new Date(order.expiresAt).toLocaleTimeString([], {
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      })}
-                      .
+                      Nhân viên sẽ sớm tiếp nhận và chuyển quầy pha chế. Đơn hàng sẽ tự động hủy nếu
+                      không kịp xác nhận trước {formatStoreDateTime(order.expiresAt)}.
                     </p>
                   </div>
                 </div>
@@ -327,18 +353,14 @@ export function OrderTrackingView({
               {order.status === 'CANCELLED' && (
                 <div className="p-3.5 bg-destructive/10 border border-destructive/20 rounded-xl text-xs text-destructive space-y-1">
                   <strong>Đơn hàng đã bị hủy.</strong>
-                  {order.cancellationReason && (
-                    <p>Lý do: {order.cancellationReason}</p>
-                  )}
+                  {order.cancellationReason && <p>Lý do: {order.cancellationReason}</p>}
                 </div>
               )}
 
               {order.status === 'REJECTED' && (
                 <div className="p-3.5 bg-destructive/10 border border-destructive/20 rounded-xl text-xs text-destructive space-y-1">
                   <strong>Quán không thể tiếp nhận đơn hàng này.</strong>
-                  {order.rejectionReason && (
-                    <p>Lý do: {order.rejectionReason}</p>
-                  )}
+                  {order.rejectionReason && <p>Lý do: {order.rejectionReason}</p>}
                 </div>
               )}
 
@@ -347,20 +369,13 @@ export function OrderTrackingView({
                 <div>
                   <span className="text-muted-foreground">Thời gian nhận:</span>
                   <p className="font-semibold text-foreground mt-0.5">
-                    {order.pickupAt
-                      ? new Date(order.pickupAt).toLocaleTimeString([], {
-                          hour: '2-digit',
-                          minute: '2-digit',
-                          day: '2-digit',
-                          month: '2-digit',
-                        })
-                      : 'Lấy sớm nhất có thể'}
+                    {order.pickupAt ? formatStoreDateTime(order.pickupAt) : 'Lấy sớm nhất có thể'}
                   </p>
                 </div>
                 <div>
                   <span className="text-muted-foreground">Hình thức thanh toán:</span>
                   <p className="font-semibold text-foreground mt-0.5">
-                    {order.isPaid ? '✓ Đã thanh toán' : 'Tiền mặt khi nhận'}
+                    {order.isPaid ? 'Đã thanh toán' : 'Tiền mặt khi nhận'}
                   </p>
                 </div>
               </div>
@@ -378,20 +393,19 @@ export function OrderTrackingView({
               {order.items.map((item, index) => (
                 <div
                   key={index}
-                  className="flex items-baseline justify-between pb-2.5 border-b border-dashed border-stone-200 text-sm last:border-none"
+                  className="flex flex-wrap items-baseline justify-between gap-2 pb-2.5 border-b border-dashed border-stone-200 text-sm last:border-none"
                 >
-                  <div>
+                  <div className="min-w-0 break-words">
                     <span className="font-semibold text-foreground">
                       {item.quantity}x {item.quotedName}
                     </span>
+                    <OrderOptions options={item.quotedOptions} />
                     {item.note && (
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        {item.note}
-                      </p>
+                      <p className="text-xs text-muted-foreground mt-0.5">{item.note}</p>
                     )}
                   </div>
                   <span className="font-semibold text-brand-800">
-                    {formatPrice(String(Number(item.quotedUnitPrice) * item.quantity))}
+                    {formatLineAmount(item.quotedUnitPrice, item.quantity)}
                   </span>
                 </div>
               ))}
@@ -408,50 +422,79 @@ export function OrderTrackingView({
           {/* Action buttons (Telegram & Cancel) */}
           <div className="space-y-2.5">
             {actionError && (
-              <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-lg text-xs text-destructive">
+              <div role="alert" className="p-3 text-xs text-destructive">
                 {actionError}
               </div>
+            )}
+            {reviewRequired && (
+              <Button
+                variant="outline"
+                disabled={trackQuery.isFetching}
+                onClick={() => void refresh()}
+              >
+                <RefreshCw size={16} aria-hidden="true" />
+                Đối chiếu trạng thái đơn
+              </Button>
             )}
 
             {order.telegram?.enabled &&
               (order.status === 'PENDING' || order.status === 'ACCEPTED') &&
               order.fulfillmentStatus !== 'COLLECTED' && (
-              <TelegramOrderLink key={orderAuth.requestId} {...orderAuth} subscribed={order.telegram.subscribed} />
-            )}
-
-            {(order.status === 'PENDING' || order.status === 'ACCEPTED') &&
-              order.fulfillmentStatus !== 'READY' &&
-              order.fulfillmentStatus !== 'COLLECTED' && (
-                <Button
-                  type="button"
-                  variant="destructive"
-                  onClick={() => setCancelModalOpen(true)}
-                  className="w-full font-semibold"
-                >
-                  Hủy đơn hàng này
-                </Button>
+                <TelegramOrderLink
+                  key={orderAuth.requestId}
+                  {...orderAuth}
+                  subscribed={order.telegram.subscribed}
+                />
               )}
+
+            {canCancel && (
+              <Button
+                type="button"
+                variant="destructive"
+                onClick={() => setCancelModalOpen(true)}
+                disabled={cancelMutation.isPending || reviewRequired || trackQuery.isFetching}
+                className="w-full font-semibold"
+              >
+                Hủy đơn hàng này
+              </Button>
+            )}
           </div>
 
           {/* Cancel Confirmation Dialog */}
           <Dialog
             open={cancelModalOpen}
-            onClose={() => setCancelModalOpen(false)}
+            onClose={() => {
+              if (!flight.current) setCancelModalOpen(false)
+            }}
             maxWidth="sm"
           >
             <div className="p-6 space-y-4">
-              <h3 className="text-lg font-bold text-destructive">
-                Xác nhận hủy đơn hàng?
-              </h3>
+              <h3 className="text-lg font-bold text-destructive">Xác nhận hủy đơn hàng?</h3>
               <p className="text-sm text-muted-foreground">
-                Bạn có chắc chắn muốn hủy đơn hàng này không? Quán sẽ ngừng chuẩn bị món.
+                Chỉ có thể hủy khi quán chưa bắt đầu chế biến hoặc in vé bếp.
               </p>
+              {actionError && (
+                <p role="alert" className="text-sm text-destructive">
+                  {actionError}
+                </p>
+              )}
+              {reviewRequired && (
+                <Button
+                  variant="outline"
+                  disabled={trackQuery.isFetching}
+                  onClick={() => void refresh()}
+                >
+                  <RefreshCw size={16} aria-hidden="true" />
+                  Đối chiếu trạng thái đơn
+                </Button>
+              )}
               <div className="flex items-center justify-end gap-2.5 pt-2">
                 <Button
                   type="button"
                   variant="outline"
                   size="sm"
                   onClick={() => setCancelModalOpen(false)}
+                  disabled={cancelMutation.isPending}
                 >
                   Quay lại
                 </Button>
@@ -459,7 +502,14 @@ export function OrderTrackingView({
                   type="button"
                   variant="destructive"
                   size="sm"
-                  onClick={() => cancelMutation.mutate()}
+                  disabled={!canCancel || reviewRequired || trackQuery.isFetching}
+                  onClick={() => {
+                    if (!flight.current && canCancel && !reviewRequired && !trackQuery.isFetching) {
+                      flight.current = true
+                      setActionError(null)
+                      cancelMutation.mutate()
+                    }
+                  }}
                   isLoading={cancelMutation.isPending}
                 >
                   Xác nhận hủy

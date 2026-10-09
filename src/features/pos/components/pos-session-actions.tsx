@@ -6,6 +6,7 @@ import type { Session } from '../../auth/session'
 import { getDiningTables, splitSession, type SessionDetail } from '../pos.api'
 import { mergeTables } from '../../dining-tables/dining-tables.api'
 import { posKeys } from '../pos.keys'
+import { kitchenKeys } from '../../kitchen/kitchen.api'
 import { errorMessage } from '@/shared/api/client'
 import { Button, Dialog, Input } from '@/shared/ui'
 
@@ -48,7 +49,7 @@ function SessionActionDialog({ mode, session, onClose }: { mode: 'merge' | 'spli
     onSuccess: () => {
       void client.invalidateQueries({ queryKey: posKeys.tables(employee.id) })
       void client.invalidateQueries({ queryKey: ['private', employee.id, 'orders'] })
-      void client.invalidateQueries({ queryKey: ['kitchen'] })
+      void client.invalidateQueries({ queryKey: kitchenKeys.all(employee.id) })
       onClose()
       navigate('/staff/pos')
     },

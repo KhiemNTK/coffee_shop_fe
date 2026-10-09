@@ -2,6 +2,9 @@ import { Check, Clock, Package, Phone, User } from 'lucide-react'
 import { type PendingOrder } from '../online-orders.api'
 import { formatPrice } from '../../menu/menu.api'
 import { errorMessage } from '../../../shared/api/client'
+import { formatLineAmount } from '../../../shared/lib/format'
+import { formatStoreDateTime } from '../../../shared/lib/store-time'
+import { OrderOptions } from '../../../shared/ui/order-options'
 import {
   Badge,
   Button,
@@ -21,6 +24,7 @@ interface StaffPendingOrdersTabProps {
   nowMs: number
   canReview: boolean
   isAcceptPending: boolean
+  isBlocked: boolean
   onAccept: (id: string) => void
   onReject: (order: PendingOrder) => void
 }
@@ -34,6 +38,7 @@ export function StaffPendingOrdersTab({
   nowMs,
   canReview,
   isAcceptPending,
+  isBlocked,
   onAccept,
   onReject,
 }: StaffPendingOrdersTabProps) {
@@ -47,13 +52,9 @@ export function StaffPendingOrdersTab({
 
   if (isError) {
     return (
-      <div className="flex items-center gap-3 text-sm text-red-700 bg-red-50 p-4 rounded-lg">
+      <div role="alert" className="flex flex-wrap items-center gap-3 text-sm text-destructive p-4">
         <span>{errorMessage(error)}</span>
-        <Button
-          variant="link"
-          onClick={onRefetch}
-          className="text-red-700 font-semibold"
-        >
+        <Button variant="link" onClick={onRefetch} className="text-red-700 font-semibold">
           Thử lại
         </Button>
       </div>
@@ -62,15 +63,12 @@ export function StaffPendingOrdersTab({
 
   if (orders.length === 0) {
     return (
-      <Card className="border-dashed p-12 text-center text-[#68776f]">
+      <div className="py-8 text-center text-muted-foreground">
         <Package size={36} className="mx-auto mb-3 text-[#9ba8a0]" />
         <p className="text-base font-semibold text-[#1a2723]">
           Không có đơn hàng nào đang chờ duyệt
         </p>
-        <p className="text-sm mt-1 text-[#68776f]">
-          Đơn hàng online mới sẽ hiển thị tại đây theo thời gian thực.
-        </p>
-      </Card>
+      </div>
     )
   }
 
@@ -85,11 +83,11 @@ export function StaffPendingOrdersTab({
             className="flex flex-col justify-between shadow-xs hover:shadow-sm transition-shadow"
           >
             <CardHeader className="pb-3">
-              <div className="flex justify-between items-start">
-                <div>
+              <div className="flex flex-wrap justify-between items-start gap-2">
+                <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-1.5">
                     <User size={15} className="text-[#174f3f]" />
-                    <CardTitle>{order.pickupName}</CardTitle>
+                    <CardTitle className="break-words">{order.pickupName}</CardTitle>
                   </div>
                   <div className="flex items-center gap-1.5 text-xs text-[#68776f] mt-1">
                     <Phone size={13} />
@@ -99,44 +97,30 @@ export function StaffPendingOrdersTab({
 
                 <Badge variant={isUrgent ? 'destructive' : 'warning'}>
                   <Clock size={11} />
-                  Hạn:{' '}
-                  {expiresAt.toLocaleTimeString([], {
-                    hour: '2-digit',
-                    minute: '2-digit',
-                  })}
+                  Hạn: {formatStoreDateTime(order.expiresAt)}
                 </Badge>
               </div>
 
               {/* Pickup Time info */}
               <div className="mt-3 rounded-md bg-[#f2f6f3] px-3 py-1.5 text-xs text-[#202d29]">
                 <span className="font-semibold">Thời gian nhận: </span>
-                {order.pickupAt
-                  ? new Date(order.pickupAt).toLocaleTimeString([], {
-                      hour: '2-digit',
-                      minute: '2-digit',
-                      day: '2-digit',
-                      month: '2-digit',
-                    })
-                  : '⚡ Lấy sớm nhất có thể'}
+                {order.pickupAt ? formatStoreDateTime(order.pickupAt) : 'Sớm nhất'}
               </div>
             </CardHeader>
 
             <CardContent className="space-y-3 flex-1">
               <div className="border-t border-[#f0f4f1] pt-3 space-y-2 text-xs">
                 {order.items.map((it, idx) => (
-                  <div key={idx} className="flex justify-between items-baseline">
-                    <div>
+                  <div key={idx} className="flex flex-wrap justify-between items-baseline gap-2">
+                    <div className="min-w-0 break-words">
                       <span>
                         <strong>{it.quantity}x</strong> {it.quotedName}
                       </span>
-                      {it.note && (
-                        <p className="text-[11px] text-[#68776f] mt-0.5">
-                          ({it.note})
-                        </p>
-                      )}
+                      <OrderOptions options={it.quotedOptions} />
+                      {it.note && <p className="text-[11px] text-[#68776f] mt-0.5">({it.note})</p>}
                     </div>
                     <span className="font-semibold text-[#174f3f]">
-                      {formatPrice(String(Number(it.quotedUnitPrice) * it.quantity))}
+                      {formatLineAmount(it.quotedUnitPrice, it.quantity)}
                     </span>
                   </div>
                 ))}
@@ -155,7 +139,7 @@ export function StaffPendingOrdersTab({
                 variant="outline"
                 size="sm"
                 onClick={() => onReject(order)}
-                disabled={!canReview || isAcceptPending}
+                disabled={!canReview || isBlocked}
                 className="text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700"
               >
                 Từ chối
@@ -165,7 +149,7 @@ export function StaffPendingOrdersTab({
                 variant="default"
                 size="sm"
                 onClick={() => onAccept(order.id)}
-                disabled={!canReview || isAcceptPending}
+                disabled={!canReview || isBlocked}
                 isLoading={isAcceptPending}
               >
                 <Check size={14} />

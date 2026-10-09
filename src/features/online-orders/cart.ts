@@ -1,4 +1,7 @@
 import type { MenuItem } from '../menu/menu.api'
+import { decimalAmount, minorAmount } from '../../shared/lib/money'
+
+export { decimalAmount, minorAmount } from '../../shared/lib/money'
 
 export interface CartItem {
   id: string
@@ -7,15 +10,6 @@ export interface CartItem {
   note: string
   selectedOptionIds: string[]
   calculatedUnitPrice: string
-}
-
-export function minorAmount(value: string) {
-  const [integer = '0', fraction = ''] = value.split('.')
-  return BigInt(integer) * 100n + BigInt(fraction.padEnd(2, '0'))
-}
-
-export function decimalAmount(minor: bigint) {
-  return `${minor / 100n}.${(minor % 100n).toString().padStart(2, '0')}`
 }
 
 export function cartSubtotal(cart: CartItem[]) {

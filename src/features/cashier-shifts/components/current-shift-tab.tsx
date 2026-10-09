@@ -1,7 +1,9 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
+import { z } from 'zod'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Coins, Lock, RefreshCw, Send, Unlock, Wallet } from 'lucide-react'
-import { errorMessage } from '../../../shared/api/client'
+import { ApiError, errorMessage } from '../../../shared/api/client'
+import { pendingIntentKey, readPendingIntent, writePendingIntent, isPendingIntentExpired, type PendingIntent } from '../../../shared/api/pending-intent'
 import { formatPrice } from '../../menu/menu.api'
 import {
   addCashMovement,
@@ -24,6 +26,13 @@ import {
   Textarea,
   cn,
 } from '../../../shared/ui'
+
+const cashCommandSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('OPEN'), fundId: z.string().min(1), startingCash: z.string().min(1) }),
+  z.object({ kind: z.literal('CLOSE'), reportedEndingCash: z.string().min(1), closingNote: z.string() }),
+  z.object({ kind: z.literal('MOVEMENT'), type: z.enum(['INCOME', 'EXPENSE']), amount: z.string().min(1), description: z.string().min(1) }),
+])
+type CashCommand = z.infer<typeof cashCommandSchema>
 
 interface CurrentShiftTabProps {
   employeeId: string
@@ -48,6 +57,9 @@ export function CurrentShiftTab({
   onSuccess,
 }: CurrentShiftTabProps) {
   const queryClient = useQueryClient()
+  const recoveryKey = pendingIntentKey(employeeId, 'cashier-shift.command')
+  const [submitted, setSubmitted] = useState(() => readPendingIntent(recoveryKey, cashCommandSchema))
+  const flight = useRef(false)
 
   // Opening shift state
   const [openingFundId, setOpeningFundId] = useState('')
@@ -84,63 +96,55 @@ export function CurrentShiftTab({
     queryKey: ['private', 'cashier-shift', 'current', 'expenses'],
     queryFn: ({ signal }) =>
       getCurrentShiftExpenseRequests({ page: 1, itemPerPage: 20 }, signal),
-    enabled: currentShiftQuery.data?.status === 'OPEN',
+    enabled: canTransact && currentShiftQuery.data?.status === 'OPEN',
   })
 
   // Mutations
-  const openShiftMutation = useMutation({
-    mutationFn: () => openCashierShift(openingFundId, openingCash),
-    onSuccess: () => {
-      onSuccess('Mở ca thu ngân thành công!')
-      void queryClient.invalidateQueries({
-        queryKey: ['private', employeeId, 'cashier-shift'],
-      })
-      void queryClient.invalidateQueries({ queryKey: ['private', 'funds'] })
+  const command = useMutation({
+    mutationFn: async ({ payload, idempotencyKey }: PendingIntent<CashCommand>) => payload.kind === 'OPEN'
+      ? openCashierShift(payload.fundId, payload.startingCash, idempotencyKey)
+      : payload.kind === 'CLOSE' ? closeCashierShift(payload.reportedEndingCash, payload.closingNote, idempotencyKey)
+        : addCashMovement(payload.type, payload.amount, payload.description, idempotencyKey),
+    onSuccess: (data, { payload }) => {
+      sessionStorage.removeItem(recoveryKey)
+      setSubmitted(null)
+      onSuccess(payload.kind === 'OPEN' ? 'Mở ca thu ngân thành công!'
+        : payload.kind === 'CLOSE' ? 'Đã đóng ca và chốt sổ tiền mặt an toàn!'
+          : 'expenseRequest' in data && data.expenseRequest ? 'Đã gửi phiếu chi chờ phê duyệt; chưa trừ quỹ.' : 'Đã tiếp nhận yêu cầu thu / chi tiền mặt!')
+      setReportedEndingCash(''); setClosingNote(''); setMovementAmount(''); setMovementDesc(''); setShowMovementForm(false)
     },
-    onError: (err) => {
+    onError: (err, intent) => {
       onError(errorMessage(err))
+      if (!intent.uncertain && err instanceof ApiError && err.status >= 400 && err.status < 500 && err.status !== 408 && err.status !== 429) {
+        sessionStorage.removeItem(recoveryKey)
+        setSubmitted(null)
+      } else {
+        const unresolved = { ...intent, uncertain: true }
+        setSubmitted(unresolved)
+        try { writePendingIntent(recoveryKey, unresolved) }
+        catch { onError('Không lưu được trạng thái chưa xác nhận. Không đóng tab; liên hệ quản lý để đối soát.') }
+      }
+    },
+    onSettled: () => {
+      flight.current = false
+      void queryClient.invalidateQueries({ queryKey: ['private', employeeId, 'cashier-shift'] })
+      void queryClient.invalidateQueries({ queryKey: ['private', 'funds'] })
+      void queryClient.invalidateQueries({ queryKey: ['private', 'cashier-shift', 'current', 'expenses'] })
+      void queryClient.invalidateQueries({ queryKey: ['private', 'cash-handovers'] })
     },
   })
 
-  const closeShiftMutation = useMutation({
-    mutationFn: () => closeCashierShift(reportedEndingCash, closingNote),
-    onSuccess: () => {
-      onSuccess('Đã đóng ca và chốt sổ tiền mặt an toàn!')
-      setReportedEndingCash('')
-      setClosingNote('')
-      void queryClient.invalidateQueries({
-        queryKey: ['private', employeeId, 'cashier-shift'],
-      })
-      void queryClient.invalidateQueries({ queryKey: ['private', 'funds'] })
-      void queryClient.invalidateQueries({
-        queryKey: ['private', 'cash-handovers'],
-      })
-    },
-    onError: (err) => {
-      onError(errorMessage(err))
-    },
-  })
-
-  const movementMutation = useMutation({
-    mutationFn: () =>
-      addCashMovement(movementType, movementAmount, movementDesc),
-    onSuccess: () => {
-      onSuccess('Đã ghi nhận giao dịch tiền mặt vào ca!')
-      setMovementAmount('')
-      setMovementDesc('')
-      setShowMovementForm(false)
-      void queryClient.invalidateQueries({
-        queryKey: ['private', employeeId, 'cashier-shift'],
-      })
-      void queryClient.invalidateQueries({
-        queryKey: ['private', 'cashier-shift', 'current', 'expenses'],
-      })
-      void queryClient.invalidateQueries({ queryKey: ['private', 'funds'] })
-    },
-    onError: (err) => {
-      onError(errorMessage(err))
-    },
-  })
+  function submitCommand(payload: CashCommand) {
+    if (flight.current || (payload.kind === 'OPEN' ? !canOpen : payload.kind === 'CLOSE' ? !canClose : !canTransact)) return
+    if (!submitted && (!currentShiftQuery.isSuccess || currentShiftQuery.isFetching)) { onError('Đang kiểm tra trạng thái ca. Chờ tải xong trước khi gửi giao dịch mới.'); return }
+    if (submitted && isPendingIntentExpired(submitted)) { onError('Yêu cầu quá thời hạn phục hồi. Liên hệ quản lý để đối soát, không tạo giao dịch khác.'); return }
+    const intent = submitted ?? { payload, createdAt: Date.now(), idempotencyKey: crypto.randomUUID() }
+    try { writePendingIntent(recoveryKey, intent) }
+    catch { onError('Không lưu được yêu cầu phục hồi. Chưa gửi giao dịch; kiểm tra bộ nhớ trình duyệt.'); return }
+    flight.current = true
+    setSubmitted(intent)
+    command.mutate(intent)
+  }
 
   const cancelMyExpenseMutation = useMutation({
     mutationFn: (id: string) => cancelCurrentExpenseRequest(id),
@@ -154,6 +158,23 @@ export function CurrentShiftTab({
       onError(errorMessage(err))
     },
   })
+
+  if (submitted) {
+    const payload = submitted.payload
+    const amount = payload.kind === 'OPEN' ? payload.startingCash : payload.kind === 'CLOSE' ? payload.reportedEndingCash : payload.amount
+    return <section aria-label="Phục hồi giao dịch ca" className="space-y-3 border-l-4 border-amber-500 p-4">
+      <h2 className="text-base font-semibold">{payload.kind === 'OPEN' ? 'Mở ca' : payload.kind === 'CLOSE' ? 'Đóng ca' : 'Thu / chi tiền mặt'} · {formatPrice(amount)}</h2>
+      <p role="status">{command.isPending ? 'Đang xác nhận giao dịch…' : 'Chưa xác nhận được kết quả. Giữ nguyên yêu cầu trước khi thực hiện giao dịch khác.'}</p>
+      {payload.kind === 'MOVEMENT' && <p>{payload.type} · {payload.description}</p>}
+      {command.error && <p role="alert">{errorMessage(command.error)}</p>}
+      {isPendingIntentExpired(submitted) ? <p role="alert">Yêu cầu đã quá thời hạn phục hồi an toàn. Liên hệ quản lý để đối soát.</p>
+        : <Button disabled={command.isPending} onClick={() => submitCommand(payload)}><RefreshCw size={16} aria-hidden="true" />Kiểm tra lại cùng yêu cầu</Button>}
+    </section>
+  }
+
+  if (currentShiftQuery.isError) return <div role="alert" className="space-y-3 border-l-4 border-destructive p-4">
+    <p>{errorMessage(currentShiftQuery.error)}</p><Button variant="outline" disabled={currentShiftQuery.isFetching} onClick={() => void currentShiftQuery.refetch()}>Kiểm tra lại ca</Button>
+  </div>
 
   if (currentShiftQuery.isLoading) {
     return (
@@ -216,7 +237,7 @@ export function CurrentShiftTab({
                     onError('Vui lòng chọn quỹ tiền mặt cho ca')
                     return
                   }
-                  openShiftMutation.mutate()
+                  submitCommand({ kind: 'OPEN', fundId: openingFundId, startingCash: openingCash })
                 }}
                 className="flex flex-col gap-4 max-w-md"
               >
@@ -276,14 +297,14 @@ export function CurrentShiftTab({
                   type="submit"
                   variant="default"
                   disabled={
-                    openShiftMutation.isPending ||
+                    command.isPending ||
                     cashFundsQuery.isPending ||
                     cashFundsQuery.isError ||
                     !openingFundId
                   }
                   className="w-full mt-2"
                 >
-                  {openShiftMutation.isPending
+                  {command.isPending
                     ? 'Đang mở ca...'
                     : 'Xác nhận mở ca thu ngân'}
                 </Button>
@@ -387,7 +408,7 @@ export function CurrentShiftTab({
               <form
                 onSubmit={(e) => {
                   e.preventDefault()
-                  movementMutation.mutate()
+                  submitCommand({ kind: 'MOVEMENT', type: movementType, amount: movementAmount, description: movementDesc })
                 }}
                 className="flex flex-col gap-3 pt-2"
               >
@@ -447,10 +468,10 @@ export function CurrentShiftTab({
                   type="submit"
                   variant="default"
                   size="sm"
-                  disabled={movementMutation.isPending}
+                  disabled={command.isPending}
                   className="mt-1"
                 >
-                  {movementMutation.isPending
+                  {command.isPending
                     ? 'Đang ghi nhận...'
                     : 'Lưu giao dịch'}
                 </Button>
@@ -554,7 +575,7 @@ export function CurrentShiftTab({
                   onError('Vui lòng nhập số tiền thực kiểm trong két')
                   return
                 }
-                closeShiftMutation.mutate()
+                submitCommand({ kind: 'CLOSE', reportedEndingCash, closingNote })
               }}
               className="flex flex-col gap-4 max-w-lg"
             >
@@ -591,10 +612,10 @@ export function CurrentShiftTab({
               <Button
                 type="submit"
                 variant="destructive"
-                disabled={closeShiftMutation.isPending}
+                disabled={command.isPending}
                 className="w-full"
               >
-                {closeShiftMutation.isPending
+                {command.isPending
                   ? 'Đang chốt ca...'
                   : 'Xác nhận đóng ca & Chốt sổ'}
               </Button>

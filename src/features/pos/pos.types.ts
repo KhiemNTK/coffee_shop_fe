@@ -6,5 +6,5 @@ export type DraftItem = {
   quantity: number
   note: string
   selectedOptionIds: string[]
-  calculatedPrice: number
+  calculatedPrice: string
 }

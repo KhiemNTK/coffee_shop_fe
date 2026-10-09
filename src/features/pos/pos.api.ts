@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { apiGet, apiMutate } from '../../shared/api/client'
 import { apiIdempotentMutate } from '../../shared/api/idempotency'
-import { moneySchema } from '../menu/menu.api'
+import { itemSchema, moneySchema } from '../menu/menu.api'
 import { selectedOptionsSchema } from '../../shared/api/order-options'
 
 export const diningTableSchema = z.object({
@@ -117,12 +117,17 @@ export async function openOrderSession(
   })
 }
 
-export type AddOrderItemPayload = {
-  menuItemId: string
-  quantity: number
-  note?: string
-  optionIds?: string[]
-}
+export const orderItemPayloadSchema = z.object({
+  menuItemId: z.uuid(), quantity: z.number().int().positive(),
+  note: z.string().max(255).optional(), optionIds: z.array(z.uuid()).max(20)
+    .refine(ids => new Set(ids).size === ids.length).optional(),
+})
+export const orderItemBatchSchema = z.array(orderItemPayloadSchema).min(1).max(100)
+export type AddOrderItemPayload = z.infer<typeof orderItemPayloadSchema>
+export const draftItemsSchema = z.array(z.object({
+  id: z.string(), menuItem: itemSchema, quantity: z.number().int().positive(),
+  note: z.string(), selectedOptionIds: z.array(z.uuid()), calculatedPrice: moneySchema,
+})).max(100)
 
 export function splitSession(payload: {
   sourceOrderSessionId: string
@@ -144,9 +149,11 @@ export function splitSession(payload: {
 export async function addOrderItems(
   sessionId: string,
   items: AddOrderItemPayload[],
-): Promise<unknown> {
-  return apiMutate(`/orders/sessions/${sessionId}/items`, 'POST', z.any(), {
+  idempotencyKey?: string,
+): Promise<SessionDetail> {
+  return apiIdempotentMutate(`/orders/sessions/${sessionId}/items`, sessionDetailSchema, {
     items,
+    idempotencyKey,
   })
 }
 

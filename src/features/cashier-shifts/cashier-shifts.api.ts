@@ -296,11 +296,17 @@ export async function addCashMovement(
   type: 'INCOME' | 'EXPENSE',
   amount: string,
   description: string,
-): Promise<unknown> {
-  return apiIdempotentMutate('/cashier-shifts/current/transactions', z.any(), {
+  idempotencyKey?: string,
+) {
+  return apiIdempotentMutate('/cashier-shifts/current/transactions', z.object({
+    movement: z.object({ id: z.string().min(1), type: z.enum(['INCOME', 'EXPENSE']), amount: moneySchema }).nullable(),
+    fundBalance: moneySchema,
+    expenseRequest: cashExpenseRequestSchema.nullable(),
+  }).refine(result => Boolean(result.movement) !== Boolean(result.expenseRequest)), {
     type,
     amount,
     description,
+    idempotencyKey,
   })
 }
 

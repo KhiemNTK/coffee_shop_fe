@@ -1,6 +1,6 @@
 import { Minus, Plus, Send } from 'lucide-react'
 import { Button } from '../../../shared/ui/button'
-import { formatPrice } from '../../menu/menu.api'
+import { formatLineAmount } from '../../../shared/lib/format'
 import type { DraftItem } from '../pos.types'
 
 interface PosDraftItemsListProps {
@@ -9,6 +9,7 @@ interface PosDraftItemsListProps {
   onClearDraft: () => void
   onSubmitOrder: () => void
   isSubmitting: boolean
+  isLocked: boolean
 }
 
 export function PosDraftItemsList({
@@ -17,6 +18,7 @@ export function PosDraftItemsList({
   onClearDraft,
   onSubmitOrder,
   isSubmitting,
+  isLocked,
 }: PosDraftItemsListProps) {
   if (draftItems.length === 0) return null
 
@@ -28,6 +30,7 @@ export function PosDraftItemsList({
         </span>
         <button
           type="button"
+          disabled={isSubmitting || isLocked}
           onClick={onClearDraft}
           className="text-xs font-semibold text-destructive hover:underline cursor-pointer"
         >
@@ -51,29 +54,31 @@ export function PosDraftItemsList({
                 </small>
               )}
               <div className="mt-0.5 text-xs font-bold text-primary">
-                {formatPrice(String(item.calculatedPrice * item.quantity))}
+                {formatLineAmount(item.calculatedPrice, item.quantity)}
               </div>
             </div>
 
             <div className="flex items-center gap-1.5">
               <button
                 type="button"
+                disabled={isSubmitting || isLocked}
                 onClick={() => onUpdateQuantity(item.id, -1)}
-                className="flex h-6 w-6 items-center justify-center rounded-md border border-border bg-card text-foreground hover:bg-muted cursor-pointer"
+                className="flex h-8 w-8 items-center justify-center rounded-lg border border-border bg-card text-foreground hover:bg-muted active:scale-90 transition-transform cursor-pointer disabled:opacity-50"
                 aria-label="Giảm số lượng"
               >
-                <Minus className="h-3 w-3" />
+                <Minus className="h-3.5 w-3.5" />
               </button>
-              <span className="w-5 text-center text-xs font-bold text-foreground">
+              <span className="w-7 text-center text-sm font-bold text-foreground">
                 {item.quantity}
               </span>
               <button
                 type="button"
+                disabled={isSubmitting || isLocked}
                 onClick={() => onUpdateQuantity(item.id, 1)}
-                className="flex h-6 w-6 items-center justify-center rounded-md border border-border bg-card text-foreground hover:bg-muted cursor-pointer"
+                className="flex h-8 w-8 items-center justify-center rounded-lg border border-border bg-card text-foreground hover:bg-muted active:scale-90 transition-transform cursor-pointer disabled:opacity-50"
                 aria-label="Tăng số lượng"
               >
-                <Plus className="h-3 w-3" />
+                <Plus className="h-3.5 w-3.5" />
               </button>
             </div>
           </div>
@@ -84,10 +89,15 @@ export function PosDraftItemsList({
         type="button"
         onClick={onSubmitOrder}
         isLoading={isSubmitting}
-        className="w-full flex items-center justify-center gap-2 cursor-pointer"
+        className="w-full min-h-[44px] flex items-center justify-center gap-2 font-bold cursor-pointer"
       >
         <Send className="h-4 w-4" />
-        {isSubmitting ? 'Đang gửi món…' : 'Gửi order vào bếp'}
+        <span>{isSubmitting ? 'Đang gửi món…' : isLocked ? 'Kiểm tra lại lần gửi món' : 'Gửi order vào bếp'}</span>
+        {!isSubmitting && !isLocked && (
+          <kbd aria-hidden="true" className="hidden sm:inline-block ml-1 rounded bg-primary-foreground/20 px-1.5 py-0.5 text-[10px] font-mono font-medium tracking-tight">
+            Ctrl+↵
+          </kbd>
+        )}
       </Button>
     </div>
   )

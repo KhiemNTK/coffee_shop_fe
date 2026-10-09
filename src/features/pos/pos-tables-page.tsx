@@ -48,24 +48,31 @@ export default function PosTablesPage() {
   const [guestCount, setGuestCount] = useState<number>(2)
   const [actionError, setActionError] = useState<string | null>(null)
 
-  const canCreateSession = authorization.permissionKeys.includes(
+  const can = (key: string) => authorization.permissionKeys.includes(key)
+  const canReadTables = can('/dining-tables_read')
+  const canReadSessions = can('/orders_sessions_read')
+  const canReadShift = can('/cashier-shifts_current')
+  const canCreateSession = canReadSessions && authorization.permissionKeys.includes(
     '/orders_sessions_create',
   )
 
   const shiftQuery = useQuery({
     queryKey: ['private', employee.id, 'cashier-shift', 'current'],
     queryFn: ({ signal }) => getCurrentShift(signal),
+    enabled: canReadShift,
   })
 
   const tablesQuery = useQuery({
     queryKey: posKeys.tables(employee.id),
     queryFn: ({ signal }) => getDiningTables(signal),
+    enabled: canReadTables,
   })
 
   const sessionsQuery = useQuery({
     queryKey: posKeys.sessions(employee.id),
     queryFn: ({ signal }) => getActiveSessions(signal),
     refetchInterval: 10_000,
+    enabled: canReadSessions,
   })
 
   const openSessionMutation = useMutation({
@@ -88,9 +95,9 @@ export default function PosTablesPage() {
   })
 
   if (
-    tablesQuery.isPending ||
-    sessionsQuery.isPending ||
-    shiftQuery.isPending
+    (canReadTables && tablesQuery.isPending) ||
+    (canReadSessions && sessionsQuery.isPending) ||
+    (canReadShift && shiftQuery.isPending)
   ) {
     return (
       <main
@@ -102,15 +109,20 @@ export default function PosTablesPage() {
     )
   }
 
-  if (tablesQuery.isError) {
+  const readError = (canReadTables && tablesQuery.error) || (canReadSessions && sessionsQuery.error) || (canReadShift && shiftQuery.error)
+  if (readError) {
     return (
       <main className="mx-auto my-12 max-w-md rounded-lg border border-destructive/20 bg-destructive/5 p-6 text-center">
         <p className="text-destructive font-semibold" role="alert">
-          {errorMessage(tablesQuery.error)}
+          {errorMessage(readError)}
         </p>
         <Button
-          onClick={() => void tablesQuery.refetch()}
-          disabled={tablesQuery.isFetching}
+          onClick={() => {
+            if (canReadTables) void tablesQuery.refetch()
+            if (canReadSessions) void sessionsQuery.refetch()
+            if (canReadShift) void shiftQuery.refetch()
+          }}
+          disabled={tablesQuery.isFetching || sessionsQuery.isFetching || shiftQuery.isFetching}
           className="mt-4"
         >
           Thử lại
@@ -126,6 +138,7 @@ export default function PosTablesPage() {
   const emptyCount = tables.filter((t) => t.status === 'EMPTY').length
   const occupiedCount = tables.filter((t) => t.status === 'OCCUPIED').length
   const takeawaySessions = activeSessions.filter((s) => s.table === null)
+  const listedSessions = canReadTables ? takeawaySessions : activeSessions
 
   const sessionByTableId = new Map<string, (typeof activeSessions)[0]>()
   for (const s of activeSessions) {
@@ -135,6 +148,7 @@ export default function PosTablesPage() {
   }
 
   function handleTableClick(table: DiningTable) {
+    if (!canReadSessions) { setActionError('Bạn không có quyền xem phiên bán hàng.'); return }
     const existing = sessionByTableId.get(table.id)
     if (existing) {
       navigate(`/staff/pos/sessions/${existing.id}`)
@@ -174,7 +188,7 @@ export default function PosTablesPage() {
         )}
       </div>
 
-      {!currentShift && (
+      {canReadShift && shiftQuery.isSuccess && !currentShift && (
         <div
           role="alert"
           className="flex flex-col gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 text-amber-900 sm:flex-row sm:items-center sm:justify-between"
@@ -206,7 +220,7 @@ export default function PosTablesPage() {
       )}
 
       {/* Thống kê nhanh */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+      {canReadTables && <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <Card className="border-l-4 border-l-emerald-500">
           <CardContent className="p-4">
             <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
@@ -227,7 +241,7 @@ export default function PosTablesPage() {
             </p>
           </CardContent>
         </Card>
-        <Card className="border-l-4 border-l-primary">
+        {canReadSessions && <Card className="border-l-4 border-l-primary">
           <CardContent className="p-4">
             <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               Đơn mang đi
@@ -236,8 +250,8 @@ export default function PosTablesPage() {
               {takeawaySessions.length}
             </p>
           </CardContent>
-        </Card>
-      </div>
+        </Card>}
+      </div>}
 
       {/* Modal xác nhận số lượng khách khi mở bàn */}
       <Dialog
@@ -301,7 +315,7 @@ export default function PosTablesPage() {
       </Dialog>
 
       {/* Lưới sơ đồ bàn */}
-      <div>
+      {canReadTables && <div>
         <h2 className="mb-4 flex items-center gap-2 text-lg font-bold text-foreground">
           <UtensilsCrossed className="h-5 w-5 text-primary" /> Danh sách bàn tại
           quán
@@ -312,11 +326,13 @@ export default function PosTablesPage() {
             const session = sessionByTableId.get(table.id)
             const isOccupied = table.status === 'OCCUPIED' || Boolean(session)
             return (
-              <div
+              <button
+                type="button"
                 key={table.id}
                 onClick={() => handleTableClick(table)}
+                disabled={!canReadSessions || (!session && !canCreateSession)}
                 className={cn(
-                  'flex min-h-[120px] cursor-pointer flex-col justify-between rounded-xl border-2 p-4 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md select-none',
+                  'flex min-h-[120px] cursor-pointer flex-col justify-between rounded-lg border-2 p-4 text-left transition-colors disabled:cursor-default focus-visible:outline-2 focus-visible:outline-primary',
                   isOccupied
                     ? 'border-amber-400 bg-amber-50/30 hover:border-amber-500'
                     : 'border-emerald-500/50 bg-card hover:border-emerald-600',
@@ -351,36 +367,36 @@ export default function PosTablesPage() {
                     <span>Mở bàn</span>
                   </div>
                 )}
-              </div>
+              </button>
             )
           })}
         </div>
-      </div>
+      </div>}
 
       <TakeawayHandoffQueue />
       {/* Danh sách đơn mang đi (Takeaway) */}
-      {takeawaySessions.length > 0 && (
+      {listedSessions.length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base font-bold text-foreground">
-              <ShoppingBag className="h-4 w-4 text-primary" /> Đơn mang đi đang
-              phục vụ ({takeawaySessions.length})
+              <ShoppingBag className="h-4 w-4 text-primary" /> {canReadTables ? 'Đơn mang đi đang phục vụ' : 'Phiên đang phục vụ'} ({listedSessions.length})
             </CardTitle>
             <CardDescription>
-              Các phiên gọi món mang đi chưa thanh toán
+              Các phiên gọi món chưa thanh toán
             </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {takeawaySessions.map((session) => (
-                <div
+              {listedSessions.map((session) => (
+                <button
+                  type="button"
                   key={session.id}
                   onClick={() => navigate(`/staff/pos/sessions/${session.id}`)}
-                  className="flex cursor-pointer items-center justify-between gap-3 rounded-lg border border-border bg-muted/30 p-3.5 transition-colors hover:bg-muted/70 hover:border-primary/50"
+                  className="flex cursor-pointer items-center justify-between gap-3 rounded-lg border border-border bg-muted/30 p-3.5 text-left transition-colors hover:bg-muted/70 hover:border-primary/50 focus-visible:outline-2 focus-visible:outline-primary"
                 >
                   <div>
                     <div className="text-sm font-semibold text-foreground">
-                      Đơn mang đi #{session.id.slice(0, 8)}
+                      {session.table?.name ?? `Đơn mang đi #${session.id.slice(0, 8)}`}
                     </div>
                     <div className="text-xs text-muted-foreground">
                       {session._count.orderItems} món •{' '}
@@ -390,7 +406,7 @@ export default function PosTablesPage() {
                   <span className="text-xs font-semibold text-primary">
                     Mở đơn &rarr;
                   </span>
-                </div>
+                </button>
               ))}
             </div>
           </CardContent>

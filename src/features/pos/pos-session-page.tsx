@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   useParams,
   useNavigate,
@@ -11,10 +11,13 @@ import {
   ArrowLeft,
   CheckCircle2,
   DollarSign,
+  Receipt,
   RefreshCw,
   UtensilsCrossed,
 } from 'lucide-react'
-import { errorMessage } from '../../shared/api/client'
+import { ApiError, errorMessage } from '../../shared/api/client'
+import { pendingIntentKey, readPendingIntent, writePendingIntent, isPendingIntentExpired, type PendingIntent } from '../../shared/api/pending-intent'
+import { decimalAmount, minorAmount } from '../../shared/lib/money'
 import {
   getCategories,
   getMenu,
@@ -22,12 +25,15 @@ import {
   type MenuItem,
 } from '../menu/menu.api'
 import { CheckoutModal } from './checkout-modal'
+import { kitchenKeys } from '../kitchen/kitchen.api'
 import {
   addOrderItems,
   cancelOrderItem,
   getDiningTables,
   getSessionDetail,
   transferTable,
+  draftItemsSchema,
+  orderItemBatchSchema,
   type AddOrderItemPayload,
 } from './pos.api'
 import { getPosRecommendations } from '../recommendations/recommendations.api'
@@ -47,17 +53,51 @@ import type { Session } from '../auth/session'
 import { Pagination } from '../../shared/ui/pagination'
 import { CancelSessionAction } from './components/cancel-session-action'
 
-export default function PosSessionPage() {
+export default function PosSessionRoute() {
+  const { sessionId } = useParams()
+  return <PosSessionPage key={sessionId} />
+}
+
+function PosSessionPage() {
   const { sessionId } = useParams<{ sessionId: string }>()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { employee, authorization } = useOutletContext<Session>()
   const can = (key: string) => authorization.permissionKeys.includes(key)
+  const draftKey = `coffee_pos_draft_${employee.id}_${sessionId}`
+  const submissionKey = pendingIntentKey(employee.id, `orders.items:${sessionId}`)
 
   const [keyword, setKeyword] = useState('')
   const [selectedCategoryId, setSelectedCategoryId] = useState('')
   const [menuPage, setMenuPage] = useState(1)
-  const [draftItems, setDraftItems] = useState<DraftItem[]>([])
+  const [draftItems, setDraftItems] = useState<DraftItem[]>(() => {
+    if (!sessionId) return []
+    try {
+      const stored = sessionStorage.getItem(draftKey)
+      return stored ? draftItemsSchema.parse(JSON.parse(stored)) : []
+    } catch {
+      return []
+    }
+  })
+
+  // Synchronize draft items with sessionStorage
+  useEffect(() => {
+    if (!sessionId) return
+    try {
+      if (draftItems.length > 0) {
+        sessionStorage.setItem(draftKey, JSON.stringify(draftItems))
+      } else {
+        sessionStorage.removeItem(draftKey)
+      }
+    } catch {
+      // Ignore sessionStorage issues
+    }
+  }, [draftItems, sessionId, draftKey])
+
+  const [submittedItems, setSubmittedItems] = useState<PendingIntent<AddOrderItemPayload[]> | null>(
+    () => readPendingIntent(submissionKey, orderItemBatchSchema),
+  )
+  const orderFlight = useRef(false)
 
   // Modal chọn tùy chọn món (options / size / topping)
   const [configuringItem, setConfiguringItem] = useState<MenuItem | null>(null)
@@ -124,32 +164,81 @@ export default function PosSessionPage() {
   })
 
   const addItemsMutation = useMutation({
-    mutationFn: async () => {
-      setActionError(null)
-      setActionSuccess(null)
-      if (draftItems.length === 0) return
-      const payload: AddOrderItemPayload[] = draftItems.map((item) => ({
-        menuItemId: item.menuItem.id,
-        quantity: item.quantity,
-        note: item.note.trim() || undefined,
-        optionIds:
-          item.selectedOptionIds.length > 0
-            ? item.selectedOptionIds
-            : undefined,
-      }))
-      return addOrderItems(sessionId!, payload)
-    },
+    mutationFn: (intent: PendingIntent<AddOrderItemPayload[]>) => addOrderItems(sessionId!, intent.payload, intent.idempotencyKey),
+    retry: false,
     onSuccess: () => {
+      sessionStorage.removeItem(submissionKey)
       setDraftItems([])
+      setSubmittedItems(null)
+      try {
+        if (sessionId) sessionStorage.removeItem(draftKey)
+      } catch {
+        // Ignore
+      }
       setActionSuccess('Đã gửi món vào bếp thành công')
+    },
+    onSettled: () => {
+      orderFlight.current = false
       void queryClient.invalidateQueries({
         queryKey: posKeys.session(employee.id, sessionId),
       })
+      void queryClient.invalidateQueries({ queryKey: kitchenKeys.tickets(employee.id) })
     },
-    onError: (err) => {
+    onError: (err, intent) => {
       setActionError(errorMessage(err))
+      if (!intent.uncertain && err instanceof ApiError && err.status >= 400 && err.status < 500 && err.status !== 408 && err.status !== 429) {
+        sessionStorage.removeItem(submissionKey)
+        setSubmittedItems(null)
+      } else {
+        const unresolved = { ...intent, uncertain: true }
+        setSubmittedItems(unresolved)
+        try { writePendingIntent(submissionKey, unresolved) }
+        catch { setActionError('Không lưu được trạng thái chưa xác nhận. Không đóng tab; liên hệ quản lý để đối soát.') }
+      }
     },
   })
+  const orderWriteLocked = addItemsMutation.isPending || Boolean(submittedItems)
+
+  const submitDraft = useCallback(() => {
+    if (
+      orderFlight.current ||
+      !sessionId ||
+      !authorization.permissionKeys.includes('/orders_items_create') ||
+      (!submittedItems && draftItems.length === 0)
+    )
+      return
+    if (submittedItems && isPendingIntentExpired(submittedItems)) {
+      setActionError('Yêu cầu đã quá thời hạn phục hồi an toàn. Liên hệ quản lý để đối soát món đã gửi; không gửi lại batch này.')
+      return
+    }
+    const payload = submittedItems?.payload ?? draftItems.map((item) => ({
+      menuItemId: item.menuItem.id,
+      quantity: item.quantity,
+      note: item.note.trim() || undefined,
+      optionIds: item.selectedOptionIds.length ? item.selectedOptionIds : undefined,
+    }))
+    const parsed = orderItemBatchSchema.safeParse(payload)
+    if (!parsed.success) { setActionError(parsed.error.issues[0]?.message ?? 'Batch món chưa hợp lệ.'); return }
+    const intent = submittedItems ?? { payload: parsed.data, createdAt: Date.now(), idempotencyKey: crypto.randomUUID() }
+    try {
+      writePendingIntent(submissionKey, intent)
+    } catch {
+      setActionError('Không lưu được yêu cầu phục hồi. Chưa gửi món; kiểm tra bộ nhớ trình duyệt.')
+      return
+    }
+    orderFlight.current = true
+    setSubmittedItems(intent)
+    setActionError(null)
+    setActionSuccess(null)
+    addItemsMutation.mutate(intent)
+  }, [
+    sessionId,
+    authorization.permissionKeys,
+    submittedItems,
+    draftItems,
+    addItemsMutation,
+    submissionKey,
+  ])
 
   const cancelItemMutation = useMutation({
     mutationFn: async ({
@@ -171,7 +260,7 @@ export default function PosSessionPage() {
       void queryClient.invalidateQueries({
         queryKey: posKeys.session(employee.id, sessionId),
       })
-      void queryClient.invalidateQueries({ queryKey: ['kitchen', 'tickets'] })
+      void queryClient.invalidateQueries({ queryKey: kitchenKeys.tickets(employee.id) })
     },
     onError: (err) => {
       setActionError(errorMessage(err))
@@ -205,6 +294,78 @@ export default function PosSessionPage() {
       setActionError(errorMessage(err))
     },
   })
+
+  const submitDraftRef = useRef(submitDraft)
+  useEffect(() => {
+    submitDraftRef.current = submitDraft
+  }, [submitDraft])
+
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.defaultPrevented) return
+
+      // Escape: Close modals
+      if (e.key === 'Escape') {
+        if (configuringItem) {
+          e.preventDefault()
+          setConfiguringItem(null)
+          return
+        }
+        if (showTransferModal) {
+          e.preventDefault()
+          setShowTransferModal(false)
+          return
+        }
+      }
+
+      // F2 or Ctrl+K: Open Checkout modal
+      if (e.key === 'F2' || ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k')) {
+        const orderItems = sessionQuery.data?.orderItems ?? []
+        const hasUnpaid = orderItems.some(
+          (item) => !item.isPaid && !item.invoiceId && item.serveStatus !== 'CANCELLED',
+        )
+        const isSessionOpen =
+          sessionQuery.data?.sessionStatus !== 'COMPLETED' &&
+          sessionQuery.data?.sessionStatus !== 'CANCELLED'
+
+        if (
+          authorization.permissionKeys.includes('/invoices_create') &&
+          isSessionOpen &&
+          hasUnpaid &&
+          !orderWriteLocked &&
+          !showCheckoutModal
+        ) {
+          e.preventDefault()
+          setShowCheckoutModal(true)
+          return
+        }
+      }
+
+      // Ctrl+Enter or Meta+Enter: Submit draft order to kitchen
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        if (
+          draftItems.length > 0 &&
+          !orderWriteLocked &&
+          authorization.permissionKeys.includes('/orders_items_create')
+        ) {
+          e.preventDefault()
+          submitDraftRef.current()
+          return
+        }
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [
+    configuringItem,
+    showTransferModal,
+    showCheckoutModal,
+    sessionQuery.data,
+    authorization.permissionKeys,
+    orderWriteLocked,
+    draftItems.length,
+  ])
 
   if (!sessionId) {
     return (
@@ -267,19 +428,19 @@ export default function PosSessionPage() {
       !item.isPaid && !item.invoiceId && item.serveStatus !== 'CANCELLED',
   )
   const existingUnpaidTotal = unpaidItems.reduce(
-    (sum, item) => sum + Number(item.priceAtTime) * item.quantity,
-    0,
+    (sum, item) => sum + minorAmount(item.priceAtTime) * BigInt(item.quantity),
+    0n,
   )
   const draftTotal = draftItems.reduce(
-    (sum, item) => sum + item.calculatedPrice * item.quantity,
-    0,
+    (sum, item) => sum + minorAmount(item.calculatedPrice) * BigInt(item.quantity),
+    0n,
   )
   const grandTotal = existingUnpaidTotal + draftTotal
 
   function handleSelectItem(item: MenuItem) {
+    if (orderFlight.current || orderWriteLocked) return
     if (item.optionGroups.length === 0) {
       // Món không có options: thêm trực tiếp vào giỏ
-      const basePrice = Number(item.price) || 0
       setDraftItems((prev) => [
         ...prev,
         {
@@ -288,7 +449,7 @@ export default function PosSessionPage() {
           quantity: 1,
           note: '',
           selectedOptionIds: [],
-          calculatedPrice: basePrice,
+          calculatedPrice: item.price,
         },
       ])
       return
@@ -300,8 +461,9 @@ export default function PosSessionPage() {
     item: MenuItem,
     selectedOptionIds: string[],
     note: string,
-    calculatedPrice: number,
+    calculatedPrice: string,
   ) {
+    if (orderFlight.current || orderWriteLocked) return
     setDraftItems((prev) => [
       ...prev,
       {
@@ -316,6 +478,7 @@ export default function PosSessionPage() {
   }
 
   function updateDraftQuantity(draftId: string, delta: number) {
+    if (orderFlight.current || orderWriteLocked) return
     setDraftItems((prev) =>
       prev
         .map((item) =>
@@ -388,6 +551,7 @@ export default function PosSessionPage() {
                 type="button"
                 variant="outline"
                 size="sm"
+                disabled={orderWriteLocked || transferMutation.isPending}
                 onClick={() => setShowTransferModal(true)}
                 className="flex items-center gap-1.5 cursor-pointer"
               >
@@ -402,11 +566,12 @@ export default function PosSessionPage() {
               <Button
                 type="button"
                 size="default"
+                disabled={orderWriteLocked}
                 onClick={() => setShowCheckoutModal(true)}
                 className="flex items-center gap-1.5 shadow-sm cursor-pointer"
               >
                 <DollarSign className="h-4 w-4" /> Thanh toán (
-                {formatPrice(String(existingUnpaidTotal))})
+                {formatPrice(decimalAmount(existingUnpaidTotal))})
               </Button>
             )}
         </div>
@@ -431,6 +596,12 @@ export default function PosSessionPage() {
           <span>{actionSuccess}</span>
         </div>
       )}
+      {submittedItems && !addItemsMutation.isPending && <div className="space-y-2">
+        <p role="status" className="text-sm">{isPendingIntentExpired(submittedItems)
+          ? 'Yêu cầu đã quá thời hạn phục hồi an toàn. Liên hệ quản lý để đối soát món đã gửi; không gửi lại batch này.'
+          : 'Chưa xác nhận được lần gửi món. Kiểm tra lại cùng nội dung trước khi thêm món khác hoặc thanh toán.'}</p>
+        {draftItems.length === 0 && can('/orders_items_create') && <Button variant="outline" disabled={isPendingIntentExpired(submittedItems)} onClick={submitDraft}>Kiểm tra lại cùng batch</Button>}
+      </div>}
 
       {isCompleted && (
         <div
@@ -445,13 +616,25 @@ export default function PosSessionPage() {
               Bàn đã được chốt và đưa về trạng thái trống.
             </p>
           </div>
-          <Button
-            type="button"
-            onClick={() => navigate('/staff/pos')}
-            className="shrink-0 cursor-pointer"
-          >
-            Quay lại sơ đồ bàn
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            {can('/invoices_read') && (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => navigate('/staff/invoices')}
+                className="shrink-0 cursor-pointer"
+              >
+                <Receipt className="h-4 w-4 mr-1.5" /> Xem danh sách hóa đơn
+              </Button>
+            )}
+            <Button
+              type="button"
+              onClick={() => navigate('/staff/pos')}
+              className="shrink-0 cursor-pointer"
+            >
+              Quay lại sơ đồ bàn
+            </Button>
+          </div>
         </div>
       )}
 
@@ -473,7 +656,7 @@ export default function PosSessionPage() {
           recommendations={recommendationsQuery.data}
           isLoadingMenu={menuQuery.isPending}
           onSelectItem={handleSelectItem}
-          disabled={!can('/orders_items_create') || isCompleted || isCancelled}
+          disabled={!can('/orders_items_create') || isCompleted || isCancelled || orderWriteLocked}
           pagination={
             menuQuery.data && (
               <Pagination
@@ -498,7 +681,7 @@ export default function PosSessionPage() {
             {/* Danh sách món đã gửi trước đó */}
             <PosOrderItemsList
               orderItems={session.orderItems}
-              canCancel={can('/orders_items_cancel')}
+              canCancel={can('/orders_items_cancel') && !orderWriteLocked}
               onCancelItem={(itemId, reason) =>
                 cancelItemMutation.mutate({ itemId, reason })
               }
@@ -509,9 +692,10 @@ export default function PosSessionPage() {
             <PosDraftItemsList
               draftItems={draftItems}
               onUpdateQuantity={updateDraftQuantity}
-              onClearDraft={() => setDraftItems([])}
-              onSubmitOrder={() => addItemsMutation.mutate()}
+              onClearDraft={() => { if (!orderFlight.current && !orderWriteLocked) setDraftItems([]) }}
+              onSubmitOrder={submitDraft}
               isSubmitting={addItemsMutation.isPending}
+              isLocked={Boolean(submittedItems)}
             />
 
             {/* Tổng tiền & thanh toán */}
@@ -521,7 +705,7 @@ export default function PosSessionPage() {
                   Tổng tiền tạm tính:
                 </span>
                 <span className="text-xl font-bold tracking-tight text-primary">
-                  {formatPrice(String(grandTotal))}
+                  {formatPrice(decimalAmount(grandTotal))}
                 </span>
               </div>
 
@@ -532,11 +716,15 @@ export default function PosSessionPage() {
                   <Button
                     type="button"
                     size="lg"
+                    disabled={orderWriteLocked}
                     onClick={() => setShowCheckoutModal(true)}
-                    className="w-full flex items-center justify-center gap-2 font-bold shadow-sm cursor-pointer"
+                    className="w-full min-h-[44px] flex items-center justify-center gap-2 font-bold shadow-sm cursor-pointer"
                   >
                     <DollarSign className="h-5 w-5" />
-                    Thanh toán hóa đơn
+                    <span>Thanh toán hóa đơn</span>
+                    <kbd className="hidden sm:inline-block ml-1 rounded bg-primary-foreground/20 px-1.5 py-0.5 text-[10px] font-mono font-medium tracking-tight">
+                      F2
+                    </kbd>
                   </Button>
                 )}
             </div>
@@ -567,9 +755,14 @@ export default function PosSessionPage() {
         <CheckoutModal
           sessionId={session.id}
           items={unpaidItems}
-          totalAmount={String(existingUnpaidTotal)}
+          totalAmount={decimalAmount(existingUnpaidTotal)}
           onClose={() => setShowCheckoutModal(false)}
           onCompleted={() => {
+            try {
+              if (sessionId) sessionStorage.removeItem(draftKey)
+            } catch {
+              // Ignore
+            }
             void queryClient.invalidateQueries({
               queryKey: posKeys.session(employee.id, sessionId),
             })

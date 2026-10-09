@@ -2,6 +2,11 @@ import { z } from 'zod'
 import { apiGet, apiMutate } from '../../shared/api/client'
 import { apiIdempotentMutate } from '../../shared/api/idempotency'
 import { moneySchema } from '../menu/menu.api'
+import { selectedOptionsSchema } from '../../shared/api/order-options'
+
+export const onlineOrderKeys = {
+  all: (employeeId: string) => ['private', employeeId, 'online-orders'] as const,
+}
 
 // --- SCHEMAS ---
 
@@ -22,7 +27,7 @@ export const OnlineOrderPublicItemSchema = z.object({
   menuItemId: z.string(),
   quotedName: z.string(),
   quotedUnitPrice: moneySchema,
-  quotedOptions: z.unknown(),
+  quotedOptions: selectedOptionsSchema,
   quantity: z.number().int().positive(),
   note: z.string().nullable().optional(),
 })
@@ -104,7 +109,7 @@ export const FulfillmentOrderItemSchema = z.object({
   readyAt: z.string().nullable().optional(),
   isPaid: z.boolean(),
   invoiceId: z.string().nullable().optional(),
-  selectedOptions: z.unknown(),
+  selectedOptions: selectedOptionsSchema,
   menuItem: z.object({
     name: z.string(),
   }),

@@ -125,6 +125,29 @@ test('uncertain response freezes checkout and explicitly retries the identical p
   expect(offers).toBe(1)
 })
 
+test('a rejected retry cannot unlock an already uncertain online checkout', async ({ page }) => {
+  const bodies: Record<string, unknown>[] = []
+  await page.route('**/api/v1/recommendations/online', route => route.fulfill({ json: envelope({ variant: 'CONTROL', recommendations: [] }) }))
+  await page.route('**/api/v1/online-orders/requests', route => {
+    bodies.push(route.request().postDataJSON())
+    if (bodies.length === 1) return route.abort()
+    if (bodies.length === 2) return route.fulfill({ status: 403, json: { message: 'Temporarily rejected' } })
+    return route.fulfill({ json: envelope(created) })
+  })
+  await openCheckout(page)
+  await page.getByRole('button', { name: 'Xem lại đơn', exact: true }).click()
+  await page.getByRole('button', { name: 'Gửi đơn mang đi', exact: true }).click()
+  const retry = page.getByRole('button', { name: 'Gửi lại đơn', exact: true })
+  await expect(retry).toBeEnabled()
+  await retry.click()
+  await expect(page.getByRole('alert')).toContainText('Yêu cầu bị từ chối')
+  await expect(page.getByRole('button', { name: 'Đóng giỏ hàng', exact: true })).toBeDisabled()
+  await expect(page.getByRole('button', { name: 'Chỉnh sửa đơn', exact: true })).toHaveCount(0)
+  await retry.click()
+  await expect.poll(() => bodies.length).toBe(3)
+  for (const body of bodies.slice(1)) expect({ ...body, turnstileToken: bodies[0]!.turnstileToken }).toEqual(bodies[0])
+})
+
 test('supplied public key survives reload without storing contact details', async ({ page }) => {
   const keys: string[] = []
   await page.route('**/api/v1/online-orders/requests', route => {
