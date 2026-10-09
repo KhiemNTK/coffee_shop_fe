@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { apiGet, apiMutate } from '../../shared/api/client'
+import { apiDownload, apiGet, apiMutate } from '../../shared/api/client'
 import { moneySchema } from '../menu/menu.api'
 
 import { signedMoneySchema } from '../../shared/api/money'
@@ -182,7 +182,7 @@ export const dailySalesCloseSchema = z.object({
   businessDate: z.string(),
   closedAt: z.string(),
   closedById: z.string(),
-  snapshot: z.record(z.string(), z.unknown()),
+  snapshot: profitabilityMetricsSchema,
   refundDeltaSinceClose: z
     .object({
       count: z.number().int(),
@@ -287,14 +287,5 @@ export async function downloadDashboardExcel(
     q.set('lowStockThreshold', String(filters.lowStockThreshold))
 
   const query = q.toString()
-  const res = await fetch(
-    `/api/v1/reports/dashboard/export${query ? `?${query}` : ''}`,
-    {
-      credentials: 'include',
-    },
-  )
-  if (!res.ok) {
-    throw new Error(`Xuất báo cáo Excel thất bại (${res.status})`)
-  }
-  return res.blob()
+  return apiDownload(`/reports/dashboard/export${query ? `?${query}` : ''}`)
 }

@@ -2,6 +2,7 @@ import { AlertTriangle, CalendarCheck, CheckCircle2, RefreshCw } from 'lucide-re
 import { type DailySalesClose } from '../reports.api'
 import { formatPrice } from '../../menu/menu.api'
 import { errorMessage } from '../../../shared/api/client'
+import { formatDateTime } from '../../../shared/lib/format'
 import {
   Button,
   Card,
@@ -67,6 +68,8 @@ export function DailySalesCloseTab({
           <div className="flex items-center gap-3">
             <Input
               type="date"
+              aria-label="Ngày chốt sổ"
+              disabled={confirmCloseModalOpen || isClosePending}
               value={selectedCloseDate}
               onChange={(e) => setSelectedCloseDate(e.target.value)}
               className="w-44 text-xs h-9"
@@ -87,7 +90,7 @@ export function DailySalesCloseTab({
               Đang kiểm tra chứng từ chốt sổ ngày {selectedCloseDate}...
             </div>
           ) : dailyCloseData ? (
-            <div className="space-y-4 rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-6">
+            <div className="space-y-4 border-t border-border pt-4">
               <div className="flex items-center gap-3">
                 <CheckCircle2 className="h-6 w-6 text-emerald-600 shrink-0" />
                 <div>
@@ -95,14 +98,32 @@ export function DailySalesCloseTab({
                     Ngày {dailyCloseData.businessDate} đã được chốt sổ thành công
                   </h2>
                   <p className="text-xs text-muted-foreground">
-                    Thời điểm chốt: {new Date(dailyCloseData.closedAt).toLocaleString('vi-VN')} |
+                    Thời điểm chốt: {formatDateTime(dailyCloseData.closedAt)} |
                     Mã nhân viên thực hiện: {dailyCloseData.closedById}
                   </p>
                 </div>
               </div>
 
+              <dl className="grid grid-cols-1 gap-x-8 gap-y-3 border-t border-border pt-4 sm:grid-cols-2">
+                {([
+                  ['Doanh thu gộp', dailyCloseData.snapshot.grossSales],
+                  ['Giảm giá', dailyCloseData.snapshot.discountAmount],
+                  ['Thuế', dailyCloseData.snapshot.taxAmount],
+                  ['Hoàn tiền tại thời điểm chốt', dailyCloseData.snapshot.refundAmount],
+                  ['Thực thu', dailyCloseData.snapshot.netReceipts],
+                  ['Doanh thu chưa thuế ước tính', dailyCloseData.snapshot.estimatedNetSalesExTax],
+                  ['Chi phí nguyên liệu', dailyCloseData.snapshot.ingredientCost],
+                  ['Chi phí hao hụt', dailyCloseData.snapshot.wasteCost],
+                  ['Lợi nhuận gộp ước tính', dailyCloseData.snapshot.estimatedGrossProfit],
+                ] as const).map(([label, amount]) => <div key={label} className="flex min-w-0 flex-wrap justify-between gap-2 text-sm">
+                  <dt>{label}</dt><dd className="font-semibold">{formatPrice(amount)}</dd>
+                </div>)}
+              </dl>
+              <p className="text-sm">{dailyCloseData.snapshot.paidInvoiceCount} hóa đơn · {dailyCloseData.snapshot.refundCount} lần hoàn tiền · {dailyCloseData.snapshot.soldItemCount} dòng món bán</p>
+              <p className="text-sm">Dòng món có snapshot giá vốn: {dailyCloseData.snapshot.itemsWithCostSnapshot}/{dailyCloseData.snapshot.soldItemCount} · Snapshot giá vốn bằng 0: {dailyCloseData.snapshot.zeroCostSnapshotCount}</p>
+
               {dailyCloseData.refundDeltaSinceClose && (
-                <div className="rounded-lg border border-border bg-card p-3 text-xs space-y-1">
+                <div className="border-t border-border pt-3 text-xs space-y-1">
                   <p className="font-semibold text-foreground">Biến động phát sinh sau khi chốt sổ:</p>
                   <p className="text-muted-foreground">
                     Hoàn tiền sau chốt: {dailyCloseData.refundDeltaSinceClose.count} giao dịch (
@@ -144,7 +165,7 @@ export function DailySalesCloseTab({
 
       {/* MODAL: XÁC NHẬN CHỐT SỔ NGÀY */}
       {confirmCloseModalOpen && (
-        <Dialog open onOpenChange={() => setConfirmCloseModalOpen(false)}>
+        <Dialog open onOpenChange={() => { if (!isClosePending) setConfirmCloseModalOpen(false) }}>
           <DialogContent>
             <DialogHeader>
               <DialogTitle className="text-primary flex items-center gap-2">

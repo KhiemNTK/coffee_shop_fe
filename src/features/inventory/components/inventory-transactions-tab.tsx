@@ -2,17 +2,26 @@ import { ArrowDownToLine, ArrowUpFromLine, RefreshCw } from 'lucide-react'
 import { type InventoryTransactionsResponse } from '../inventory.api'
 import { formatPrice } from '../../menu/menu.api'
 import { formatQuantity } from '../quantity'
-import { Badge, Card, CardContent, cn } from '../../../shared/ui'
+import { Badge, Button, Card, CardContent, cn } from '../../../shared/ui'
+import { errorMessage } from '../../../shared/api/client'
+import { formatDateTime } from '../../../shared/lib/format'
 
 interface InventoryTransactionsTabProps {
   data?: InventoryTransactionsResponse
   isLoading: boolean
+  error?: unknown
+  onRetry: () => void
+  isFetching: boolean
 }
 
 export function InventoryTransactionsTab({
   data,
   isLoading,
+  error, onRetry, isFetching,
 }: InventoryTransactionsTabProps) {
+  if (error) return <div role="alert" className="space-y-3 border-l-4 border-destructive p-4">
+    <p>{errorMessage(error)}</p><Button variant="outline" disabled={isFetching} onClick={onRetry}><RefreshCw size={16} aria-hidden="true" />Tải lại lịch sử kho</Button>
+  </div>
   return (
     <Card className="border-border/80 shadow-xs overflow-hidden">
       <CardContent className="p-0">
@@ -47,16 +56,7 @@ export function InventoryTransactionsTab({
                   data.list.map((tx) => (
                     <tr key={tx.id} className="hover:bg-stone-50/70 transition-colors">
                       <td className="py-3.5 px-4 sm:px-6 text-xs text-muted-foreground">
-                        {new Date(tx.transactionDate).toLocaleTimeString([], {
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        })}{' '}
-                        •{' '}
-                        {new Date(tx.transactionDate).toLocaleDateString([], {
-                          day: '2-digit',
-                          month: '2-digit',
-                          year: 'numeric',
-                        })}
+                        {formatDateTime(tx.transactionDate)}
                       </td>
                       <td className="py-3.5 px-4">
                         {tx.type === 'IMPORT' ? (

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Pagination } from '../../shared/ui/pagination'
 import { useOutletContext } from 'react-router-dom'
 import type { Session } from '../auth/session'
 import {
@@ -34,7 +35,7 @@ import {
 
 export default function InventoryPage() {
   const queryClient = useQueryClient()
-  const { authorization } = useOutletContext<Session>()
+  const { employee, authorization } = useOutletContext<Session>()
 
   // Tab: 'items' | 'alerts' | 'transactions'
   const [activeTab, setActiveTab] = useState<
@@ -53,6 +54,8 @@ export default function InventoryPage() {
   const [selectedUnitId, setSelectedUnitId] = useState('')
   const [lowStockOnly, setLowStockOnly] = useState(false)
   const [page, setPage] = useState(1)
+  const [transactionPage, setTransactionPage] = useState(1)
+  const [transactionType, setTransactionType] = useState<'IMPORT' | 'EXPORT' | ''>('')
 
   // Dialog states
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
@@ -105,9 +108,9 @@ export default function InventoryPage() {
   })
 
   const transactionsQuery = useQuery({
-    queryKey: ['inventory-transactions'],
+    queryKey: ['inventory-transactions', employee.id, transactionPage, transactionType],
     queryFn: ({ signal }) =>
-      getInventoryTransactions({ itemPerPage: 20 }, signal),
+      getInventoryTransactions({ page: transactionPage, itemPerPage: 20, type: transactionType }, signal),
     enabled: activeTab === 'transactions',
   })
 
@@ -307,10 +310,26 @@ export default function InventoryPage() {
 
       {/* TAB 3: TRANSACTIONS HISTORY */}
       {activeTab === 'transactions' && (
-        <InventoryTransactionsTab
+        <section aria-label="Lịch sử xuất nhập" className="space-y-3">
+          <label className="block text-sm">Loại biến động
+            <select className="ml-3 rounded-md border border-border p-2" value={transactionType} onChange={event => {
+              setTransactionType(event.target.value as 'IMPORT' | 'EXPORT' | ''); setTransactionPage(1)
+            }}>
+              <option value="">Tất cả</option><option value="IMPORT">Nhập kho</option><option value="EXPORT">Xuất kho</option>
+            </select>
+          </label>
+          <InventoryTransactionsTab
           data={transactionsQuery.data}
           isLoading={transactionsQuery.isLoading}
-        />
+          error={transactionsQuery.error}
+          onRetry={() => void transactionsQuery.refetch()}
+          isFetching={transactionsQuery.isFetching}
+          />
+          {!transactionsQuery.isError && transactionsQuery.data && <>
+            <p className="text-sm text-muted-foreground">{transactionsQuery.data.totalItems} giao dịch</p>
+            <Pagination page={transactionPage} totalPages={transactionsQuery.data.totalPages} onPage={setTransactionPage} disabled={transactionsQuery.isFetching} />
+          </>}
+        </section>
       )}
 
       {/* IMPORT MODAL */}
