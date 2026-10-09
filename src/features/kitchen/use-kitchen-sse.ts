@@ -1,14 +1,23 @@
 import { useEffect, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { posKeys } from '../pos/pos.keys'
+import { kitchenKeys } from './kitchen.api'
+import { playKitchenChime } from '../../shared/lib/sound'
 
-export type KitchenConnectionStatus =
-  | 'connected'
-  | 'connecting'
-  | 'disconnected'
+export type KitchenConnectionStatus = 'connected' | 'connecting' | 'disconnected'
 
-export function useKitchenSse(employeeId: string, enabled = true) {
+export function useKitchenSse(
+  employeeId: string,
+  enabled = true,
+  options?: { soundEnabled?: boolean },
+) {
   const queryClient = useQueryClient()
+  const soundEnabled = options?.soundEnabled ?? false
+  const soundEnabledRef = useRef(soundEnabled)
+  useEffect(() => {
+    soundEnabledRef.current = soundEnabled
+  }, [soundEnabled])
+
   const [status, setStatus] = useState<KitchenConnectionStatus>(() =>
     enabled ? 'connecting' : 'disconnected',
   )
@@ -22,8 +31,8 @@ export function useKitchenSse(employeeId: string, enabled = true) {
     let active = true
 
     function refresh() {
-      void queryClient.invalidateQueries({ queryKey: ['kitchen', 'tickets'] })
-      void queryClient.invalidateQueries({ queryKey: ['kitchen', 'workload'] })
+      void queryClient.invalidateQueries({ queryKey: kitchenKeys.tickets(employeeId) })
+      void queryClient.invalidateQueries({ queryKey: kitchenKeys.workload(employeeId) })
       void queryClient.invalidateQueries({
         queryKey: posKeys.sessions(employeeId),
       })
@@ -52,6 +61,9 @@ export function useKitchenSse(employeeId: string, enabled = true) {
       source.addEventListener('kitchen.refresh', () => {
         if (!active) return
         setLastRefreshedAt(new Date().toLocaleTimeString('vi-VN'))
+        if (soundEnabledRef.current) {
+          playKitchenChime()
+        }
         refresh()
       })
 
@@ -79,5 +91,8 @@ export function useKitchenSse(employeeId: string, enabled = true) {
     }
   }, [employeeId, enabled, queryClient])
 
-  return { status, lastRefreshedAt }
+  return {
+    status: enabled ? status : ('disconnected' as const),
+    lastRefreshedAt: enabled ? lastRefreshedAt : null,
+  }
 }

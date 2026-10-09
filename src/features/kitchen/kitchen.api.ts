@@ -2,6 +2,13 @@ import { z } from 'zod'
 import { apiGet, apiMutate } from '../../shared/api/client'
 import { selectedOptionsSchema } from '../../shared/api/order-options'
 
+export const kitchenKeys = {
+  all: (employeeId: string) => ['private', employeeId, 'kitchen'] as const,
+  tickets: (employeeId: string) => ['private', employeeId, 'kitchen', 'tickets'] as const,
+  workload: (employeeId: string) => ['private', employeeId, 'kitchen', 'workload'] as const,
+  stations: (employeeId: string) => ['private', employeeId, 'kitchen', 'stations'] as const,
+}
+
 export const kitchenStationSchema = z.object({
   id: z.uuid(),
   code: z.string(),
@@ -31,8 +38,7 @@ export const kitchenTicketItemSchema = z.object({
       id: z.uuid(),
       name: z.string(),
     })
-    .nullable()
-    .optional(),
+    .nullable(),
 })
 
 export const kitchenTicketSchema = z.object({

@@ -4,6 +4,7 @@ import { Button } from '../../../shared/ui/button'
 import { cn } from '../../../shared/ui/utils'
 import type { KitchenTicket, KitchenTicketItem } from '../kitchen.api'
 import { OrderOptions } from '../../../shared/ui/order-options'
+import { formatStoreDateTime } from '../../../shared/lib/store-time'
 
 interface KitchenTicketCardProps {
   ticket: KitchenTicket
@@ -20,13 +21,9 @@ export function KitchenTicketCard({
 }: KitchenTicketCardProps) {
   const isCompletedTicket = ticket.state === 'COMPLETED'
   const isOverdue = ticket.isOverdue
-  const currentTables = ticket.items.map((item) =>
-    item.currentTable === undefined ? ticket.table : item.currentTable,
-  )
+  const currentTables = ticket.items.map((item) => item.currentTable)
   const destination = currentTables[0]
-  const destinationLabel = currentTables.some(
-    (table) => table?.id !== destination?.id,
-  )
+  const destinationLabel = currentTables.some((table) => table?.id !== destination?.id)
     ? 'Nhiều phiên'
     : destination
       ? `Bàn: ${destination.name}`
@@ -42,25 +39,24 @@ export function KitchenTicketCard({
   }
 
   return (
-    <article aria-label={`Vé bếp ${ticket.ticketNumber}`}
+    <article
+      aria-label={`Vé bếp ${ticket.ticketNumber}`}
       className={cn(
-        "flex flex-col justify-between overflow-hidden rounded-xl border-2 bg-card transition-all",
+        'flex flex-col justify-between overflow-hidden rounded-lg border-2 bg-card transition-all',
         isOverdue
-          ? "border-red-500 shadow-md shadow-red-500/10"
+          ? 'border-red-500 shadow-md shadow-red-500/10'
           : isCompletedTicket
-            ? "border-emerald-300"
-            : ticket.state === "IN_PROGRESS"
-              ? "border-sky-400"
-              : "border-border",
+            ? 'border-emerald-300'
+            : ticket.state === 'IN_PROGRESS'
+              ? 'border-sky-400'
+              : 'border-border',
       )}
     >
       {/* Header vé */}
       <div
         className={cn(
-          "flex flex-wrap items-start justify-between gap-2 border-b px-4 py-3",
-          isOverdue
-            ? "bg-red-50/50 border-red-100"
-            : "bg-muted/40 border-border",
+          'flex flex-wrap items-start justify-between gap-2 border-b px-4 py-3',
+          isOverdue ? 'bg-red-50/50 border-red-100' : 'bg-muted/40 border-border',
         )}
       >
         <div className="min-w-0 flex-1">
@@ -69,29 +65,27 @@ export function KitchenTicketCard({
               #{ticket.ticketNumber}
             </strong>
             <Badge
-              variant={destination ? "secondary" : "default"}
+              variant={destination ? 'secondary' : 'default'}
               className="whitespace-normal wrap-break-word text-[11px] font-bold"
             >
               {destinationLabel}
             </Badge>
           </div>
-          <span className="text-xs text-muted-foreground">
-            Quầy: {ticket.station.name}
-          </span>
+          <span className="text-xs text-muted-foreground">Quầy: {ticket.station.name}</span>
         </div>
 
         <div className="text-right">
           <div
             className={cn(
-              "flex items-center gap-1 text-xs font-bold justify-end",
-              isOverdue ? "text-red-600" : "text-muted-foreground",
+              'flex items-center gap-1 text-xs font-bold justify-end',
+              isOverdue ? 'text-red-600' : 'text-muted-foreground',
             )}
           >
             <Clock className="h-3.5 w-3.5" />
             {formatTimeDiff(ticket.dueAt)}
           </div>
           <small className="text-[11px] text-muted-foreground">
-            Gọi: {new Date(ticket.createdAt).toLocaleTimeString("vi-VN")}
+            Gọi: {formatStoreDateTime(ticket.createdAt)}
           </small>
         </div>
       </div>
@@ -99,24 +93,23 @@ export function KitchenTicketCard({
       {/* Danh sách món trong vé */}
       <div className="space-y-2.5 p-4">
         {ticket.items.map((item) => {
-          const isPending = item.serveStatus === "PENDING";
-          const isCooking = item.serveStatus === "COOKING";
-          const isReady = item.serveStatus === "READY";
-          const isServed = item.serveStatus === "SERVED";
-          const currentTable =
-            item.currentTable === undefined ? ticket.table : item.currentTable;
-          const advance = () => onAdvanceItemStatus({ ...item, currentTable });
+          const isPending = item.serveStatus === 'PENDING'
+          const isCooking = item.serveStatus === 'COOKING'
+          const isReady = item.serveStatus === 'READY'
+          const isServed = item.serveStatus === 'SERVED'
+          const currentTable = item.currentTable
+          const advance = () => onAdvanceItemStatus(item)
 
           return (
             <div
               key={item.id}
               className={cn(
-                "flex items-center justify-between gap-3 rounded-lg border p-2.5 transition-colors",
+                'flex flex-wrap items-center justify-between gap-3 border-b py-2.5 transition-colors',
                 isReady
-                  ? "border-emerald-200 bg-emerald-50/50"
+                  ? 'border-emerald-200 bg-emerald-50/50'
                   : isCooking
-                    ? "border-sky-200 bg-sky-50/50"
-                    : "border-border bg-muted/20",
+                    ? 'border-sky-200 bg-sky-50/50'
+                    : 'border-border bg-muted/20',
               )}
             >
               <div className="min-w-0 flex-1 wrap-break-word">
@@ -127,11 +120,7 @@ export function KitchenTicketCard({
                 </div>
 
                 <OrderOptions options={item.selectedOptions} />
-                {currentTable && (
-                  <p className="text-xs font-semibold">
-                    Bàn: {currentTable.name}
-                  </p>
-                )}
+                {currentTable && <p className="text-xs font-semibold">Bàn: {currentTable.name}</p>}
                 {item.note && (
                   <p className="mt-1 inline-block rounded bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">
                     Ghi chú: {item.note}
@@ -144,10 +133,9 @@ export function KitchenTicketCard({
                 {isPending && (
                   <Button
                     type="button"
-                    size="sm"
                     onClick={advance}
                     disabled={isUpdatingStatus}
-                    className="h-8 bg-sky-600 hover:bg-sky-700 text-xs font-semibold cursor-pointer"
+                    className="min-h-[44px] px-4 text-sm font-bold bg-sky-600 hover:bg-sky-700 text-white shadow-xs active:scale-95 transition-transform cursor-pointer"
                   >
                     Bắt đầu làm
                   </Button>
@@ -156,20 +144,17 @@ export function KitchenTicketCard({
                 {isCooking && (
                   <Button
                     type="button"
-                    size="sm"
                     variant="success"
                     onClick={advance}
                     disabled={isUpdatingStatus}
-                    className="h-8 text-xs font-semibold cursor-pointer"
+                    className="min-h-[44px] px-4 text-sm font-bold shadow-xs active:scale-95 transition-transform cursor-pointer"
                   >
                     Xong món
                   </Button>
                 )}
 
                 {isReady && (
-                  <span className="text-xs font-semibold text-emerald-700">
-                    Chờ quầy giao món
-                  </span>
+                  <span className="text-xs font-semibold text-emerald-700">Chờ quầy giao món</span>
                 )}
 
                 {isServed && (
@@ -179,9 +164,9 @@ export function KitchenTicketCard({
                 )}
               </div>
             </div>
-          );
+          )
         })}
       </div>
     </article>
-  );
+  )
 }

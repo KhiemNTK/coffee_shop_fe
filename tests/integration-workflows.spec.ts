@@ -277,13 +277,14 @@ test('kitchen event invalidates the current actor POS keys without invalidating 
     const path = '/src/app/query-client.ts'
     const { queryClient } = await import(path)
     const keys = [['private', actor, 'orders', 'session', sessionId], ['private', actor, 'dining-tables'],
-      ['private', actor, 'orders', 'active-sessions'], ['private', 'another-employee', 'orders', 'session', sessionId]]
+      ['private', actor, 'orders', 'active-sessions'], ['private', 'another-employee', 'orders', 'session', sessionId],
+      ['private', actor, 'kitchen', 'tickets', 'inactive-fixture'], ['private', 'another-employee', 'kitchen', 'tickets', 'inactive-fixture']]
     keys.forEach(key => queryClient.setQueryData(key, {}))
     const source = (window as unknown as { kitchenSource: EventTarget }).kitchenSource
     source.dispatchEvent(new Event('kitchen.refresh'))
     return keys.map(key => queryClient.getQueryState(key)?.isInvalidated)
   }, { actor: defaultMockAdminEmployee.id, sessionId: id })
-  expect(result).toEqual([true, true, true, false])
+  expect(result).toEqual([true, true, true, false, true, false])
 })
 
 test('business report preserves unknown rates and avoids a fabricated recommendation lift', async ({ page }, info) => {

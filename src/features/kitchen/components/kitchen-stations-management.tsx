@@ -7,6 +7,7 @@ import {
   deleteStation,
   getStationPage,
   saveStation,
+  kitchenKeys,
   type KitchenStation,
   type StationInput,
 } from '../kitchen.api'
@@ -32,7 +33,7 @@ export function KitchenStationsManagement() {
     void client.invalidateQueries({
       queryKey: ['private', employee.id, 'station-management'],
     })
-    void client.invalidateQueries({ queryKey: ['kitchen'] })
+    void client.invalidateQueries({ queryKey: kitchenKeys.all(employee.id) })
     void client.invalidateQueries({
       queryKey: ['private', employee.id, 'kitchen-stations'],
     })
