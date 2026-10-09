@@ -26,6 +26,7 @@ export default function SignInPage() {
   const [attempt, setAttempt] = useState(0)
   const submitting = useRef(false)
   const mounted = useRef(true)
+
   useEffect(() => {
     mounted.current = true
     return () => {
@@ -36,7 +37,12 @@ export default function SignInPage() {
   const configMissing = import.meta.env.PROD && !siteKey
 
   async function signInWithGoogle(idToken: string) {
-    if (submitting.current || configMissing || (siteKey && !token)) return
+    if (submitting.current || configMissing) return
+    if (siteKey && !token) {
+      setError(new Error('Vui lòng đợi xác minh bảo mật hoàn tất trước khi đăng nhập bằng Google.'))
+      requestAnimationFrame(() => errorRef.current?.focus())
+      return
+    }
     submitting.current = true
     setPending(true)
     setError(undefined)
@@ -46,7 +52,6 @@ export default function SignInPage() {
       announceSessionChange()
       if (mounted.current) navigate('/staff', { replace: true })
     } catch (failure) {
-      clearIdentity()
       if (mounted.current) {
         setError(failure)
         requestAnimationFrame(() => errorRef.current?.focus())
@@ -86,7 +91,7 @@ export default function SignInPage() {
               Đăng nhập
             </CardTitle>
             <CardDescription>
-              Đăng nhập hệ thống nội bộ Coffee Shop POS & KDS
+              Đăng nhập hệ thống nội bộ Coffee Homes
             </CardDescription>
           </CardHeader>
 
@@ -98,8 +103,13 @@ export default function SignInPage() {
               className="space-y-4"
               onSubmit={async (event) => {
                 event.preventDefault()
-                if (submitting.current || configMissing || (siteKey && !token))
+                if (submitting.current || configMissing)
                   return
+                if (siteKey && !token) {
+                  setError(new Error('Vui lòng đợi xác minh bảo mật hoàn tất trước khi đăng nhập.'))
+                  requestAnimationFrame(() => errorRef.current?.focus())
+                  return
+                }
                 const form = event.currentTarget
                 const values = new FormData(form)
                 submitting.current = true
@@ -116,13 +126,12 @@ export default function SignInPage() {
                   announceSessionChange()
                   if (mounted.current) navigate('/staff', { replace: true })
                 } catch (failure) {
-                  clearIdentity()
                   if (!mounted.current) return
                   setError(failure)
                   const password = form.elements.namedItem(
                     'password',
                   ) as HTMLInputElement
-                  password.value = ''
+                  if (password) password.value = ''
                   requestAnimationFrame(() => errorRef.current?.focus())
                 } finally {
                   submitting.current = false

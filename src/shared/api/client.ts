@@ -37,6 +37,11 @@ function csrfToken() {
   )
 }
 
+export function hasAuthSession(): boolean {
+  if (typeof document === 'undefined') return false
+  return Boolean(csrfToken())
+}
+
 export function withSessionLock<T>(task: () => Promise<T>): Promise<T> {
   return navigator.locks
     ? (navigator.locks.request('coffee-shop-auth', task) as Promise<T>)
@@ -106,15 +111,14 @@ function refresh(observedCsrf: string, sessionSignal: AbortSignal) {
   return refreshFlight
 }
 
-async function request<T>(
+async function requestResponse(
   path: string,
   method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE',
-  schema: z.ZodType<T>,
   signal: AbortSignal | undefined,
   authenticated: boolean,
   body?: unknown,
   timeoutMs = 10_000,
-): Promise<T> {
+): Promise<{ response: Response; signal: AbortSignal }> {
   const sessionSignal = sessionRequests.signal
   const activeSignal = signal ?? new AbortController().signal
   const combined = authenticated
@@ -154,13 +158,28 @@ async function request<T>(
       sessionEvents.dispatchEvent(new Event('forbidden'))
     throw error
   }
-  const parsed = z.object({ data: schema, errors: z.null() }).safeParse(await response.json())
+  return { response, signal: combined }
+}
+
+async function request<T>(
+  path: string, method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE', schema: z.ZodType<T>,
+  signal: AbortSignal | undefined, authenticated: boolean, body?: unknown, timeoutMs = 10_000,
+): Promise<T> {
+  const result = await requestResponse(path, method, signal, authenticated, body, timeoutMs)
+  const parsed = z.object({ data: schema, errors: z.null() }).safeParse(await result.response.json())
   if (!parsed.success) {
-    throw new ApiError(502, 'CLIENT_RESPONSE_INVALID', response.headers.get('x-request-id') ?? undefined,
+    throw new ApiError(502, 'CLIENT_RESPONSE_INVALID', result.response.headers.get('x-request-id') ?? undefined,
       'Phản hồi không hợp lệ. Vui lòng kiểm tra trạng thái giao dịch trước khi thử lại.')
   }
-  combined.throwIfAborted()
+  result.signal.throwIfAborted()
   return parsed.data.data
+}
+
+export async function apiDownload(path: string, signal?: AbortSignal): Promise<Blob> {
+  const result = await requestResponse(path, 'GET', signal, true)
+  const blob = await result.response.blob()
+  result.signal.throwIfAborted()
+  return blob
 }
 
 export function apiGet<T>(
@@ -213,6 +232,10 @@ export async function authCommand(
 }
 
 export function errorMessage(error: unknown) {
+  if (error instanceof TypeError || (error instanceof DOMException && error.name === 'TimeoutError'))
+    return 'Không thể kết nối. Vui lòng thử lại.'
+  if (error instanceof Error && !(error instanceof ApiError) && error.message)
+    return error.message
   if (!(error instanceof ApiError))
     return 'Không thể kết nối. Vui lòng thử lại.'
   if (error.code === 'CLIENT_RESPONSE_INVALID')
@@ -231,7 +254,9 @@ export function errorMessage(error: unknown) {
     return 'Bạn thao tác quá nhanh. Vui lòng thử lại sau.'
   if (
     error.serverMessage &&
-    (error.status === 400 || error.status === 409 || error.status === 404)
+    (error.status === 400 ||
+      error.status === 404 ||
+      error.status === 409)
   )
     return error.serverMessage
   if (error.status === 400)

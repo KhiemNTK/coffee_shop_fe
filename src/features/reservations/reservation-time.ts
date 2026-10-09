@@ -1,22 +1,12 @@
-// This single-store booking calendar uses Vietnam time, not the POS device timezone.
-const timeZone = 'Asia/Ho_Chi_Minh'
-const vietnamOffsetMs = 7 * 60 * 60 * 1000
-
-export function toReservationLocal(date: Date) {
-  return new Date(date.getTime() + vietnamOffsetMs).toISOString().slice(0, 16)
-}
-
-export function fromReservationLocal(value: string) {
-  const date = new Date(`${value}:00+07:00`)
-  if (
-    !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value) ||
-    !Number.isFinite(date.getTime()) ||
-    toReservationLocal(date) !== value
-  ) {
-    throw new Error('Invalid reservation time')
-  }
-  return date
-}
+import {
+  storeTimeZone as timeZone,
+  toStoreLocal as toReservationLocal,
+} from '../../shared/lib/store-time.js'
+export {
+  toStoreLocal as toReservationLocal,
+  fromStoreLocal as fromReservationLocal,
+  formatStoreDateTime as formatReservationDateTime,
+} from '../../shared/lib/store-time.js'
 
 export function reservationDayBounds(offset: number, now = new Date()) {
   const midnight = new Date(`${toReservationLocal(now).slice(0, 10)}T00:00:00+07:00`)
@@ -36,5 +26,3 @@ export const formatReservationTime = (iso: string) =>
     minute: '2-digit',
     hour12: false,
   })
-export const formatReservationDateTime = (iso: string) =>
-  new Date(iso).toLocaleString('vi-VN', { timeZone, hour12: false })

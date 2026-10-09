@@ -38,8 +38,8 @@ export function useSession(enabled = true) {
       }
       return { employee, authorization }
     },
-    staleTime: 0,
+    staleTime: 30_000,
     retry: false,
-    refetchOnWindowFocus: 'always',
+    refetchOnWindowFocus: true,
   })
 }

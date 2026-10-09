@@ -19,6 +19,8 @@ import {
   type MenuFilters,
   type MenuItem,
 } from './menu.api'
+import { hasAuthSession } from '../../shared/api/client'
+import { useSession } from '../auth/session'
 import { Card, CardHeader, CardTitle, CardContent } from '../../shared/ui/card'
 import { Button } from '../../shared/ui/button'
 import { buttonVariants } from '../../shared/ui/button-variants'
@@ -76,6 +78,8 @@ function MenuCard({ item }: { item: MenuItem }) {
 export function MenuPage() {
   const [draft, setDraft] = useState('')
   const [filters, setFilters] = useState(initialFilters)
+  const session = useSession(hasAuthSession())
+  const employee = session.data?.employee
   const categories = useQuery({
     queryKey: ['public-menu', 'categories'],
     queryFn: ({ signal }) => getCategories(signal),
@@ -118,13 +122,30 @@ export function MenuPage() {
               <ShoppingBag className="h-4 w-4" />
               Đặt mang đi
             </Link>
-            <Link
-              to="/sign-in"
-              className={cn(buttonVariants({ variant: 'ghost', size: 'sm' }), 'gap-1.5 text-muted-foreground')}
-            >
-              <UserRound className="h-4 w-4" />
-              <span className="hidden sm:inline">Nhân viên</span>
-            </Link>
+            {employee ? (
+              <Link
+                to="/staff"
+                className={cn(
+                  buttonVariants({ variant: 'outline', size: 'sm' }),
+                  'gap-1.5 font-semibold text-primary border-primary/30 hover:bg-primary/10 transition-colors',
+                )}
+                title={`Đang đăng nhập: ${employee.fullName}`}
+              >
+                <UserRound className="h-4 w-4 text-primary" />
+                <span className="hidden sm:inline font-semibold">{employee.fullName}</span>
+                <span className="rounded bg-primary/15 px-1.5 py-0.5 text-[10px] font-bold text-primary uppercase">
+                  {employee.position?.name || 'Vào ca'}
+                </span>
+              </Link>
+            ) : (
+              <Link
+                to="/sign-in"
+                className={cn(buttonVariants({ variant: 'ghost', size: 'sm' }), 'gap-1.5 text-muted-foreground')}
+              >
+                <UserRound className="h-4 w-4" />
+                <span className="hidden sm:inline">Nhân viên</span>
+              </Link>
+            )}
           </nav>
         </div>
       </header>

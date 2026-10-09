@@ -5,7 +5,8 @@ export const pendingOperationPrefix = 'coffee-shop:pending:'
 
 export function clearPrivatePendingOperations() {
   for (const key of Object.keys(sessionStorage)) {
-    if (key.startsWith(pendingOperationPrefix + 'private:')) sessionStorage.removeItem(key)
+    // Actor-scoped recovery commands retain their own key until reconciled.
+    if (key.startsWith(pendingOperationPrefix + 'private:') && !key.startsWith(pendingOperationPrefix + 'private:intent:')) sessionStorage.removeItem(key)
   }
 }
 
@@ -41,7 +42,14 @@ export async function apiIdempotentMutate<T>(
   }
   const key = pendingKey ?? (typeof suppliedKey === 'string' && suppliedKey ? suppliedKey : crypto.randomUUID())
   sessionStorage.setItem(storageKey, key)
-  const result = await apiMutate(path, 'POST', schema, { ...request, [keyField]: key }, signal, authenticated, timeoutMs)
-  if (sessionStorage.getItem(storageKey) === key) sessionStorage.removeItem(storageKey)
-  return result
+  try {
+    const result = await apiMutate(path, 'POST', schema, { ...request, [keyField]: key }, signal, authenticated, timeoutMs)
+    if (sessionStorage.getItem(storageKey) === key) sessionStorage.removeItem(storageKey)
+    return result
+  } catch (error) {
+    // A rejected first write has no unknown predecessor. Never discard a retry's key.
+    if (!pendingKey && error instanceof ApiError && error.status >= 400 && error.status < 500 && error.status !== 408 && error.status !== 429 && sessionStorage.getItem(storageKey) === key)
+      sessionStorage.removeItem(storageKey)
+    throw error
+  }
 }

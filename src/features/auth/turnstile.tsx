@@ -7,8 +7,8 @@ type TurnstileApi = {
     options: {
       sitekey: string
       action: string
-      size: 'compact'
-      theme: 'light'
+      size?: 'compact' | 'normal' | 'flexible'
+      theme?: 'light' | 'dark' | 'auto'
       callback: (token: string) => void
       'expired-callback': () => void
       'error-callback': () => void
@@ -61,10 +61,12 @@ export function Turnstile({
   siteKey,
   onToken,
   action = 'login',
+  size = 'normal',
 }: {
   siteKey: string
   onToken: (token: string) => void
   action?: string
+  size?: 'compact' | 'normal' | 'flexible'
 }) {
   const container = useRef<HTMLDivElement>(null)
   const [failed, setFailed] = useState(false)
@@ -88,7 +90,7 @@ export function Turnstile({
         widget = api.render(container.current, {
           sitekey: siteKey,
           action,
-          size: 'compact',
+          size,
           theme: 'light',
           callback: (token) => {
             if (!cancelled) {
@@ -108,7 +110,7 @@ export function Turnstile({
       cancelled = true
       if (widget !== undefined) api?.remove(widget)
     }
-  }, [siteKey, onToken, attempt, action])
+  }, [siteKey, onToken, attempt, action, size])
 
   return (
     <div className="verification space-y-2">
@@ -121,7 +123,7 @@ export function Turnstile({
 
       <div
         ref={container}
-        className="min-h-[140px] flex items-center justify-center"
+        className="min-h-[70px] flex items-center justify-center rounded-xl border border-border/50 bg-muted/20 p-1 transition-all"
       />
 
       {failed && (

@@ -1,3 +1,5 @@
+import { decimalAmount, minorAmount } from './money'
+
 const integerFormatter = new Intl.NumberFormat('vi-VN')
 
 /**
@@ -27,9 +29,7 @@ export const formatPrice = formatVnd
 
 // Display snapshot line amounts exactly; invoice totals remain server-authoritative.
 export function formatLineAmount(unitPrice: string, quantity: number): string {
-  const [integer = '0', fraction = ''] = unitPrice.split('.')
-  const minor = (BigInt(integer) * 100n + BigInt(fraction.padEnd(2, '0'))) * BigInt(quantity)
-  return formatVnd(`${minor / 100n}.${(minor % 100n).toString().padStart(2, '0')}`)
+  return formatVnd(decimalAmount(minorAmount(unitPrice) * BigInt(quantity)))
 }
 
 /**

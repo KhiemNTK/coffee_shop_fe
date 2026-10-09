@@ -16,6 +16,7 @@ import {
   Coffee,
   Coins,
   Cpu,
+  ExternalLink,
   LogOut,
   LayoutGrid,
   Printer,
@@ -273,19 +274,42 @@ export function StaffLayout() {
   return (
     <div className="min-h-screen bg-muted/20">
       <header className="flex h-14 items-center justify-between border-b border-border bg-card px-4 sm:px-6 shadow-xs md:sticky md:top-0 md:z-40">
-        <Link to="/" className="flex items-center gap-2 text-base font-bold text-primary">
-          <Coffee className="h-5 w-5" />
-          Coffee Shop
-        </Link>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => void logout()}
-          className="flex items-center gap-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-        >
-          <LogOut className="h-4 w-4" />
-          Đăng xuất
-        </Button>
+        <div className="flex items-center gap-3">
+          <Link to="/staff" className="flex items-center gap-2 text-base font-bold text-primary">
+            <Coffee className="h-5 w-5" />
+            <span>Coffee Homes</span>
+          </Link>
+          <span className="hidden sm:inline text-xs text-muted-foreground/40">|</span>
+          <Link
+            to="/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="hidden sm:inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+            title="Mở thực đơn khách trên tab mới"
+          >
+            <ExternalLink className="h-3 w-3" />
+            Xem thực đơn khách
+          </Link>
+        </div>
+        <div className="flex items-center gap-3">
+          <div className="hidden sm:flex flex-col text-right">
+            <span className="text-xs font-bold text-foreground leading-tight">
+              {session.data.employee.fullName}
+            </span>
+            <span className="text-[11px] text-muted-foreground leading-tight">
+              {session.data.employee.position?.name || 'Nhân viên'}
+            </span>
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => void logout()}
+            className="flex items-center gap-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+          >
+            <LogOut className="h-4 w-4" />
+            Đăng xuất
+          </Button>
+        </div>
       </header>
 
       {/* Thanh điều hướng ngang cho mobile */}
