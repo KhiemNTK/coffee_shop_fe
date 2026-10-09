@@ -1,536 +1,499 @@
-import { useState } from 'react'
-import { useMutation } from '@tanstack/react-query'
-import { AlertCircle, Trash2 } from 'lucide-react'
+import { useId, useRef, useState, type ReactNode } from 'react'
+import { useMutation, useQuery } from '@tanstack/react-query'
+import { RefreshCw, RotateCcw, Trash2 } from 'lucide-react'
 import {
   createPromotion,
   updatePromotion,
   deletePromotion,
+  restorePromotion,
+  getPromotionById,
+  promotionKeys,
+  promotionDecimalSchema,
   type Promotion,
   type DiscountType,
+  type CreatePromotionPayload,
+  type UpdatePromotionPayload,
 } from '../promotions.api'
+import { ApiError, errorMessage } from '../../../shared/api/client'
 import { formatPrice } from '../../../shared/lib/format'
-import { errorMessage } from '../../../shared/api/client'
-import {
-  Badge,
-  Button,
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  Input,
-} from '../../../shared/ui'
+import { fromStoreLocal, toStoreLocal, formatStoreDateTime } from '../../../shared/lib/store-time'
+import { Button, Dialog, DialogHeader, DialogFooter, DialogTitle, Input } from '../../../shared/ui'
 
-function toDatetimeLocal(date: Date) {
-  const pad = (n: number) => String(n).padStart(2, '0')
-  const y = date.getFullYear()
-  const m = pad(date.getMonth() + 1)
-  const d = pad(date.getDate())
-  const h = pad(date.getHours())
-  const min = pad(date.getMinutes())
-  return `${y}-${m}-${d}T${h}:${min}`
-}
-
-function formatDiscountAmount(val: string | number) {
-  return formatPrice(String(val))
-}
-
-// --- CREATE PROMOTION MODAL ---
-export function CreatePromotionModal({
-  open,
-  onClose,
-  onSuccess,
-}: {
-  open: boolean
+type ModalProps = {
+  employeeId: string
   onClose: () => void
   onSuccess: () => void
+  onSettled: () => void
+}
+
+function PromotionDetail({
+  promotionId,
+  employeeId,
+  onClose,
+  children,
+}: Pick<ModalProps, 'employeeId' | 'onClose'> & {
+  promotionId: string
+  children: (promotion: Promotion, reload: () => void) => ReactNode
 }) {
-  const [name, setName] = useState('')
-  const [discountType, setDiscountType] = useState<DiscountType>('PERCENTAGE')
-  const [discountValue, setDiscountValue] = useState<number>(10)
-  const [maxDiscount, setMaxDiscount] = useState<string>('')
-
-  // Default: Starts today, ends in 30 days
-  const [startDate, setStartDate] = useState(() => {
-    const d = new Date()
-    return toDatetimeLocal(d)
+  const query = useQuery({
+    queryKey: promotionKeys.detail(employeeId, promotionId),
+    queryFn: ({ signal }) => getPromotionById(promotionId, signal),
+    staleTime: 0,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
   })
-  const [endDate, setEndDate] = useState(() => {
-    const d = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
-    return toDatetimeLocal(d)
-  })
-
-  const [error, setError] = useState<string | null>(null)
-
-  const createMutation = useMutation({
-    mutationFn: () => {
-      const s = new Date(startDate)
-      const e = new Date(endDate)
-      return createPromotion({
-        name: name.trim(),
-        discountType,
-        discountValue,
-        maxDiscount:
-          discountType === 'PERCENTAGE' && maxDiscount.trim()
-            ? Number(maxDiscount)
-            : null,
-        startDate: s.toISOString(),
-        endDate: e.toISOString(),
-      })
-    },
-    onSuccess,
-    onError: (err) => setError(errorMessage(err)),
-  })
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    setError(null)
-    if (!name.trim()) {
-      setError('Vui lòng nhập tên chương trình khuyến mãi.')
-      return
-    }
-    if (new Date(endDate) <= new Date(startDate)) {
-      setError('Ngày kết thúc phải diễn ra sau ngày bắt đầu.')
-      return
-    }
-    if (discountType === 'PERCENTAGE' && (discountValue <= 0 || discountValue > 100)) {
-      setError('Tỷ lệ giảm giá theo phần trăm phải nằm trong khoảng từ 1% đến 100%.')
-      return
-    }
-    if (discountType === 'FIXED_AMOUNT' && discountValue <= 0) {
-      setError('Số tiền giảm giá phải lớn hơn 0.')
-      return
-    }
-    createMutation.mutate()
-  }
-
-  return (
-    <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-xl">
-        <form onSubmit={handleSubmit}>
-          <DialogHeader>
-            <DialogTitle>Tạo chương trình khuyến mãi mới</DialogTitle>
-            <DialogDescription>
-              Cấu hình mã ưu đãi, hình thức chiết khấu và thời gian áp dụng trên hóa đơn.
-            </DialogDescription>
-          </DialogHeader>
-
-          {error && (
-            <div className="mb-4 rounded-md border border-red-200 bg-red-50 p-3 text-xs text-red-800">
-              {error}
-            </div>
-          )}
-
-          <div className="space-y-4 py-2 text-sm">
-            <div>
-              <label className="font-semibold text-foreground block mb-1">
-                Tên chương trình khuyến mãi <span className="text-red-500">*</span>
-              </label>
-              <Input
-                type="text"
-                required
-                placeholder="Ví dụ: Khai xuân rộn ràng - Giảm 20%"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-              />
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="font-semibold text-foreground block mb-1">
-                  Hình thức giảm giá <span className="text-red-500">*</span>
-                </label>
-                <select
-                  value={discountType}
-                  onChange={(e) => setDiscountType(e.target.value as DiscountType)}
-                  className="w-full h-10 rounded-md border border-input bg-card px-3 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-700"
-                >
-                  <option value="PERCENTAGE">Theo phần trăm (%)</option>
-                  <option value="FIXED_AMOUNT">Số tiền cố định (₫)</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="font-semibold text-foreground block mb-1">
-                  {discountType === 'PERCENTAGE'
-                    ? 'Tỷ lệ giảm (%) *'
-                    : 'Số tiền giảm (₫) *'}
-                </label>
-                <Input
-                  type="number"
-                  min={1}
-                  max={discountType === 'PERCENTAGE' ? 100 : undefined}
-                  required
-                  value={discountValue}
-                  onChange={(e) => setDiscountValue(Number(e.target.value))}
-                />
-              </div>
-            </div>
-
-            {discountType === 'PERCENTAGE' && (
-              <div>
-                <label className="font-semibold text-foreground block mb-1">
-                  Số tiền giảm tối đa (₫) (Tùy chọn)
-                </label>
-                <Input
-                  type="number"
-                  min={0}
-                  placeholder="Ví dụ: 50000 (để trống nếu không giới hạn)"
-                  value={maxDiscount}
-                  onChange={(e) => setMaxDiscount(e.target.value)}
-                />
-                <span className="text-xs text-muted-foreground mt-0.5 block">
-                  Nếu hóa đơn giảm 20% vượt quá số tiền này thì chỉ giảm tối đa mức trên.
-                </span>
-              </div>
-            )}
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="font-semibold text-foreground block mb-1">
-                  Ngày bắt đầu <span className="text-red-500">*</span>
-                </label>
-                <Input
-                  type="datetime-local"
-                  required
-                  value={startDate}
-                  onChange={(e) => setStartDate(e.target.value)}
-                />
-              </div>
-
-              <div>
-                <label className="font-semibold text-foreground block mb-1">
-                  Ngày kết thúc <span className="text-red-500">*</span>
-                </label>
-                <Input
-                  type="datetime-local"
-                  required
-                  value={endDate}
-                  onChange={(e) => setEndDate(e.target.value)}
-                />
-              </div>
-            </div>
-
-            {/* Live Preview Card */}
-            <div className="rounded-xl border border-dashed border-emerald-300 bg-emerald-50/50 p-4">
-              <span className="text-xs font-bold uppercase tracking-wider text-emerald-800 block mb-2">
-                Xem trước hiển thị Voucher:
-              </span>
-              <div className="flex items-center justify-between">
-                <div>
-                  <h5 className="font-bold text-foreground">
-                    {name.trim() || 'Tên chương trình ưu đãi'}
-                  </h5>
-                  <p className="text-xs text-emerald-800 font-medium">
-                    {discountType === 'PERCENTAGE'
-                      ? `Giảm ${discountValue || 0}%${maxDiscount ? ` (Tối đa ${formatDiscountAmount(maxDiscount)})` : ''}`
-                      : `Giảm ${formatDiscountAmount(discountValue || 0)}`}
-                  </p>
-                </div>
-                <Badge className="bg-emerald-700 text-white">Ưu đãi</Badge>
-              </div>
-            </div>
-          </div>
-
-          <DialogFooter className="mt-4">
-            <Button type="button" variant="outline" onClick={onClose}>
-              Hủy
+  if (!query.isSuccess || query.isFetching)
+    return (
+      <Dialog open onClose={onClose}>
+        <DialogTitle>Chi tiết khuyến mãi</DialogTitle>
+        {query.isFetching ? (
+          <p role="status">Đang tải trạng thái mới nhất…</p>
+        ) : (
+          <>
+            <p role="alert" className="text-sm text-destructive">
+              {errorMessage(query.error)}
+            </p>
+            <Button variant="outline" onClick={() => void query.refetch()}>
+              <RefreshCw size={16} aria-hidden="true" />
+              Tải lại chương trình
             </Button>
-            <Button
-              type="submit"
-              disabled={createMutation.isPending}
-              className="bg-emerald-700 hover:bg-emerald-800 text-white"
-            >
-              {createMutation.isPending ? 'Đang tạo…' : 'Xác nhận tạo khuyến mãi'}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
+          </>
+        )}
+      </Dialog>
+    )
+  return children(query.data, () => void query.refetch())
+}
+
+export function PromotionEditorModal(props: ModalProps & { promotionId?: string }) {
+  return props.promotionId ? (
+    <PromotionDetail {...props} promotionId={props.promotionId}>
+      {(promotion, reload) =>
+        promotion.deletedAt ? (
+          <Dialog open onClose={props.onClose}>
+            <DialogTitle>{promotion.name}</DialogTitle>
+            <p role="status">Chương trình đã ngưng. Khôi phục trước khi sửa.</p>
+          </Dialog>
+        ) : (
+          <PromotionEditor {...props} initial={promotion} onReload={reload} />
+        )
+      }
+    </PromotionDetail>
+  ) : (
+    <PromotionEditor {...props} />
   )
 }
 
-// --- EDIT PROMOTION MODAL ---
-export function EditPromotionModal({
-  promotion,
-  onClose,
-  onSuccess,
-}: {
-  promotion: Promotion | null
-  onClose: () => void
-  onSuccess: () => void
-}) {
-  if (!promotion) return null
-  return <EditPromotionModalInner promotion={promotion} onClose={onClose} onSuccess={onSuccess} />
-}
-
-function EditPromotionModalInner({
-  promotion,
-  onClose,
-  onSuccess,
-}: {
-  promotion: Promotion
-  onClose: () => void
-  onSuccess: () => void
-}) {
-  const [name, setName] = useState(promotion.name)
-  const [discountType, setDiscountType] = useState<DiscountType>(promotion.discountType)
-  const [discountValue, setDiscountValue] = useState<number>(Number(promotion.discountValue))
-  const [maxDiscount, setMaxDiscount] = useState<string>(
-    promotion.maxDiscount ? String(promotion.maxDiscount) : '',
+function PromotionEditor({
+  initial,
+  onReload,
+  ...props
+}: ModalProps & { initial?: Promotion; onReload?: () => void }) {
+  const id = useId()
+  const errorRef = useRef<HTMLDivElement>(null)
+  const flight = useRef(false)
+  const [name, setName] = useState(initial?.name ?? '')
+  const [discountType, setDiscountType] = useState<DiscountType>(
+    initial?.discountType ?? 'PERCENTAGE',
   )
+  const [discountValue, setDiscountValue] = useState(initial?.discountValue ?? '10')
+  const [maxDiscount, setMaxDiscount] = useState(initial?.maxDiscount ?? '')
   const [startDate, setStartDate] = useState(() =>
-    toDatetimeLocal(new Date(promotion.startDate)),
+    toStoreLocal(initial ? new Date(initial.startDate) : new Date()),
   )
   const [endDate, setEndDate] = useState(() =>
-    toDatetimeLocal(new Date(promotion.endDate)),
+    toStoreLocal(initial ? new Date(initial.endDate) : new Date(Date.now() + 30 * 86_400_000)),
   )
-  const [error, setError] = useState<string | null>(null)
-
-  const isFinancialLocked = (promotion.usageCount || 0) > 0
-
-  const updateMutation = useMutation({
-    mutationFn: () => {
-      const s = new Date(startDate)
-      const e = new Date(endDate)
-      return updatePromotion(promotion.id, {
-        name: name.trim(),
-        startDate: s.toISOString(),
-        endDate: e.toISOString(),
-        ...(isFinancialLocked
-          ? {}
-          : {
-              discountType,
-              discountValue,
-              maxDiscount:
-                discountType === 'PERCENTAGE' && maxDiscount.trim()
-                  ? Number(maxDiscount)
-                  : null,
-            }),
-      })
+  const [validation, setValidation] = useState<{ field: string; message: string } | null>(null)
+  const [blocked, setBlocked] = useState(false)
+  const financialLocked = (initial?.usageCount ?? 0) > 0
+  const mutation = useMutation({
+    mutationFn: (payload: CreatePromotionPayload | UpdatePromotionPayload) =>
+      initial
+        ? updatePromotion(initial.id, payload)
+        : createPromotion(payload as CreatePromotionPayload),
+    retry: false,
+    onSuccess: props.onSuccess,
+    onError: (error) => {
+      setBlocked(
+        !(error instanceof ApiError) ||
+          error.status >= 500 ||
+          (error.status === 409 && Boolean(initial)) ||
+          error.status === 408,
+      )
+      requestAnimationFrame(() => errorRef.current?.focus())
     },
-    onSuccess,
-    onError: (err) => setError(errorMessage(err)),
+    onSettled: () => {
+      flight.current = false
+      props.onSettled()
+    },
   })
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    setError(null)
-    if (new Date(endDate) <= new Date(startDate)) {
-      setError('Ngày kết thúc phải diễn ra sau ngày bắt đầu.')
-      return
-    }
-    updateMutation.mutate()
+  function fail(field: string, message: string) {
+    setValidation({ field, message })
+    requestAnimationFrame(() => errorRef.current?.focus())
   }
-
+  function inlineError(field: string) {
+    return validation?.field === field ? (
+      <p id={`${id}-${field}-error`} className="text-sm text-destructive">
+        {validation.message}
+      </p>
+    ) : null
+  }
+  function close() {
+    if (!flight.current) props.onClose()
+  }
+  const invalidProps = (field: string) => ({
+    'aria-invalid': validation?.field === field || undefined,
+    'aria-describedby': validation?.field === field ? `${id}-${field}-error` : undefined,
+  })
   return (
-    <Dialog open={true} onOpenChange={onClose}>
-      <DialogContent className="max-w-xl">
-        <form onSubmit={handleSubmit}>
-          <DialogHeader>
-            <DialogTitle>Cập nhật chương trình khuyến mãi</DialogTitle>
-            <DialogDescription>
-              Mã chương trình: {promotion.id.slice(0, 8)}…
-            </DialogDescription>
-          </DialogHeader>
-
-          {error && (
-            <div className="mb-4 rounded-md border border-red-200 bg-red-50 p-3 text-xs text-red-800">
-              {error}
-            </div>
-          )}
-
-          {isFinancialLocked && (
-            <div className="mb-4 rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 flex items-start gap-2">
-              <AlertCircle className="h-4 w-4 text-amber-700 shrink-0 mt-0.5" />
-              <div>
-                <strong>Lưu ý bảo toàn số liệu tài chính:</strong> Chương trình này đã được áp dụng trên{' '}
-                {promotion.usageCount} hóa đơn. Để đảm bảo tính toàn vẹn của sổ sách kế toán, các trường loại chiết khấu và giá trị giảm được khóa. Bạn chỉ có thể gia hạn thời gian hoặc sửa tên chương trình.
-              </div>
-            </div>
-          )}
-
-          <div className="space-y-4 py-2 text-sm">
-            <div>
-              <label className="font-semibold text-foreground block mb-1">
-                Tên chương trình khuyến mãi
+    <Dialog open onClose={close}>
+      <DialogHeader>
+        <DialogTitle>
+          {initial ? 'Cập nhật chương trình khuyến mãi' : 'Tạo chương trình khuyến mãi mới'}
+        </DialogTitle>
+      </DialogHeader>
+      <form
+        className="space-y-4"
+        onSubmit={(event) => {
+          event.preventDefault()
+          if (flight.current || blocked) return
+          setValidation(null)
+          if (!name.trim()) {
+            fail('name', 'Vui lòng nhập tên chương trình.')
+            return
+          }
+          let start: Date, end: Date
+          try {
+            start = fromStoreLocal(startDate)
+            end = fromStoreLocal(endDate)
+          } catch {
+            fail('start', 'Ngày giờ chưa hợp lệ.')
+            return
+          }
+          if (end <= start) {
+            fail('end', 'Ngày kết thúc phải sau ngày bắt đầu.')
+            return
+          }
+          const value = promotionDecimalSchema.safeParse(discountValue.trim())
+          if (
+            !value.success ||
+            !/[1-9]/.test(value.data) ||
+            (discountType === 'PERCENTAGE' && Number(value.data) > 100)
+          ) {
+            fail(
+              'value',
+              'Mức giảm phải lớn hơn 0, tối đa 2 chữ số thập phân; phần trăm không vượt 100%.',
+            )
+            return
+          }
+          const cap =
+            discountType === 'PERCENTAGE'
+              ? maxDiscount.trim() || null
+              : initial?.discountType === 'FIXED_AMOUNT'
+                ? (initial.maxDiscount ?? null)
+                : null
+          if (
+            cap != null &&
+            (!promotionDecimalSchema.safeParse(cap).success || !/[1-9]/.test(cap))
+          ) {
+            fail('cap', 'Giới hạn phải lớn hơn 0 và có tối đa 2 chữ số thập phân.')
+            return
+          }
+          let payload: CreatePromotionPayload | UpdatePromotionPayload
+          if (!initial)
+            payload = {
+              name: name.trim(),
+              discountType,
+              discountValue: value.data,
+              maxDiscount: cap,
+              startDate: start.toISOString(),
+              endDate: end.toISOString(),
+            }
+          else {
+            payload = {
+              ...(name.trim() !== initial.name ? { name: name.trim() } : {}),
+              ...(startDate !== toStoreLocal(new Date(initial.startDate))
+                ? { startDate: start.toISOString() }
+                : {}),
+              ...(endDate !== toStoreLocal(new Date(initial.endDate))
+                ? { endDate: end.toISOString() }
+                : {}),
+              ...(!financialLocked
+                ? {
+                    ...(discountType !== initial.discountType ? { discountType } : {}),
+                    ...(value.data !== initial.discountValue ? { discountValue: value.data } : {}),
+                    ...(cap !== (initial.maxDiscount ?? null) ? { maxDiscount: cap } : {}),
+                  }
+                : {}),
+            }
+            if (!Object.keys(payload).length) {
+              props.onClose()
+              return
+            }
+          }
+          flight.current = true
+          // ponytail: changed-field edits remain last-writer-wins; require server revisions for concurrent editing.
+          mutation.mutate(payload)
+        }}
+      >
+        {(validation || mutation.isError) && (
+          <div ref={errorRef} tabIndex={-1} role="alert" className="text-sm text-destructive">
+            {validation ? (
+              <a href={`#${id}-${validation.field}`}>{validation.message}</a>
+            ) : (
+              errorMessage(mutation.error)
+            )}
+          </div>
+        )}
+        {financialLocked && (
+          <p className="border-l-4 border-primary pl-3 text-sm">
+            Chương trình đã gắn vào {initial!.usageCount} hóa đơn. Mức giảm và giới hạn đã khóa.
+          </p>
+        )}
+        <fieldset disabled={mutation.isPending || blocked} className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-1 sm:col-span-2">
+            <label htmlFor={`${id}-name`} className="text-sm font-medium">
+              Tên chương trình
+            </label>
+            <Input
+              id={`${id}-name`}
+              {...invalidProps('name')}
+              required
+              maxLength={100}
+              placeholder="Ví dụ: Khai xuân rộn ràng - Giảm 20%"
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+            />
+            {inlineError('name')}
+          </div>
+          <div className="space-y-1">
+            <label htmlFor={`${id}-type`} className="text-sm font-medium">
+              Hình thức giảm giá
+            </label>
+            <select
+              id={`${id}-type`}
+              disabled={financialLocked}
+              value={discountType}
+              onChange={(event) => setDiscountType(event.target.value as DiscountType)}
+              className="h-10 w-full min-w-0 rounded-md border border-input bg-card px-3 text-sm"
+            >
+              <option value="PERCENTAGE">Theo phần trăm (%)</option>
+              <option value="FIXED_AMOUNT">Số tiền cố định (₫)</option>
+            </select>
+          </div>
+          <div className="space-y-1">
+            <label htmlFor={`${id}-value`} className="text-sm font-medium">
+              {discountType === 'PERCENTAGE' ? 'Tỷ lệ giảm (%)' : 'Số tiền giảm (₫)'}
+            </label>
+            <Input
+              id={`${id}-value`}
+              {...invalidProps('value')}
+              type="number"
+              step="0.01"
+              min="0.01"
+              max={discountType === 'PERCENTAGE' ? 100 : undefined}
+              required
+              disabled={financialLocked}
+              value={discountValue}
+              onChange={(event) => setDiscountValue(event.target.value)}
+            />
+            {inlineError('value')}
+          </div>
+          {discountType === 'PERCENTAGE' && (
+            <div className="space-y-1 sm:col-span-2">
+              <label htmlFor={`${id}-cap`} className="text-sm font-medium">
+                Số tiền giảm tối đa (₫)
               </label>
               <Input
-                type="text"
-                required
-                value={name}
-                onChange={(e) => setName(e.target.value)}
+                id={`${id}-cap`}
+                {...invalidProps('cap')}
+                type="number"
+                step="0.01"
+                min="0.01"
+                disabled={financialLocked}
+                placeholder="Ví dụ: 50000 (để trống nếu không giới hạn)"
+                value={maxDiscount}
+                onChange={(event) => setMaxDiscount(event.target.value)}
               />
+              {inlineError('cap')}
             </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="font-semibold text-foreground block mb-1">
-                  Hình thức giảm giá
-                </label>
-                <select
-                  disabled={isFinancialLocked}
-                  value={discountType}
-                  onChange={(e) => setDiscountType(e.target.value as DiscountType)}
-                  className={`w-full h-10 rounded-md border border-input bg-card px-3 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-700 ${
-                    isFinancialLocked ? 'opacity-60 cursor-not-allowed' : ''
-                  }`}
-                >
-                  <option value="PERCENTAGE">Theo phần trăm (%)</option>
-                  <option value="FIXED_AMOUNT">Số tiền cố định (₫)</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="font-semibold text-foreground block mb-1">
-                  {discountType === 'PERCENTAGE' ? 'Tỷ lệ giảm (%)' : 'Số tiền giảm (₫)'}
-                </label>
-                <Input
-                  type="number"
-                  disabled={isFinancialLocked}
-                  min={1}
-                  max={discountType === 'PERCENTAGE' ? 100 : undefined}
-                  required
-                  value={discountValue}
-                  onChange={(e) => setDiscountValue(Number(e.target.value))}
-                  className={isFinancialLocked ? 'opacity-60 cursor-not-allowed' : ''}
-                />
-              </div>
-            </div>
-
-            {discountType === 'PERCENTAGE' && (
-              <div>
-                <label className="font-semibold text-foreground block mb-1">
-                  Số tiền giảm tối đa (₫)
-                </label>
-                <Input
-                  type="number"
-                  disabled={isFinancialLocked}
-                  min={0}
-                  placeholder="Để trống nếu không giới hạn"
-                  value={maxDiscount}
-                  onChange={(e) => setMaxDiscount(e.target.value)}
-                  className={isFinancialLocked ? 'opacity-60 cursor-not-allowed' : ''}
-                />
-              </div>
-            )}
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="font-semibold text-foreground block mb-1">
-                  Ngày bắt đầu
-                </label>
-                <Input
-                  type="datetime-local"
-                  required
-                  value={startDate}
-                  onChange={(e) => setStartDate(e.target.value)}
-                />
-              </div>
-
-              <div>
-                <label className="font-semibold text-foreground block mb-1">
-                  Ngày kết thúc
-                </label>
-                <Input
-                  type="datetime-local"
-                  required
-                  value={endDate}
-                  onChange={(e) => setEndDate(e.target.value)}
-                />
-              </div>
-            </div>
+          )}
+          <div className="space-y-1">
+            <label htmlFor={`${id}-start`} className="text-sm font-medium">
+              Ngày bắt đầu (Việt Nam)
+            </label>
+            <Input
+              id={`${id}-start`}
+              {...invalidProps('start')}
+              type="datetime-local"
+              required
+              value={startDate}
+              onChange={(event) => setStartDate(event.target.value)}
+            />
+            {inlineError('start')}
           </div>
-
-          <DialogFooter className="mt-4">
-            <Button type="button" variant="outline" onClick={onClose}>
-              Hủy
-            </Button>
-            <Button
-              type="submit"
-              disabled={updateMutation.isPending}
-              className="bg-emerald-700 hover:bg-emerald-800 text-white"
-            >
-              {updateMutation.isPending ? 'Đang lưu…' : 'Lưu thay đổi'}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
+          <div className="space-y-1">
+            <label htmlFor={`${id}-end`} className="text-sm font-medium">
+              Ngày kết thúc (Việt Nam)
+            </label>
+            <Input
+              id={`${id}-end`}
+              {...invalidProps('end')}
+              type="datetime-local"
+              required
+              value={endDate}
+              onChange={(event) => setEndDate(event.target.value)}
+            />
+            {inlineError('end')}
+          </div>
+        </fieldset>
+        <p className="break-words border-t border-border pt-3 text-sm">
+          {discountType === 'PERCENTAGE'
+            ? `Giảm ${discountValue}%${maxDiscount ? ` (Tối đa ${formatPrice(maxDiscount)})` : ''}`
+            : `Giảm ${formatPrice(discountValue)}`}
+        </p>
+        {blocked && (
+          <div className="space-y-2 text-sm">
+            <p>
+              {initial
+                ? 'Đối chiếu chương trình mới nhất trước khi sửa tiếp.'
+                : 'Chưa rõ kết quả tạo. Đối chiếu danh sách theo tên trước khi tạo chương trình khác.'}
+            </p>
+            {onReload && (
+              <Button type="button" variant="outline" onClick={onReload}>
+                <RefreshCw size={16} aria-hidden="true" />
+                Đối chiếu chương trình
+              </Button>
+            )}
+          </div>
+        )}
+        <DialogFooter>
+          <Button type="button" variant="outline" disabled={mutation.isPending} onClick={close}>
+            Đóng
+          </Button>
+          <Button type="submit" disabled={mutation.isPending || blocked}>
+            {mutation.isPending
+              ? 'Đang lưu…'
+              : initial
+                ? 'Lưu thay đổi'
+                : 'Xác nhận tạo khuyến mãi'}
+          </Button>
+        </DialogFooter>
+      </form>
     </Dialog>
   )
 }
 
-// --- DELETE PROMOTION MODAL ---
-export function DeletePromotionModal({
-  promotion,
-  onClose,
-  onSuccess,
-}: {
-  promotion: Promotion | null
-  onClose: () => void
-  onSuccess: () => void
-}) {
-  if (!promotion) return null
-  return <DeletePromotionModalInner promotion={promotion} onClose={onClose} onSuccess={onSuccess} />
+export function PromotionCommandModal(
+  props: ModalProps & { promotionId: string; kind: 'delete' | 'restore' },
+) {
+  return (
+    <PromotionDetail {...props}>
+      {(promotion, reload) => (
+        <PromotionCommand {...props} promotion={promotion} onReload={reload} />
+      )}
+    </PromotionDetail>
+  )
 }
 
-function DeletePromotionModalInner({
+function PromotionCommand({
   promotion,
-  onClose,
-  onSuccess,
-}: {
+  kind,
+  onReload,
+  ...props
+}: ModalProps & {
+  promotionId: string
   promotion: Promotion
-  onClose: () => void
-  onSuccess: () => void
+  kind: 'delete' | 'restore'
+  onReload: () => void
 }) {
-  const [error, setError] = useState<string | null>(null)
-
-  const deleteMutation = useMutation({
-    mutationFn: () => deletePromotion(promotion.id),
-    onSuccess,
-    onError: (err) => setError(errorMessage(err)),
+  const errorRef = useRef<HTMLParagraphElement>(null)
+  const flight = useRef(false)
+  const [blocked, setBlocked] = useState(false)
+  const mutation = useMutation({
+    mutationFn: async () => {
+      await (kind === 'delete' ? deletePromotion(promotion.id) : restorePromotion(promotion.id))
+    },
+    retry: false,
+    onSuccess: props.onSuccess,
+    onError: (error) => {
+      setBlocked(
+        !(error instanceof ApiError) ||
+          error.status >= 500 ||
+          error.status === 409 ||
+          error.status === 408,
+      )
+      requestAnimationFrame(() => errorRef.current?.focus())
+    },
+    onSettled: () => {
+      flight.current = false
+      props.onSettled()
+    },
   })
-
+  const alreadyDone = kind === 'delete' ? Boolean(promotion.deletedAt) : !promotion.deletedAt
+  function close() {
+    if (!flight.current) props.onClose()
+  }
   return (
-    <Dialog open={true} onOpenChange={onClose}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-destructive">
-            <Trash2 className="h-5 w-5" />
-            Ngừng áp dụng khuyến mãi
-          </DialogTitle>
-          <DialogDescription>
-            Bạn có chắc chắn muốn ngừng áp dụng chương trình{' '}
-            <strong>{promotion.name}</strong> không?
-          </DialogDescription>
-        </DialogHeader>
-
-        {error && (
-          <div className="mb-4 rounded-md border border-red-200 bg-red-50 p-3 text-xs text-red-800">
-            {error}
-          </div>
-        )}
-
-        <div className="py-2 text-xs text-muted-foreground space-y-1">
-          <p>• Chương trình sẽ được đánh dấu ngừng hoạt động và không thể áp dụng cho các đơn hàng mới.</p>
-          <p>• Các hóa đơn cũ đã áp dụng voucher này trong quá khứ sẽ vẫn được bảo lưu nguyên vẹn.</p>
-          <p>• Bạn có thể khôi phục lại chương trình này bất kỳ lúc nào.</p>
-        </div>
-
-        <DialogFooter className="mt-4">
-          <Button variant="outline" onClick={onClose}>
-            Đóng
-          </Button>
+    <Dialog open onClose={close}>
+      <DialogHeader>
+        <DialogTitle>
+          {kind === 'delete' ? 'Ngừng áp dụng khuyến mãi?' : 'Khôi phục khuyến mãi?'}
+        </DialogTitle>
+      </DialogHeader>
+      <p className="break-words font-medium">{promotion.name}</p>
+      <p className="text-sm">
+        {formatStoreDateTime(promotion.startDate)} – {formatStoreDateTime(promotion.endDate)}
+      </p>
+      <p className="text-sm">Đã gắn vào {promotion.usageCount} hóa đơn.</p>
+      {kind === 'delete' ? (
+        <p className="text-sm">
+          Hóa đơn cũ giữ nguyên. Chương trình sẽ không áp dụng cho hóa đơn mới.
+        </p>
+      ) : (
+        <p className="text-sm">
+          Khôi phục giữ nguyên thời gian hiệu lực; không tự gia hạn chương trình đã hết hạn.
+        </p>
+      )}
+      {alreadyDone && <p role="status">Thao tác đã hoàn tất theo trạng thái hiện tại.</p>}
+      {mutation.isError && (
+        <p ref={errorRef} tabIndex={-1} role="alert" className="text-sm text-destructive">
+          {errorMessage(mutation.error)}
+        </p>
+      )}
+      {blocked && (
+        <Button variant="outline" onClick={onReload}>
+          <RefreshCw size={16} aria-hidden="true" />
+          Đối chiếu trạng thái
+        </Button>
+      )}
+      <DialogFooter>
+        <Button variant="outline" disabled={mutation.isPending} onClick={close}>
+          Đóng
+        </Button>
+        {!alreadyDone && (
           <Button
-            variant="destructive"
-            disabled={deleteMutation.isPending}
-            onClick={() => deleteMutation.mutate()}
+            variant={kind === 'delete' ? 'destructive' : 'default'}
+            disabled={mutation.isPending || blocked}
+            onClick={() => {
+              if (flight.current || blocked) return
+              flight.current = true
+              mutation.mutate()
+            }}
           >
-            {deleteMutation.isPending ? 'Đang xóa…' : 'Xác nhận ngừng áp dụng'}
+            {kind === 'delete' ? (
+              <Trash2 size={16} aria-hidden="true" />
+            ) : (
+              <RotateCcw size={16} aria-hidden="true" />
+            )}
+            {mutation.isPending
+              ? 'Đang xử lý…'
+              : kind === 'delete'
+                ? 'Xác nhận ngừng áp dụng'
+                : 'Xác nhận khôi phục'}
           </Button>
-        </DialogFooter>
-      </DialogContent>
+        )}
+      </DialogFooter>
     </Dialog>
   )
 }

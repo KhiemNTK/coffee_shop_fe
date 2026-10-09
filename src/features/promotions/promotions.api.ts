@@ -1,38 +1,45 @@
 import { z } from 'zod'
 import { apiGet, apiMutate } from '../../shared/api/client'
+import { moneySchema } from '../menu/menu.api'
+
+export const promotionKeys = {
+  list: (employeeId: string) => ['private', employeeId, 'promotions'] as const,
+  detail: (employeeId: string, id: string) =>
+    ['private', employeeId, 'promotion-detail', id] as const,
+  active: (employeeId: string) => ['private', employeeId, 'checkout-promotions'] as const,
+}
 
 export const discountTypeSchema = z.enum(['PERCENTAGE', 'FIXED_AMOUNT'])
 export type DiscountType = z.infer<typeof discountTypeSchema>
 
-export const promotionStatusSchema = z.enum([
-  'ACTIVE',
-  'UPCOMING',
-  'EXPIRED',
-  'DELETED',
-])
+export const promotionStatusSchema = z.enum(['ACTIVE', 'UPCOMING', 'EXPIRED', 'DELETED'])
 export type PromotionStatus = z.infer<typeof promotionStatusSchema>
 
-export const promotionDecimalSchema = z.union([
-  z.number(),
-  z.string().regex(/^\d+(\.\d{1,4})?$/),
-])
+export const promotionDecimalSchema = moneySchema
+const dateTimeSchema = z.iso.datetime({ offset: true })
 
 export const promotionSchema = z.object({
-  id: z.string(),
+  id: z.uuid(),
   name: z.string(),
-  startDate: z.string(),
-  endDate: z.string(),
+  startDate: dateTimeSchema,
+  endDate: dateTimeSchema,
   discountType: discountTypeSchema,
   discountValue: promotionDecimalSchema,
-  maxDiscount: promotionDecimalSchema.nullable().optional(),
+  maxDiscount: promotionDecimalSchema.nullable(),
   status: promotionStatusSchema,
-  usageCount: z.number().int().nonnegative().optional().default(0),
-  createdAt: z.string(),
-  updatedAt: z.string(),
-  deletedAt: z.string().nullable().optional(),
+  usageCount: z.number().int().nonnegative(),
+  createdAt: dateTimeSchema,
+  updatedAt: dateTimeSchema,
+  deletedAt: dateTimeSchema.nullable(),
   estimatedDiscountAmount: promotionDecimalSchema.optional(),
 })
 export type Promotion = z.infer<typeof promotionSchema>
+const promotionRecordSchema = promotionSchema.omit({
+  status: true,
+  usageCount: true,
+  estimatedDiscountAmount: true,
+})
+export type PromotionRecord = z.infer<typeof promotionRecordSchema>
 
 export const paginatedPromotionsSchema = z.object({
   list: z.array(promotionSchema),
@@ -97,10 +104,7 @@ export async function getActivePromotions(
   return apiGet(`/promotions/active${qs}`, activePromotionsResponseSchema, signal, true)
 }
 
-export async function getPromotionById(
-  id: string,
-  signal?: AbortSignal,
-): Promise<Promotion> {
+export async function getPromotionById(id: string, signal?: AbortSignal): Promise<Promotion> {
   return apiGet(`/promotions/${id}`, promotionSchema, signal, true)
 }
 
@@ -113,10 +117,8 @@ export interface CreatePromotionPayload {
   maxDiscount?: number | string | null
 }
 
-export async function createPromotion(
-  payload: CreatePromotionPayload,
-): Promise<Promotion> {
-  return apiMutate('/promotions', 'POST', promotionSchema, payload)
+export async function createPromotion(payload: CreatePromotionPayload): Promise<PromotionRecord> {
+  return apiMutate('/promotions', 'POST', promotionRecordSchema, payload)
 }
 
 export interface UpdatePromotionPayload {
@@ -131,23 +133,19 @@ export interface UpdatePromotionPayload {
 export async function updatePromotion(
   id: string,
   payload: UpdatePromotionPayload,
-): Promise<Promotion> {
-  return apiMutate(`/promotions/${id}`, 'PATCH', promotionSchema, payload)
+): Promise<PromotionRecord> {
+  return apiMutate(`/promotions/${id}`, 'PATCH', promotionRecordSchema, payload)
 }
 
-export async function deletePromotion(
-  id: string,
-): Promise<{ success: boolean; message: string }> {
+export async function deletePromotion(id: string): Promise<{ success: boolean; message: string }> {
   return apiMutate(
     `/promotions/${id}`,
     'DELETE',
-    z.object({ success: z.boolean(), message: z.string() }),
+    z.object({ success: z.literal(true), message: z.string() }),
     undefined,
   )
 }
 
-export async function restorePromotion(
-  id: string,
-): Promise<Promotion> {
-  return apiMutate(`/promotions/${id}/restore`, 'POST', promotionSchema, {})
+export async function restorePromotion(id: string): Promise<PromotionRecord> {
+  return apiMutate(`/promotions/${id}/restore`, 'POST', promotionRecordSchema, {})
 }
