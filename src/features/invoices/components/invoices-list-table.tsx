@@ -168,7 +168,6 @@ export function InvoicesListTable({
                     <tr
                       key={invoice.id}
                       tabIndex={0}
-                      role="button"
                       aria-label={`Chi tiết hóa đơn ${invoice.invoiceNumber}`}
                       className="hover:bg-stone-50/70 focus-visible:bg-stone-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 transition-colors group cursor-pointer"
                       onClick={() => onSelectInvoice(invoice.id)}

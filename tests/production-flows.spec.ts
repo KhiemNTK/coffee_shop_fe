@@ -85,7 +85,12 @@ test('takeaway invoice uses priceAtTime and its native dialog traps and returns 
   await page.goto('/staff/invoices')
   const main = await page.getByRole('main').boundingBox()
   expect(main!.x + main!.width).toBeLessThanOrEqual(info.project.use.viewport!.width)
-  const opener = page.getByTitle('Xem chi tiết & Thanh toán')
+  const row = page.getByRole('table').getByRole('row', {
+    name: 'Chi tiết hóa đơn ' + invoice.invoiceNumber,
+    exact: true,
+  })
+  await expect(row).toBeVisible()
+  const opener = row.getByTitle('Xem chi tiết & Thanh toán')
   await opener.click()
   const dialog = page.getByRole('dialog')
   await expect(dialog.getByText('Contract coffee', { exact: true })).toBeVisible()
