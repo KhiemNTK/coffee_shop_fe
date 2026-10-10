@@ -124,8 +124,10 @@ test.describe('Audit Logs & System Trail Management', () => {
     await expect(page.getByText('EQUIPMENT_STATUS_CHANGED')).toBeVisible()
 
     // Staff names
-    await expect(page.getByText('Quản trị viên Hệ thống').first()).toBeVisible()
-    await expect(page.getByText('Thu ngân Ca Sáng')).toBeVisible()
+    const promotionRow = page.getByRole('row').filter({ hasText: 'PROMOTION_CREATED' })
+    await expect(promotionRow.getByText('Quản trị viên Hệ thống', { exact: true })).toBeVisible()
+    const checkoutRow = page.getByRole('row').filter({ hasText: 'ORDER_CHECKOUT' })
+    await expect(checkoutRow.getByText('Thu ngân Ca Sáng', { exact: true })).toBeVisible()
 
     // Request IDs
     await expect(page.getByText('req-alpha-001')).toBeVisible()

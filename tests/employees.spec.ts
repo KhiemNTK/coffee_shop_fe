@@ -173,18 +173,19 @@ test.describe('Staff Employees and Roles Management', () => {
     ).toContainText('3')
 
     // Employee names
-    await expect(page.getByText('Trần Văn Chủ Quán')).toBeVisible()
-    await expect(page.getByText('Lê Thị Thu Ngân')).toBeVisible()
-    await expect(page.getByText('Nguyễn Văn Tạm Khóa')).toBeVisible()
+    const table = page.getByRole('table')
+    await expect(table.getByText('Trần Văn Chủ Quán', { exact: true })).toBeVisible()
+    await expect(table.getByText('Lê Thị Thu Ngân', { exact: true })).toBeVisible()
+    await expect(table.getByText('Nguyễn Văn Tạm Khóa', { exact: true })).toBeVisible()
 
     // Filter by status: Inactive
     await page.getByLabel('Lọc theo trạng thái').selectOption('INACTIVE')
-    await expect(page.getByText('Nguyễn Văn Tạm Khóa')).toBeVisible()
-    await expect(page.getByText('Trần Văn Chủ Quán')).not.toBeVisible()
+    await expect(table.getByText('Nguyễn Văn Tạm Khóa', { exact: true })).toBeVisible()
+    await expect(table.getByText('Trần Văn Chủ Quán', { exact: true })).toHaveCount(0)
 
     // Reset filter
     await page.getByLabel('Lọc theo trạng thái').selectOption('ALL')
-    await expect(page.getByText('Trần Văn Chủ Quán')).toBeVisible()
+    await expect(table.getByText('Trần Văn Chủ Quán', { exact: true })).toBeVisible()
   })
 
   test('creates a new employee', async ({ page }) => {
