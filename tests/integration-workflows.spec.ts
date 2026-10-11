@@ -37,9 +37,9 @@ test('failed lazy screen has a render fallback instead of a blank page', async (
 
 test('exception read failure is not shown as an empty healthy queue', async ({ page }) => {
   await staff(page, ['/management-exceptions_read'])
-  await page.route('**/api/v1/management/exceptions/summary', route => route.fulfill({ json: envelope({ counts: { PAYMENT: 0, CASH_EXPENSE: 0, CASH_HANDOVER: 0, FEEDBACK: 0 }, total: 0 }) }))
+  await page.route('**/api/v1/management/exceptions/summary', route => route.fulfill({ json: envelope({ asOf: date, counts: { PAYMENT: 0, CASH_EXPENSE: 0, CASH_HANDOVER: 0, FEEDBACK: 0, KITCHEN_OVERDUE: 0, ONLINE_PICKUP_LATE: 0 }, total: 0 }) }))
   await page.route('**/api/v1/management/exceptions?*', route => route.fulfill({ status: 503, json: { message: 'Unavailable' } }))
-  await page.goto('/staff/settings')
+  await page.goto('/staff/operations')
   await expect(page.getByRole('alert')).toContainText('Dịch vụ tạm thời không khả dụng')
   await expect(page.getByText('Không có ngoại lệ tồn đọng')).toHaveCount(0)
 })

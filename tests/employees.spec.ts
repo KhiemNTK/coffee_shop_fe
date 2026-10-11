@@ -174,18 +174,30 @@ test.describe('Staff Employees and Roles Management', () => {
 
     // Employee names
     const table = page.getByRole('table')
-    await expect(table.getByText('Trần Văn Chủ Quán', { exact: true })).toBeVisible()
-    await expect(table.getByText('Lê Thị Thu Ngân', { exact: true })).toBeVisible()
-    await expect(table.getByText('Nguyễn Văn Tạm Khóa', { exact: true })).toBeVisible()
+    await expect(
+      table.getByText('Trần Văn Chủ Quán', { exact: true }),
+    ).toBeVisible()
+    await expect(
+      table.getByText('Lê Thị Thu Ngân', { exact: true }),
+    ).toBeVisible()
+    await expect(
+      table.getByText('Nguyễn Văn Tạm Khóa', { exact: true }),
+    ).toBeVisible()
 
     // Filter by status: Inactive
     await page.getByLabel('Lọc theo trạng thái').selectOption('INACTIVE')
-    await expect(table.getByText('Nguyễn Văn Tạm Khóa', { exact: true })).toBeVisible()
-    await expect(table.getByText('Trần Văn Chủ Quán', { exact: true })).toHaveCount(0)
+    await expect(
+      table.getByText('Nguyễn Văn Tạm Khóa', { exact: true }),
+    ).toBeVisible()
+    await expect(
+      table.getByText('Trần Văn Chủ Quán', { exact: true }),
+    ).toHaveCount(0)
 
     // Reset filter
     await page.getByLabel('Lọc theo trạng thái').selectOption('ALL')
-    await expect(table.getByText('Trần Văn Chủ Quán', { exact: true })).toBeVisible()
+    await expect(
+      table.getByText('Trần Văn Chủ Quán', { exact: true }),
+    ).toBeVisible()
   })
 
   test('creates a new employee', async ({ page }) => {
@@ -310,6 +322,8 @@ test.describe('Staff Employees and Roles Management', () => {
               email: 'cashier01@example.test',
               fullName: 'Lê Thị Thu Ngân',
               isActive: true,
+              canManageRoles: true,
+              assignableRoleIds: mockRoles.map((role) => role.id),
               employeeRoles: [
                 {
                   role: mockRoles[2], // CASHIER

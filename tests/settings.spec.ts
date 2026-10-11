@@ -148,11 +148,14 @@ const mockSettingRevisions = [
 ]
 
 const mockExceptionsSummary = {
+  asOf: '2026-10-11T10:00:00.000Z',
   counts: {
     PAYMENT: 1,
     CASH_EXPENSE: 1,
     CASH_HANDOVER: 0,
     FEEDBACK: 2,
+    KITCHEN_OVERDUE: 0,
+    ONLINE_PICKUP_LATE: 0,
   },
   total: 4,
 }

@@ -367,8 +367,8 @@ test.describe('real Docker backend contract', () => {
       await check('printing/printing.api', 'printingApi.getJobs')
       await check('settings/settings.api', 'settingsApi.getEquipment')
       await check('settings/settings.api', 'settingsApi.getSystemSettings')
-      await check('settings/settings.api', 'settingsApi.getManagementExceptionsSummary')
-      await check('settings/settings.api', 'settingsApi.getManagementExceptions', [{ kind: 'PAYMENT' }])
+      await check('operations/operations.api', 'operationsApi.getManagementExceptionsSummary')
+      await check('operations/operations.api', 'operationsApi.getManagementExceptions', [{ kind: 'PAYMENT' }])
       await check('audit-logs/audit-logs.api', 'auditLogsApi.getAuditLogs')
       await check('reservations/reservations.api', 'getReservations', [{}])
       return { passed, failures }

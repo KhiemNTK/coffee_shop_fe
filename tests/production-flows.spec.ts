@@ -201,7 +201,7 @@ test('receipt posting confirms once and accepts the backend movement result', as
 
 test('refund confirmation preserves its key after an uncertain provider response', async ({ page }) => {
   const keys: string[] = []
-  const paid = { ...invoice, paymentStatus: 'PAID' }
+  const paid = { ...invoice, paymentStatus: 'PAID', paymentMethod: 'TRANSFER' }
   const pageData = (list: unknown[]) => ({ list, totalItems: list.length, totalPages: 1, currentPage: 1 })
   await page.route('**/api/v1/auth/me', (route) => route.fulfill({ json: envelope(defaultMockAdminEmployee) }))
   await page.route('**/api/v1/auth/me/permissions', (route) => route.fulfill({ json: envelope(defaultMockAdminAuth([
@@ -228,6 +228,7 @@ test('refund confirmation preserves its key after an uncertain provider response
   })
   await page.goto('/staff/invoices')
   await page.getByTitle('Xem chi tiết & Thanh toán').click()
+  await page.getByRole('button', { name: 'Hoàn tiền & làm lại', exact: true }).click()
   await page.getByLabel('Số tiền hoàn (VND)').fill('10000')
   await page.getByLabel('Lý do hoàn tiền').fill('Wrong drink')
   await page.getByRole('button', { name: 'Yêu cầu hoàn tiền', exact: true }).click()

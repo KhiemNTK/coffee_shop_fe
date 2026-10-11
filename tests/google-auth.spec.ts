@@ -212,7 +212,7 @@ test('link Google rechecks password and discards credentials after a rejected li
     linked = true
     return route.fulfill({ json: envelope({ linked: true }) })
   })
-  await page.goto('/staff')
+  await page.goto('/staff/account')
   const submit = page.getByRole('button', {
     name: 'Liên kết Google',
     exact: true,
@@ -246,7 +246,7 @@ for (const status of [503, 200]) {
           json: status === 200 ? envelope({ unlinked: false }) : {},
         })
       })
-      await page.goto('/staff')
+      await page.goto('/staff/account')
       await page.getByLabel('Mật khẩu hiện tại').fill('Fixture-password-123!')
       await page
         .getByRole('button', { name: 'Hủy liên kết và đăng xuất' })
@@ -285,9 +285,9 @@ test('successful unlink clears both tabs without retaining Google credentials', 
     revoked = true
     return route.fulfill({ json: envelope({ unlinked: true }) })
   })
-  await page.goto('/staff')
+  await page.goto('/staff/account')
   const other = await context.newPage()
-  await other.goto('/staff')
+  await other.goto('/staff/account')
   await expect(
     other.getByRole('heading', { name: defaultMockAdminEmployee.fullName }),
   ).toBeVisible()
@@ -322,7 +322,7 @@ for (const linked of [false, true]) {
           return route.fulfill({ status: 401, json: {} })
         },
       )
-      await page.goto('/staff')
+      await page.goto('/staff/account')
       if (!linked)
         await page.getByRole('button', { name: 'Google fixture' }).click()
       await page.getByLabel('Mật khẩu hiện tại').fill('Incorrect-password-123!')
@@ -338,7 +338,7 @@ for (const linked of [false, true]) {
       await expect(page.getByLabel('Mật khẩu hiện tại')).toBeEnabled()
       expect(calls).toBe(1)
       expect(refreshes).toBe(0)
-      await expect(page).toHaveURL(/\/staff$/)
+      await expect(page).toHaveURL(/\/staff\/account$/)
     },
   )
 }
@@ -361,9 +361,9 @@ test('queued Google unlink cannot use a session changed while waiting for the cr
     await delayed
     await route.fulfill({ body: 'released' })
   })
-  await page.goto('/staff')
+  await page.goto('/staff/account')
   const other = await context.newPage()
-  await other.goto('/staff')
+  await other.goto('/staff/account')
   const holding = other.evaluate(async () =>
     navigator.locks.request('coffee-shop-auth', async () => {
       document.title = 'Fixture lock held'

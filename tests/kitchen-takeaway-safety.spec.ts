@@ -87,6 +87,7 @@ test('uncertain KDS status requires a fresh read before the next step', async ({
                 selectedOptions: [],
                 serveStatus: status,
                 currentTable: null,
+                remake: { id: 'remake-safe', originalItemId: 'original-safe', reason: 'Pha sai công thức' },
               },
             ],
           },
@@ -103,13 +104,15 @@ test('uncertain KDS status requires a fresh read before the next step', async ({
       : route.fulfill({ json: envelope({ id: itemId, serveStatus: status }) })
   })
   await page.goto('/staff/kitchen')
+  await expect(page.getByText('Làm lại · Không thu tiền', { exact: true })).toBeVisible()
+  await expect(page.getByText('Pha sai công thức', { exact: true })).toBeVisible()
   await page.getByRole('button', { name: 'Bắt đầu làm' }).click()
   await expect(page.getByRole('button', { name: 'Xong món' })).toBeDisabled()
   await page.getByRole('button', { name: 'Đối chiếu vé bếp' }).click()
   await expect(page.getByRole('button', { name: 'Xong món' })).toBeEnabled()
   expect(writes).toEqual(['COOKING'])
   await page.getByRole('button', { name: 'Xong món' }).click()
-  await expect(page.getByText('Chờ quầy giao món')).toBeVisible()
+  await expect(page.getByText('Chờ giao món')).toBeVisible()
   expect(writes).toEqual(['COOKING', 'READY'])
 })
 
@@ -138,6 +141,7 @@ test('uncertain walk-in handoff is reviewed inside the dialog without another wr
                   orderSessionId: id,
                   menuItem: { name: 'Walk-in coffee' },
                   ticketNumber: 'BAR-SAFE',
+                  replacementRemake: { id: 'remake-safe', originalItemId: 'original-safe', reason: 'Pha sai công thức' },
                 },
               ],
         ),
@@ -150,6 +154,7 @@ test('uncertain walk-in handoff is reviewed inside the dialog without another wr
     return route.abort()
   })
   await page.goto('/staff/pos')
+  await expect(page.getByText('Làm lại · Không thu tiền', { exact: true })).toBeVisible()
   await page.getByRole('button', { name: 'Giao món', exact: true }).click()
   const dialog = page.getByRole('dialog')
   await dialog.getByRole('button', { name: 'Đã giao cho khách' }).click()
