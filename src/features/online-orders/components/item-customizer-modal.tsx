@@ -93,15 +93,15 @@ export function ItemCustomizerModal({
     <Dialog open onClose={onClose} maxWidth="md" label={'Tùy chọn ' + item.name} showCloseButton={false}>
       <div className="flex flex-col max-h-[85vh]">
         {/* Header */}
-        <div className="p-5 border-b border-border flex items-center justify-between">
-          <div>
-            <h3 className="text-lg font-bold text-brand-900">{item.name}</h3>
+        <div className="p-5 border-b border-border flex items-center justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <h3 className="text-lg font-bold text-brand-900 break-words line-clamp-2 leading-snug">{item.name}</h3>
             <p className="text-xs text-muted-foreground mt-0.5">
               Giá cơ bản:{' '}
-              <span className="font-semibold text-brand-700">{formatPrice(item.price)}</span>
+              <span className="font-semibold text-brand-700 tabular-nums">{formatPrice(item.price)}</span>
             </p>
           </div>
-          <Button variant="ghost" size="sm" onClick={onClose} aria-label="Đóng tùy chọn món" className="h-8 w-8 p-0 rounded-full">
+          <Button variant="ghost" size="sm" onClick={onClose} aria-label="Đóng tùy chọn món" className="h-8 w-8 p-0 rounded-full shrink-0">
             <X className="h-4 w-4" />
           </Button>
         </div>
@@ -113,12 +113,12 @@ export function ItemCustomizerModal({
             const isSingle = group.maxSelected === 1
             return (
               <div key={group.id} className="space-y-2.5">
-                <div className="flex items-baseline justify-between">
-                  <label className="text-sm font-semibold text-foreground">
+                <div className="flex items-baseline justify-between gap-2 min-w-0">
+                  <label className="text-sm font-semibold text-foreground min-w-0 flex-1 break-words">
                     {group.name}
                     {group.minSelected > 0 && <span className="text-destructive ml-1">*</span>}
                   </label>
-                  <span className="text-xs text-muted-foreground">
+                  <span className="text-xs text-muted-foreground shrink-0">
                     {isSingle
                       ? 'Chọn 1'
                       : group.maxSelected > 0
@@ -137,16 +137,16 @@ export function ItemCustomizerModal({
                         aria-pressed={isChecked}
                         onClick={() => toggleOption(group.id, opt.id, group.maxSelected)}
                         className={cn(
-                          'flex items-center justify-between p-3 rounded-lg border text-left transition-all text-sm',
+                          'flex items-center justify-between gap-3 p-3 rounded-lg border text-left transition-all text-sm min-w-0',
                           isChecked
                             ? 'border-brand-600 bg-brand-50/80 text-brand-950 font-medium ring-1 ring-brand-500'
                             : 'border-border bg-card hover:bg-stone-50 text-foreground',
                         )}
                       >
-                        <span>{opt.name}</span>
-                        <div className="flex items-center gap-2">
+                        <span className="min-w-0 flex-1 break-words">{opt.name}</span>
+                        <div className="flex items-center gap-2 shrink-0">
                           {Number(opt.priceDelta) > 0 && (
-                            <span className="text-brand-700 font-semibold text-xs">
+                            <span className="text-brand-700 font-semibold text-xs tabular-nums">
                               +{formatPrice(opt.priceDelta)}
                             </span>
                           )}

@@ -28,13 +28,13 @@ export function PosRecommendationsStrip({
             type="button"
             disabled={disabled}
             onClick={() => onSelectItem(item)}
-            className="flex items-center justify-between rounded-lg border border-primary/20 bg-card p-2 text-left text-xs transition-colors hover:border-primary hover:bg-primary/5 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex items-center justify-between rounded-lg border border-primary/20 bg-card p-2 text-left text-xs transition-colors hover:border-primary hover:bg-primary/5 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 min-w-0"
           >
-            <div className="truncate mr-1">
-              <span className="font-semibold text-foreground truncate block">
+            <div className="truncate mr-1 min-w-0 flex-1">
+              <span className="font-semibold text-foreground truncate block" title={item.name}>
                 {item.name}
               </span>
-              <span className="font-bold text-primary text-[11px]">
+              <span className="font-bold text-primary text-[11px] tabular-nums">
                 {formatPrice(item.price)}
               </span>
             </div>

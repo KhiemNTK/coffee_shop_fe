@@ -13,6 +13,20 @@ interface PosOrderItemsListProps {
   canCancel: boolean
 }
 
+const SERVE_STATUS_CONFIG: Record<
+  string,
+  {
+    label: string
+    variant: 'default' | 'secondary' | 'success' | 'warning' | 'destructive' | 'outline'
+  }
+> = {
+  PENDING: { label: 'Chờ làm', variant: 'warning' },
+  COOKING: { label: 'Đang làm', variant: 'secondary' },
+  READY: { label: 'Đã xong', variant: 'success' },
+  SERVED: { label: 'Đã lên món', variant: 'outline' },
+  CANCELLED: { label: 'Đã hủy', variant: 'destructive' },
+}
+
 export function PosOrderItemsList({
   orderItems,
   onCancelItem,
@@ -35,51 +49,54 @@ export function PosOrderItemsList({
             const isCancelable =
               canCancel &&
               !item.invoiceId &&
-              !item.isPaid &&
+              (!item.isPaid || Boolean(item.replacementRemake)) &&
               item.serveStatus !== 'SERVED' &&
               item.serveStatus !== 'CANCELLED'
+
+            const statusConfig = SERVE_STATUS_CONFIG[item.serveStatus] ?? {
+              label: item.serveStatus,
+              variant: 'warning' as const,
+            }
 
             return (
               <div
                 key={item.id}
                 className={cn(
-                  'flex items-center justify-between gap-3 rounded-lg border p-2.5 transition-colors',
+                  'flex items-center justify-between gap-3 rounded-xl border p-2.5 transition-all min-w-0',
                   item.serveStatus === 'CANCELLED'
                     ? 'border-destructive/20 bg-destructive/5 opacity-70'
-                    : 'border-border bg-muted/20',
+                    : 'border-border bg-card shadow-xs',
                 )}
               >
-                <div className="space-y-0.5">
-                  <div className="flex items-center gap-2">
+                <div className="space-y-0.5 min-w-0 flex-1">
+                  <div className="flex items-start justify-between gap-2 min-w-0">
                     <span
                       className={cn(
-                        'text-sm font-semibold text-foreground',
+                        'text-sm font-semibold text-foreground min-w-0 flex-1 break-words line-clamp-2 leading-snug',
                         item.serveStatus === 'CANCELLED' &&
                           'line-through text-muted-foreground',
                       )}
+                      title={`${item.quantity}x ${item.menuItem.name}`}
                     >
                       {item.quantity}x {item.menuItem.name}
                     </span>
                     <Badge
-                      variant={
-                        item.serveStatus === 'SERVED'
-                          ? 'success'
-                          : item.serveStatus === 'CANCELLED'
-                            ? 'destructive'
-                            : 'warning'
-                      }
-                      className="text-[10px]"
+                      variant={statusConfig.variant}
+                      className="text-[10px] font-semibold shrink-0"
+                      data-status={item.serveStatus}
                     >
-                      {item.serveStatus}
+                      {statusConfig.label}
                     </Badge>
                   </div>
                   <OrderOptions options={item.selectedOptions} />
+                  {item.replacementRemake && <Badge variant="secondary">Làm lại · Không thu tiền</Badge>}
+                  {item.originalRemake && <p className="text-xs text-sky-800">Đã yêu cầu làm lại</p>}
                   {item.note && (
-                    <small className="block text-xs text-muted-foreground">
+                    <small className="block text-xs text-muted-foreground break-words line-clamp-2">
                       {item.note}
                     </small>
                   )}
-                  <span className="block text-xs font-bold text-primary">
+                  <span className="block text-xs font-bold text-primary tabular-nums">
                     {formatLineAmount(item.priceAtTime, item.quantity)}
                   </span>
                 </div>

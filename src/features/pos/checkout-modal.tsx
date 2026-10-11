@@ -102,6 +102,7 @@ export function CheckoutModal({
     totalMinor,
     ((totalMinor + 4_999_999n) / 5_000_000n) * 5_000_000n,
     ((totalMinor + 9_999_999n) / 10_000_000n) * 10_000_000n,
+    20_000_000n,
     50_000_000n,
   ].filter((val, idx, arr) => val >= totalMinor && arr.indexOf(val) === idx)
 
@@ -429,7 +430,7 @@ export function CheckoutModal({
 
           {/* Nội dung Tab 1: Tiền mặt */}
           {method === 'CASH' && (
-            <div className="mt-4 space-y-3">
+            <div className="mt-4 space-y-3.5">
               <div className="space-y-1.5">
                 <label
                   htmlFor="amountTenderedInput"
@@ -440,46 +441,103 @@ export function CheckoutModal({
                 <Input
                   id="amountTenderedInput"
                   type="number"
+                  inputMode="decimal"
                   min={payableTotal}
-                  step="0.01"
+                  step="1000"
                   value={tendered}
                   disabled={pending || Boolean(submittedDirect)}
                   onChange={(e) => setTendered(e.target.value)}
-                  className="text-lg font-bold"
+                  className="text-lg font-bold tabular-nums"
                   required
                 />
               </div>
 
-              {/* Phím số tiền gợi ý nhanh */}
+              {/* Phím số tiền gợi ý nhanh theo màu polymer VND */}
               <div className="flex flex-wrap gap-2">
-                {quickDenominations.map((val) => (
-                  <button
-                    key={String(val)}
-                    type="button"
-                    onClick={() => setTendered(decimalAmount(val))}
-                    disabled={pending || Boolean(submittedDirect)}
-                    className={cn(
-                      'rounded-md border px-3 py-1.5 text-xs font-semibold transition-colors cursor-pointer',
-                      tenderedMinor === val
-                        ? 'border-primary bg-primary/10 text-primary ring-1 ring-primary'
-                        : 'border-border bg-card text-foreground hover:bg-muted',
-                    )}
-                  >
-                    {formatPrice(decimalAmount(val))}
-                  </button>
-                ))}
+                {quickDenominations.map((val) => {
+                  const isExact = val === totalMinor
+                  const is500k = val === 50_000_000n
+                  const is200k = val === 20_000_000n
+                  const is100k = val === 10_000_000n
+                  const isSelected = tenderedMinor === val
+
+                  let colorClasses = 'border-border bg-card text-foreground hover:bg-muted'
+                  if (isSelected) {
+                    colorClasses = 'border-primary bg-primary/10 text-primary ring-2 ring-primary/40 font-bold'
+                  } else if (isExact) {
+                    colorClasses = 'border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 font-bold'
+                  } else if (is500k) {
+                    colorClasses = 'border-sky-300 bg-sky-50 text-sky-800 hover:bg-sky-100 font-semibold'
+                  } else if (is200k) {
+                    colorClasses = 'border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100 font-semibold'
+                  } else if (is100k) {
+                    colorClasses = 'border-teal-300 bg-teal-50 text-teal-800 hover:bg-teal-100 font-semibold'
+                  }
+
+                  return (
+                    <button
+                      key={String(val)}
+                      type="button"
+                      onClick={() => setTendered(decimalAmount(val))}
+                      disabled={pending || Boolean(submittedDirect)}
+                      className={cn(
+                        'rounded-lg border px-3 py-1.5 text-xs transition-all active:scale-95 cursor-pointer',
+                        colorClasses,
+                      )}
+                    >
+                      {isExact ? `Đúng tiền (${formatPrice(decimalAmount(val))})` : formatPrice(decimalAmount(val))}
+                    </button>
+                  )
+                })}
               </div>
 
-              <div className="flex items-center justify-between border-t border-border pt-3">
-                <span className="text-sm text-muted-foreground">Tiền thừa trả khách:</span>
-                <span
-                  className={cn(
-                    'text-lg font-bold',
-                    change > 0 ? 'text-primary' : 'text-foreground',
-                  )}
-                >
-                  {tenderedMinor === null ? 'Chưa xác định' : formatPrice(decimalAmount(change))}
-                </span>
+              {/* Khối hiển thị tiền thừa / còn thiếu */}
+              <div
+                className={cn(
+                  'flex items-center justify-between rounded-xl border p-3.5 transition-all',
+                  tenderedEnough
+                    ? change > 0n
+                      ? 'border-emerald-200 bg-emerald-50/60 text-emerald-950'
+                      : 'border-border bg-muted/40 text-foreground'
+                    : 'border-amber-200 bg-amber-50/60 text-amber-950',
+                )}
+              >
+                <div>
+                  <span className="block text-xs font-semibold text-muted-foreground">
+                    {tenderedEnough ? 'Tiền thừa trả khách:' : 'Khách còn thiếu:'}
+                  </span>
+                  <span
+                    className={cn(
+                      'text-xl font-bold tracking-tight tabular-nums',
+                      tenderedEnough
+                        ? change > 0n
+                          ? 'text-emerald-700'
+                          : 'text-foreground'
+                        : 'text-amber-700',
+                    )}
+                  >
+                    {tenderedMinor === null
+                      ? 'Chưa xác định'
+                      : tenderedEnough
+                        ? formatPrice(decimalAmount(change))
+                        : formatPrice(decimalAmount(totalMinor - tenderedMinor))}
+                  </span>
+                </div>
+                {tenderedEnough && change === 0n && (
+                  <Badge variant="success" className="font-bold">
+                    Đủ tiền
+                  </Badge>
+                )}
+                {tenderedEnough && change > 0n && (
+                  <Badge variant="outline" className="border-emerald-300 bg-white font-bold text-emerald-700">
+                    Trả lại {formatPrice(decimalAmount(change))}
+                  </Badge>
+                )}
+                {!tenderedEnough && tenderedMinor !== null && (
+                  <Badge variant="warning" className="font-bold">
+                    Chưa đủ tiền
+                  </Badge>
+                )}
               </div>
             </div>
           )}

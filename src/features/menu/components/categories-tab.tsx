@@ -67,9 +67,15 @@ export function CategoriesTab({
               <tbody className="divide-y divide-border">
                 {categoriesQuery.data?.list.map((cat) => (
                   <tr key={cat.id} className="hover:bg-muted/30 transition-colors">
-                    <td className="px-4 py-3.5 font-bold text-foreground">{cat.name}</td>
-                    <td className="px-4 py-3.5 text-xs text-muted-foreground">
-                      {cat.description || '—'}
+                    <td className="px-4 py-3.5 font-bold text-foreground max-w-[200px]">
+                      <span className="break-words line-clamp-1 block" title={cat.name}>
+                        {cat.name}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3.5 text-xs text-muted-foreground max-w-[320px]">
+                      <span className="break-words line-clamp-2 block" title={cat.description ?? undefined}>
+                        {cat.description || '—'}
+                      </span>
                     </td>
                     <td className="px-4 py-3.5 text-right">
                       <div className="flex items-center justify-end gap-1.5">

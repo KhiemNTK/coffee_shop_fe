@@ -135,13 +135,15 @@ export function MenuItemsTab({
                   {itemsQuery.data.list.map((item) => {
                     return (
                       <tr key={item.id} className="hover:bg-muted/30 transition-colors">
-                        <td className="px-4 py-3.5 font-semibold text-foreground">
-                          {item.name}
+                        <td className="px-4 py-3.5 font-semibold text-foreground max-w-[240px]">
+                          <span className="break-words line-clamp-2 block leading-snug" title={item.name}>
+                            {item.name}
+                          </span>
                         </td>
 
-                        <td className="px-4 py-3.5">
+                        <td className="px-4 py-3.5 max-w-[160px]">
                           {item.category?.name ? (
-                            <Badge variant="outline" className="text-xs">
+                            <Badge variant="outline" className="text-xs truncate max-w-full" title={item.category.name}>
                               {item.category.name}
                             </Badge>
                           ) : (

@@ -137,24 +137,30 @@ export function TakeawayMenuView({
             >
               <CardContent className="p-5 flex-1 flex flex-col justify-between gap-4">
                 <div>
-                  <div className="flex items-center justify-between gap-2 mb-1.5">
-                    <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+                  <div className="flex items-center justify-between gap-2 mb-1.5 min-w-0">
+                    <span
+                      className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground truncate min-w-0 flex-1"
+                      title={item.category.name}
+                    >
                       {item.category.name}
                     </span>
                     {item.optionGroups.length > 0 && (
-                      <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                      <Badge variant="outline" className="text-[10px] px-1.5 py-0 shrink-0">
                         {item.optionGroups.length} tùy chọn
                       </Badge>
                     )}
                   </div>
-                  <h3 className="text-base font-semibold text-foreground group-hover:text-brand-900 transition-colors line-clamp-1">
+                  <h3
+                    className="text-base font-semibold text-foreground group-hover:text-brand-900 transition-colors line-clamp-2 break-words leading-snug"
+                    title={item.name}
+                  >
                     {item.name}
                   </h3>
-                  <p className="text-lg font-bold text-brand-700 mt-1">
+                  <p className="text-lg font-bold text-brand-700 mt-1 tabular-nums">
                     {formatPrice(item.price)}
                   </p>
                   {item.optionGroups.length > 0 && (
-                    <p className="text-xs text-muted-foreground mt-2 line-clamp-1">
+                    <p className="text-xs text-muted-foreground mt-2 line-clamp-2 break-words">
                       {item.optionGroups.map((g) => g.name).join(' • ')}
                     </p>
                   )}

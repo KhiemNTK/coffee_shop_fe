@@ -59,29 +59,29 @@ export default function OnlineOrderPage() {
   }
 
   return (
-    <div className="min-h-screen bg-stone-50 text-foreground flex flex-col">
+    <div className="min-h-screen bg-background text-foreground flex flex-col">
       {/* Header */}
-      <header className="sticky top-0 z-40 bg-card/95 backdrop-blur border-b border-border shadow-xs">
+      <header className="sticky top-0 z-40 bg-card/95 backdrop-blur-md border-b border-border shadow-xs">
         <div className="max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-3.5 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <Link
               to="/"
-              className="p-1.5 -ml-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-stone-100 transition-colors"
+              className="p-1.5 -ml-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
               title="Về trang chủ"
             >
               <ArrowLeft className="h-5 w-5" />
             </Link>
             <div className="flex items-center gap-2.5">
-              <div className="h-9 w-9 rounded-xl bg-brand-800 text-white flex items-center justify-center shadow-xs">
+              <div className="h-9 w-9 rounded-xl bg-primary text-primary-foreground flex items-center justify-center shadow-xs">
                 <Coffee className="h-5 w-5" />
               </div>
               <div className="flex items-center gap-2">
-                <span className="font-bold text-lg text-brand-900 tracking-tight">
+                <span className="font-bold text-lg text-primary tracking-tight">
                   Coffee Shop
                 </span>
                 <Badge
                   variant="secondary"
-                  className="font-semibold text-xs text-brand-800 bg-brand-50 border-brand-200"
+                  className="font-semibold text-xs text-primary bg-primary-light border-border"
                 >
                   Đặt mang đi
                 </Badge>
@@ -96,7 +96,7 @@ export default function OnlineOrderPage() {
                 variant="ghost"
                 size="sm"
                 onClick={() => setView('lookup')}
-                className="text-stone-600 font-semibold"
+                className="text-muted-foreground hover:text-foreground font-semibold"
               >
                 Tra cứu đơn
               </Button>

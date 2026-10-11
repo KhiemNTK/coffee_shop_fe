@@ -3,6 +3,7 @@ import { apiGet, apiMutate } from '../../shared/api/client'
 import { apiIdempotentMutate } from '../../shared/api/idempotency'
 import { itemSchema, moneySchema } from '../menu/menu.api'
 import { selectedOptionsSchema } from '../../shared/api/order-options'
+import { originalRemakeSchema, replacementRemakeSchema } from '../../shared/api/order-remakes'
 
 export const diningTableSchema = z.object({
   id: z.uuid(),
@@ -43,6 +44,8 @@ export const sessionItemSchema = z.object({
   serveStatus: z.enum(['PENDING', 'COOKING', 'READY', 'SERVED', 'CANCELLED']),
   isPaid: z.boolean(),
   invoiceId: z.string().nullable().optional(),
+  originalRemake: originalRemakeSchema.nullish(),
+  replacementRemake: replacementRemakeSchema.nullish(),
   menuItem: z.object({
     id: z.uuid(),
     name: z.string(),
@@ -231,6 +234,7 @@ export function getHandoffQueue(page: number, signal?: AbortSignal) {
           orderSessionId: z.string(),
           menuItem: z.object({ name: z.string() }),
           ticketNumber: z.string().nullable(),
+          replacementRemake: replacementRemakeSchema.nullish(),
         }),
       ),
       totalPages: z.number(),

@@ -7,7 +7,7 @@ import { getHandoffQueue, handoffItem } from '../pos.api'
 import { kitchenKeys } from '../../kitchen/kitchen.api'
 import { errorMessage } from '../../../shared/api/client'
 import { formatStoreDateTime } from '../../../shared/lib/store-time'
-import { Button, Dialog, DialogTitle, DialogDescription, DialogFooter } from '../../../shared/ui'
+import { Badge, Button, Dialog, DialogTitle, DialogDescription, DialogFooter } from '../../../shared/ui'
 import { Pagination } from '../../../shared/ui/pagination'
 
 export function TakeawayHandoffQueue() {
@@ -85,12 +85,16 @@ export function TakeawayHandoffQueue() {
       <ul className="divide-y">
         {query.isSuccess &&
           query.data.list.map((item) => (
-            <li key={item.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
-              <div className="min-w-0">
-                <p className="break-words text-sm font-medium">
+            <li key={item.id} className="flex flex-wrap items-center justify-between gap-3 py-3 min-w-0">
+              <div className="min-w-0 flex-1">
+                <p
+                  className="break-words line-clamp-2 text-sm font-medium leading-snug"
+                  title={`${item.quantity} × ${item.menuItem.name}`}
+                >
                   {item.quantity} × {item.menuItem.name}
                 </p>
-                <p className="text-xs text-muted-foreground">
+                {item.replacementRemake && <div className="mt-1 space-y-1"><Badge variant="secondary">Làm lại · Không thu tiền</Badge><p className="break-words text-xs text-muted-foreground">{item.replacementRemake.reason}</p></div>}
+                <p className="text-xs text-muted-foreground truncate">
                   {item.ticketNumber ?? item.orderSessionId.slice(0, 8)} ·{' '}
                   {item.readyAt ? formatStoreDateTime(item.readyAt) : 'Sẵn sàng'}
                 </p>
@@ -98,6 +102,7 @@ export function TakeawayHandoffQueue() {
               {canHandoff && (
                 <Button
                   size="sm"
+                  className="shrink-0"
                   disabled={mutation.isPending || reviewRequired || query.isFetching}
                   onClick={() => {
                     if (flight.current) return

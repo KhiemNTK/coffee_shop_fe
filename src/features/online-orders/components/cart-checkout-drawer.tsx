@@ -215,15 +215,18 @@ export function CartCheckoutDrawer({
                   key={item.id}
                   className="bg-stone-50 border border-stone-200 rounded-xl p-3.5 space-y-2.5"
                 >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <h4 className="break-words font-semibold text-sm text-foreground">
+                  <div className="flex items-start justify-between gap-2 min-w-0">
+                    <div className="min-w-0 flex-1">
+                      <h4
+                        className="break-words font-semibold text-sm text-foreground line-clamp-2 leading-snug"
+                        title={item.menuItem.name}
+                      >
                         {item.menuItem.name}
                       </h4>
-                      <p className="text-xs font-semibold text-brand-700 mt-0.5">
+                      <p className="text-xs font-semibold text-brand-700 mt-0.5 tabular-nums">
                         {formatPrice(String(item.calculatedUnitPrice))}
                       </p>
-                      {item.selectedOptionIds.length > 0 && <p className="break-words text-xs text-muted-foreground">
+                      {item.selectedOptionIds.length > 0 && <p className="break-words text-xs text-muted-foreground line-clamp-2">
                         {item.menuItem.optionGroups.flatMap(group => group.options).filter(option => item.selectedOptionIds.includes(option.id)).map(option => option.name).join(', ')}
                       </p>}
                     </div>
@@ -234,7 +237,7 @@ export function CartCheckoutDrawer({
                       onClick={() => onRemoveItem(item.id)}
                       disabled={Boolean(review) || reviewMutation.isPending}
                       aria-label={'Xóa ' + item.menuItem.name}
-                      className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                      className="h-7 w-7 p-0 shrink-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
                       title="Xóa món"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
@@ -242,13 +245,13 @@ export function CartCheckoutDrawer({
                   </div>
 
                   {item.note && (
-                    <p className="text-xs text-muted-foreground italic bg-white/60 px-2 py-1 rounded border border-stone-200/50">
+                    <p className="text-xs text-muted-foreground italic bg-white/60 px-2 py-1 rounded border border-stone-200/50 break-words line-clamp-2">
                       Ghi chú: {item.note}
                     </p>
                   )}
 
-                  <div className="flex items-center justify-between pt-1">
-                    {!review ? <div className="flex items-center gap-2">
+                  <div className="flex items-center justify-between pt-1 gap-2">
+                    {!review ? <div className="flex items-center gap-2 shrink-0">
                       <Button
                         type="button"
                         variant="outline"
@@ -260,7 +263,7 @@ export function CartCheckoutDrawer({
                       >
                         <Minus className="h-3 w-3" />
                       </Button>
-                      <span className="text-sm font-semibold min-w-5 text-center">
+                      <span className="text-sm font-semibold min-w-5 text-center tabular-nums">
                         {item.quantity}
                       </span>
                       <Button
@@ -274,9 +277,9 @@ export function CartCheckoutDrawer({
                       >
                         <Plus className="h-3 w-3" />
                       </Button>
-                    </div> : <span className="text-sm">Số lượng: {item.quantity}</span>}
+                    </div> : <span className="text-sm shrink-0">Số lượng: {item.quantity}</span>}
 
-                    <span className="text-sm font-bold text-brand-800">
+                    <span className="text-sm font-bold text-brand-800 tabular-nums shrink-0">
                       {formatLineAmount(item.calculatedUnitPrice, item.quantity)}
                     </span>
                   </div>

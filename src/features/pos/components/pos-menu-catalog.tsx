@@ -85,9 +85,12 @@ export function PosMenuCatalog({
 
         {/* Lưới món ăn */}
         {error ? (
-          <div role="alert">
-            <p>{error}</p>
-            <Button variant="outline" onClick={onRetry}>
+          <div
+            role="alert"
+            className="my-4 rounded-xl border border-destructive/20 bg-destructive/10 p-5 text-center text-sm text-destructive"
+          >
+            <p className="font-semibold">{error}</p>
+            <Button variant="outline" size="sm" onClick={onRetry} className="mt-3">
               Thử lại
             </Button>
           </div>
@@ -110,12 +113,15 @@ export function PosMenuCatalog({
                 type="button"
                 onClick={() => onSelectItem(item)}
                 disabled={disabled}
-                className="group flex min-h-[85px] flex-col justify-between rounded-xl border border-border bg-card p-3 text-left transition-all hover:border-primary hover:shadow-xs focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-50 select-none cursor-pointer"
+                className="group flex min-h-[85px] flex-col justify-between rounded-xl border border-border bg-card p-3 text-left transition-all duration-150 hover:-translate-y-0.5 hover:border-primary/60 hover:shadow-xs active:scale-[0.98] focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-50 select-none cursor-pointer overflow-hidden min-w-0"
               >
-                <span className="text-sm font-semibold text-foreground group-hover:text-primary transition-colors line-clamp-2">
+                <span
+                  className="text-sm font-semibold text-foreground group-hover:text-primary transition-colors line-clamp-2 break-words w-full leading-snug"
+                  title={item.name}
+                >
                   {item.name}
                 </span>
-                <span className="mt-2 text-xs font-bold text-primary">
+                <span className="mt-2 text-xs font-bold text-primary tabular-nums shrink-0">
                   {formatPrice(item.price)}
                 </span>
               </button>

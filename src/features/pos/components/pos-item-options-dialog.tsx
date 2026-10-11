@@ -75,13 +75,13 @@ function PosItemOptionsContent({
                   <label
                     key={opt.id}
                     className={cn(
-                      'flex min-h-[44px] cursor-pointer items-center justify-between rounded-lg border px-3.5 py-2.5 text-xs transition-all active:scale-[0.99]',
+                      'flex min-h-[44px] cursor-pointer items-center justify-between gap-3 rounded-lg border px-3.5 py-2.5 text-xs transition-all active:scale-[0.99] min-w-0',
                       isSelected
                         ? 'border-primary bg-primary/10 text-primary font-semibold ring-1 ring-primary'
                         : 'border-border bg-card text-foreground hover:bg-muted',
                     )}
                   >
-                    <span className="flex items-center gap-2.5">
+                    <span className="flex items-center gap-2.5 min-w-0 flex-1">
                       <input
                         type={group.maxSelected === 1 ? 'radio' : 'checkbox'}
                         name={`option-group-${group.id}`}
@@ -108,11 +108,11 @@ function PosItemOptionsContent({
                             }
                           })
                         }}
-                        className="h-4 w-4 rounded border-border text-primary focus:ring-primary cursor-pointer"
+                        className="h-4 w-4 shrink-0 rounded border-border text-primary focus:ring-primary cursor-pointer"
                       />
-                      <span className="text-sm font-medium">{opt.name}</span>
+                      <span className="text-sm font-medium break-words">{opt.name}</span>
                     </span>
-                    <span className="text-xs font-bold text-primary">
+                    <span className="text-xs font-bold text-primary shrink-0 tabular-nums">
                       +{formatPrice(opt.priceDelta)}
                     </span>
                   </label>

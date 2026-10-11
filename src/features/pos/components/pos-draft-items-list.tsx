@@ -42,23 +42,26 @@ export function PosDraftItemsList({
         {draftItems.map((item) => (
           <div
             key={item.id}
-            className="flex items-center justify-between gap-3 rounded-lg border border-primary/30 bg-primary/5 p-2.5"
+            className="flex items-center justify-between gap-3 rounded-lg border border-primary/30 bg-primary/5 p-2.5 min-w-0"
           >
-            <div>
-              <strong className="text-sm font-semibold text-foreground">
+            <div className="min-w-0 flex-1">
+              <strong
+                className="text-sm font-semibold text-foreground break-words line-clamp-2 block leading-snug"
+                title={item.menuItem.name}
+              >
                 {item.menuItem.name}
               </strong>
               {item.note && (
-                <small className="block text-xs text-muted-foreground">
+                <small className="block text-xs text-muted-foreground break-words line-clamp-2">
                   {item.note}
                 </small>
               )}
-              <div className="mt-0.5 text-xs font-bold text-primary">
+              <div className="mt-0.5 text-xs font-bold text-primary tabular-nums">
                 {formatLineAmount(item.calculatedPrice, item.quantity)}
               </div>
             </div>
 
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1.5 shrink-0">
               <button
                 type="button"
                 disabled={isSubmitting || isLocked}

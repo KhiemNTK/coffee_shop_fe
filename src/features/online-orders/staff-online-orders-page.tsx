@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from 'react'
+import { startTransition, useEffect, useOptimistic, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useOutletContext } from 'react-router-dom'
+import { useOutletContext, useSearchParams } from 'react-router-dom'
+import { z } from 'zod'
 import { AlertCircle, CheckCircle2, RefreshCw } from 'lucide-react'
 import type { Session } from '../auth/session'
 import {
@@ -35,9 +36,22 @@ export default function StaffOnlineOrdersPage() {
   const canReview = permissions.includes('/online-orders_review')
   const canCollect =
     permissions.includes('/invoices_create') && permissions.includes('/orders_items_handoff')
-  const [activeTab, setActiveTab] = useState<'pending' | 'fulfillment'>('pending')
-  const [overdueOnly, setOverdueOnly] = useState(false)
-  const [page, setPage] = useState(1)
+  const [params, setParams] = useSearchParams()
+  const activeTab = params.get('tab') === 'fulfillment' ? 'fulfillment' : 'pending'
+  const overdueOnly = params.get('overdueOnly') === 'true'
+  const [displayOverdueOnly, setDisplayOverdueOnly] = useOptimistic(overdueOnly)
+  const page = z.coerce.number().int().min(1).max(100_000).safeParse(params.get('page') ?? 1).data ?? 1
+  function setFilters(changes: Record<string, string | null>) {
+    setParams(previous => {
+      const next = new URLSearchParams(previous)
+      for (const [key, value] of Object.entries(changes)) {
+        if (value === null) next.delete(key)
+        else next.set(key, value)
+      }
+      return next
+    })
+  }
+  const setPage = (value: number) => setFilters({ page: value === 1 ? null : String(value) })
   const [nowMs, setNowMs] = useState(() => Date.now())
   const [target, setTarget] = useState<ReviewTarget | null>(null)
   const [collecting, setCollecting] = useState<FulfillmentOrder | null>(null)
@@ -66,6 +80,8 @@ export default function StaffOnlineOrdersPage() {
   })
   const current = activeTab === 'pending' ? pending : fulfillment
   function invalidate() {
+    void client.invalidateQueries({ queryKey: ['management-exceptions-summary'] })
+    void client.invalidateQueries({ queryKey: ['management-exceptions-list'] })
     for (const key of [
       onlineOrderKeys.all(employee.id),
       kitchenKeys.all(employee.id),
@@ -174,8 +190,7 @@ export default function StaffOnlineOrdersPage() {
       <Tabs
         value={activeTab}
         onValueChange={(value) => {
-          setActiveTab(value as typeof activeTab)
-          setPage(1)
+          if (!flight.current) setFilters({ tab: value === 'fulfillment' ? value : null, page: null })
         }}
       >
         <TabsList className="w-full sm:w-auto">
@@ -214,10 +229,12 @@ export default function StaffOnlineOrdersPage() {
           isError={fulfillment.isError}
           error={fulfillment.error}
           onRefetch={() => void refresh()}
-          overdueOnly={overdueOnly}
+          overdueOnly={displayOverdueOnly}
           setOverdueOnly={(value) => {
-            setOverdueOnly(value)
-            setPage(1)
+            startTransition(() => {
+              setDisplayOverdueOnly(value)
+              setFilters({ overdueOnly: value ? 'true' : null, page: null })
+            })
           }}
           canReview={canReview}
           canCollect={canCollect && !blocked}

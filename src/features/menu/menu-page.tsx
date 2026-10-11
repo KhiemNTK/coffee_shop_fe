@@ -33,34 +33,38 @@ const initialFilters: MenuFilters = { keyword: '', categoryId: '', page: 1 }
 function MenuCard({ item }: { item: MenuItem }) {
   return (
     <article className="h-full">
-      <Card className="flex flex-col justify-between overflow-hidden transition-all hover:border-primary/50 hover:shadow-md h-full">
+      <Card className="flex flex-col justify-between overflow-hidden transition-all duration-200 hover:-translate-y-1 hover:border-primary/40 hover:shadow-md h-full">
         <CardHeader className="p-4 pb-2">
-          <Badge variant="secondary" className="w-fit text-[11px] mb-1.5">
+          <Badge variant="secondary" className="w-fit max-w-full truncate text-[11px] mb-1.5 font-medium" title={item.category.name}>
             {item.category.name}
           </Badge>
-          <CardTitle className="text-base font-bold text-foreground line-clamp-2">
+          <CardTitle className="text-base font-bold text-foreground line-clamp-2 break-words leading-snug" title={item.name}>
             {item.name}
           </CardTitle>
         </CardHeader>
         <CardContent className="p-4 pt-0">
-          <p className="text-lg font-bold text-primary">{formatPrice(item.price)}</p>
+          <p className="text-lg font-bold text-primary tabular-nums tracking-tight">{formatPrice(item.price)}</p>
 
           {item.optionGroups.length > 0 && (
             <details className="mt-3 rounded-lg border border-border bg-muted/20 p-2.5 text-xs group">
-              <summary className="cursor-pointer font-semibold text-muted-foreground hover:text-foreground select-none">
+              <summary className="cursor-pointer font-semibold text-muted-foreground hover:text-foreground select-none transition-colors">
                 Tùy chọn món ({item.optionGroups.length})
               </summary>
               <div className="mt-2 space-y-2 pt-2 border-t border-border">
                 {item.optionGroups.map((group) => (
-                  <div key={group.id} className="space-y-1">
-                    <strong className="block text-[11px] uppercase tracking-wider text-muted-foreground">
+                  <div key={group.id} className="space-y-1 min-w-0">
+                    <strong className="block text-[11px] uppercase tracking-wider text-muted-foreground truncate" title={group.name}>
                       {group.name}
                     </strong>
                     <ul className="space-y-1">
                       {group.options.map((option) => (
-                        <li key={option.id} className="flex justify-between text-muted-foreground">
-                          <span>{option.name}</span>
-                          <span className="font-semibold text-primary">+{formatPrice(option.priceDelta)}</span>
+                        <li key={option.id} className="flex items-baseline justify-between gap-2 min-w-0 text-muted-foreground">
+                          <span className="min-w-0 flex-1 break-words line-clamp-1" title={option.name}>
+                            {option.name}
+                          </span>
+                          <span className="shrink-0 font-semibold text-primary tabular-nums">
+                            +{formatPrice(option.priceDelta)}
+                          </span>
                         </li>
                       ))}
                     </ul>
@@ -252,10 +256,10 @@ export function MenuPage() {
             aria-pressed={!filters.categoryId}
             onClick={() => setFilters((current) => ({ ...current, categoryId: '', page: 1 }))}
             className={cn(
-              'rounded-full px-4 py-1.5 text-xs font-semibold transition-colors',
+              'rounded-full px-4 py-2 text-xs font-semibold transition-all active:scale-95 cursor-pointer select-none',
               !filters.categoryId
-                ? 'bg-primary text-primary-foreground shadow-xs'
-                : 'border border-border bg-card text-foreground hover:bg-muted',
+                ? 'bg-primary text-primary-foreground shadow-xs ring-1 ring-primary'
+                : 'border border-border bg-card text-foreground hover:bg-muted hover:border-border/90',
             )}
           >
             Tất cả
@@ -267,10 +271,10 @@ export function MenuPage() {
               aria-pressed={filters.categoryId === category.id}
               onClick={() => setFilters((current) => ({ ...current, categoryId: category.id, page: 1 }))}
               className={cn(
-                'rounded-full px-4 py-1.5 text-xs font-semibold transition-colors',
+                'rounded-full px-4 py-2 text-xs font-semibold transition-all active:scale-95 cursor-pointer select-none',
                 filters.categoryId === category.id
-                  ? 'bg-primary text-primary-foreground shadow-xs'
-                  : 'border border-border bg-card text-foreground hover:bg-muted',
+                  ? 'bg-primary text-primary-foreground shadow-xs ring-1 ring-primary'
+                  : 'border border-border bg-card text-foreground hover:bg-muted hover:border-border/90',
               )}
             >
               {category.name}
