@@ -73,8 +73,8 @@ export function KitchenStationsManagement() {
               key={station.id}
               className="flex flex-wrap items-center justify-between gap-3 py-4"
             >
-              <div className="min-w-0">
-                <h3 className="wrap-break-word font-semibold">
+              <div className="min-w-0 flex-1">
+                <h3 className="break-words font-semibold text-base text-foreground">
                   {station.code} · {station.name}
                 </h3>
                 <p className="text-sm">

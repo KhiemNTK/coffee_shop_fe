@@ -4,7 +4,7 @@ import { cn } from '../../../shared/ui/utils'
 import type { KitchenStation } from '../kitchen.api'
 
 interface KitchenStationsBarProps {
-  stations: KitchenStation[]
+  stations: Pick<KitchenStation, 'id' | 'name' | 'code'>[]
   selectedStationId: string
   onSelectStation: (id: string) => void
   includeCompleted: boolean
@@ -28,6 +28,7 @@ export function KitchenStationsBar({
           <button
             type="button"
             onClick={() => onSelectStation('')}
+            aria-pressed={selectedStationId === ''}
             className={cn(
               'rounded-full px-3.5 py-1 text-xs font-semibold transition-colors cursor-pointer',
               selectedStationId === ''
@@ -42,6 +43,7 @@ export function KitchenStationsBar({
               key={s.id}
               type="button"
               onClick={() => onSelectStation(s.id)}
+              aria-pressed={selectedStationId === s.id}
               className={cn(
                 'max-w-full break-words rounded-full px-3.5 py-1 text-xs font-semibold transition-colors cursor-pointer',
                 selectedStationId === s.id

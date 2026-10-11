@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate, useOutletContext } from 'react-router-dom'
 import {
   AlertCircle,
+  Armchair,
   Coffee,
   Plus,
   ShoppingBag,
@@ -221,32 +222,32 @@ export default function PosTablesPage() {
 
       {/* Thống kê nhanh */}
       {canReadTables && <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <Card className="border-l-4 border-l-emerald-500">
+        <Card className="border-l-4 border-l-emerald-500 shadow-xs">
           <CardContent className="p-4">
             <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               Bàn trống
             </span>
-            <p className="mt-1 text-2xl font-bold text-emerald-600">
+            <p className="mt-1 text-2xl font-bold text-emerald-600 tabular-nums">
               {emptyCount}
             </p>
           </CardContent>
         </Card>
-        <Card className="border-l-4 border-l-amber-500">
+        <Card className="border-l-4 border-l-amber-500 shadow-xs">
           <CardContent className="p-4">
             <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               Đang có khách
             </span>
-            <p className="mt-1 text-2xl font-bold text-amber-600">
+            <p className="mt-1 text-2xl font-bold text-amber-600 tabular-nums">
               {occupiedCount}
             </p>
           </CardContent>
         </Card>
-        {canReadSessions && <Card className="border-l-4 border-l-primary">
+        {canReadSessions && <Card className="border-l-4 border-l-primary shadow-xs">
           <CardContent className="p-4">
             <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               Đơn mang đi
             </span>
-            <p className="mt-1 text-2xl font-bold text-primary">
+            <p className="mt-1 text-2xl font-bold text-primary tabular-nums">
               {takeawaySessions.length}
             </p>
           </CardContent>
@@ -321,7 +322,7 @@ export default function PosTablesPage() {
           quán
         </h2>
 
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5">
           {tables.map((table) => {
             const session = sessionByTableId.get(table.id)
             const isOccupied = table.status === 'OCCUPIED' || Boolean(session)
@@ -330,41 +331,55 @@ export default function PosTablesPage() {
                 type="button"
                 key={table.id}
                 onClick={() => handleTableClick(table)}
-                disabled={!canReadSessions || (!session && !canCreateSession)}
                 className={cn(
-                  'flex min-h-[120px] cursor-pointer flex-col justify-between rounded-lg border-2 p-4 text-left transition-colors disabled:cursor-default focus-visible:outline-2 focus-visible:outline-primary',
+                  'group flex min-h-[128px] cursor-pointer flex-col justify-between rounded-xl border-2 p-3.5 sm:p-4 text-left transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-primary overflow-hidden disabled:opacity-100',
                   isOccupied
-                    ? 'border-amber-400 bg-amber-50/30 hover:border-amber-500'
-                    : 'border-emerald-500/50 bg-card hover:border-emerald-600',
+                    ? 'border-amber-400 bg-amber-50/70 hover:border-amber-500 shadow-xs'
+                    : 'border-emerald-500/60 bg-card hover:border-emerald-600 shadow-xs',
                 )}
               >
-                <div className="flex items-start justify-between gap-1">
-                  <span className="text-base font-bold text-foreground">
-                    {table.name}
-                  </span>
+                <div className="flex items-start justify-between gap-2 min-w-0 w-full">
+                  <div className="flex items-center gap-2 min-w-0 flex-1">
+                    <div
+                      className={cn(
+                        'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg font-bold text-xs shadow-xs',
+                        isOccupied
+                          ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                          : 'bg-emerald-100 text-emerald-900 border border-emerald-300',
+                      )}
+                    >
+                      <Armchair className="h-4 w-4" />
+                    </div>
+                    <span
+                      className="text-sm sm:text-base font-bold text-foreground min-w-0 flex-1 break-words line-clamp-2 leading-tight"
+                      title={table.name}
+                    >
+                      {table.name}
+                    </span>
+                  </div>
                   <Badge
                     variant={isOccupied ? 'warning' : 'success'}
-                    className="text-[11px]"
+                    className="text-[10px] sm:text-[11px] shrink-0 font-bold shadow-xs"
                   >
                     {isOccupied ? 'Có khách' : 'Trống'}
                   </Badge>
                 </div>
 
                 {session ? (
-                  <div className="mt-3 space-y-1 text-xs text-muted-foreground">
-                    <div className="flex items-center gap-1.5">
-                      <Users className="h-3.5 w-3.5 text-foreground/70" />
-                      <span>{session.guestCount ?? 1} khách</span>
+                  <div className="mt-3 space-y-1.5 text-xs font-medium">
+                    <div className="flex items-center gap-1.5 text-foreground">
+                      <Users className="h-3.5 w-3.5 text-amber-700 shrink-0" />
+                      <span className="font-semibold text-foreground">{session.guestCount ?? 1} khách</span>
                     </div>
-                    <div className="flex items-center gap-1.5">
-                      <Coffee className="h-3.5 w-3.5 text-foreground/70" />
-                      <span>{session._count.orderItems} món</span>
+                    <div className="flex items-center gap-1.5 text-foreground">
+                      <Coffee className="h-3.5 w-3.5 text-amber-700 shrink-0" />
+                      <span className="font-semibold text-amber-800">{session._count.orderItems} món</span>
                     </div>
                   </div>
                 ) : (
-                  <div className="mt-3 flex items-center gap-1 text-xs text-muted-foreground">
-                    <Plus className="h-3.5 w-3.5 text-emerald-600" />
-                    <span>Mở bàn</span>
+                  <div className="mt-3 flex items-center gap-1.5 text-xs font-semibold text-emerald-700">
+                    <Plus className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                    <span>Sẵn sàng phục vụ</span>
                   </div>
                 )}
               </button>

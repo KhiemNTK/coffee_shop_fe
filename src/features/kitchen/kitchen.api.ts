@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { apiGet, apiMutate } from '../../shared/api/client'
 import { selectedOptionsSchema } from '../../shared/api/order-options'
+import { replacementRemakeSchema } from '../../shared/api/order-remakes'
 
 export const kitchenKeys = {
   all: (employeeId: string) => ['private', employeeId, 'kitchen'] as const,
@@ -32,6 +33,7 @@ export const kitchenTicketItemSchema = z.object({
   quantity: z.number().int().positive(),
   note: z.string().nullable().optional(),
   selectedOptions: selectedOptionsSchema,
+  remake: replacementRemakeSchema.nullish(),
   serveStatus: z.enum(['PENDING', 'COOKING', 'READY', 'SERVED', 'CANCELLED']),
   currentTable: z
     .object({

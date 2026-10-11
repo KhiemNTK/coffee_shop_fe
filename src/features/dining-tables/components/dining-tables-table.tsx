@@ -57,12 +57,17 @@ export function DiningTablesTable({
 
               return (
                 <tr key={table.id} className="hover:bg-muted/30 transition-colors">
-                  <td className="px-4 py-3.5">
-                    <div className="flex items-center gap-2">
-                      <Armchair className="h-4 w-4 text-muted-foreground" />
-                      <div>
-                        <span className="font-semibold text-foreground">{table.name}</span>
-                        <div className="text-[11px] font-mono text-muted-foreground">
+                  <td className="px-4 py-3.5 max-w-[220px]">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Armchair className="h-4 w-4 shrink-0 text-muted-foreground" />
+                      <div className="min-w-0 flex-1">
+                        <span
+                          className="font-semibold text-foreground break-words line-clamp-1 block"
+                          title={table.name}
+                        >
+                          {table.name}
+                        </span>
+                        <div className="text-[11px] font-mono text-muted-foreground truncate">
                           {table.id.slice(0, 8)}
                         </div>
                       </div>

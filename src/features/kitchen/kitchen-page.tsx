@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from 'react'
+import { startTransition, useEffect, useOptimistic, useRef, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useOutletContext } from 'react-router-dom'
+import { useOutletContext, useSearchParams } from 'react-router-dom'
+import { z } from 'zod'
 import { AlertCircle, ChefHat, Radio, RefreshCw, Volume2, VolumeX } from 'lucide-react'
 import { errorMessage } from '../../shared/api/client'
 import { type Session } from '../auth/session'
@@ -29,9 +30,22 @@ export default function KitchenPage() {
   const canReadStations = authorization.permissionKeys.includes('/kitchen-stations_read')
   const canUpdateStatus = authorization.permissionKeys.includes('/orders_items_update-status')
 
-  const [selectedStationId, setSelectedStationId] = useState<string>('')
-  const [includeCompleted, setIncludeCompleted] = useState<boolean>(false)
-  const [page, setPage] = useState(1)
+  const [params, setParams] = useSearchParams()
+  const selectedStationId = z.uuid().safeParse(params.get('stationId')).data ?? ''
+  const includeCompleted = params.get('includeCompleted') === 'true'
+  const [displayIncludeCompleted, setDisplayIncludeCompleted] = useOptimistic(includeCompleted)
+  const page = z.coerce.number().int().min(1).max(100_000).safeParse(params.get('page') ?? 1).data ?? 1
+  function setFilters(changes: Record<string, string | null>) {
+    setParams(previous => {
+      const next = new URLSearchParams(previous)
+      for (const [key, value] of Object.entries(changes)) {
+        if (value === null) next.delete(key)
+        else next.set(key, value)
+      }
+      return next
+    })
+  }
+  const setPage = (value: number) => setFilters({ page: value === 1 ? null : String(value) })
   const [management, setManagement] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
   const [reviewRequired, setReviewRequired] = useState(false)
@@ -94,6 +108,8 @@ export default function KitchenPage() {
     },
     onSettled: () => {
       flight.current = false
+      void queryClient.invalidateQueries({ queryKey: ['management-exceptions-summary'] })
+      void queryClient.invalidateQueries({ queryKey: ['management-exceptions-list'] })
       void queryClient.invalidateQueries({ queryKey: kitchenKeys.tickets(employee.id) })
       void queryClient.invalidateQueries({ queryKey: kitchenKeys.workload(employee.id) })
       void queryClient.invalidateQueries({ queryKey: ['private', employee.id, 'orders'] })
@@ -253,16 +269,25 @@ export default function KitchenPage() {
 
           {/* Thanh bộ lọc Quầy Bếp (Station Filter) & Trạng thái hoàn thành */}
           <KitchenStationsBar
-            stations={stationsQuery.data || []}
+            stations={
+              stationsQuery.data ??
+              workloadQuery.data?.stations.map((station) => ({
+                id: station.stationId,
+                name: station.stationName,
+                code: station.stationCode,
+              })) ??
+              []
+            }
             selectedStationId={selectedStationId}
             onSelectStation={(id) => {
-              setSelectedStationId(id)
-              setPage(1)
+              setFilters({ stationId: id || null, page: null })
             }}
-            includeCompleted={includeCompleted}
+            includeCompleted={displayIncludeCompleted}
             onToggleIncludeCompleted={(value) => {
-              setIncludeCompleted(value)
-              setPage(1)
+              startTransition(() => {
+                setDisplayIncludeCompleted(value)
+                setFilters({ includeCompleted: value ? 'true' : null, page: null })
+              })
             }}
           />
 
