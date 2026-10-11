@@ -75,6 +75,7 @@ export const paginatedRolesSchema = z.object({
 export type PaginatedRoles = z.infer<typeof paginatedRolesSchema>
 
 export const rolePermissionDetailSchema = z.object({
+  canManagePermissions: z.boolean(),
   id: z.string(),
   name: z.string(),
   description: z.string().nullable().optional(),
@@ -119,6 +120,8 @@ export const paginatedEmployeesSchema = z.object({
 export type PaginatedEmployees = z.infer<typeof paginatedEmployeesSchema>
 
 export const employeeRolesResponseSchema = z.object({
+  canManageRoles: z.boolean(),
+  assignableRoleIds: z.array(z.string()),
   id: z.string(),
   email: z.string(),
   fullName: z.string(),

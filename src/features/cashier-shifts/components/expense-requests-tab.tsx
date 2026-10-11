@@ -64,6 +64,8 @@ export function ExpenseRequestsTab({ onError, onSuccess }: ExpenseRequestsTabPro
       setSelectedExpense(null)
       setExpenseReviewNote('')
       void queryClient.invalidateQueries({ queryKey: ['private', 'expense-requests'] })
+      void queryClient.invalidateQueries({ queryKey: ['management-exceptions-summary'] })
+      void queryClient.invalidateQueries({ queryKey: ['management-exceptions-list'] })
       void queryClient.invalidateQueries({ queryKey: ['private', 'funds'] })
     },
     onError: (err) => {
@@ -82,6 +84,8 @@ export function ExpenseRequestsTab({ onError, onSuccess }: ExpenseRequestsTabPro
       setSelectedExpense(null)
       setExpenseRejectReason('')
       void queryClient.invalidateQueries({ queryKey: ['private', 'expense-requests'] })
+      void queryClient.invalidateQueries({ queryKey: ['management-exceptions-summary'] })
+      void queryClient.invalidateQueries({ queryKey: ['management-exceptions-list'] })
     },
     onError: (err) => {
       onError(errorMessage(err))

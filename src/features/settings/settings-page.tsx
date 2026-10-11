@@ -11,15 +11,17 @@ import {
   Wrench,
 } from 'lucide-react'
 import { settingsApi } from '@/features/settings/settings.api'
+import { operationsApi } from '../operations/operations.api'
+import { errorMessage } from '@/shared/api/client'
 import type { Session } from '@/features/auth/session'
 import { Button, Badge } from '@/shared/ui'
 import { EquipmentTab } from './components/equipment-tab'
 import { SystemSettingsTab } from './components/system-settings-tab'
-import { ManagementExceptionsTab } from './components/management-exceptions-tab'
+import { ManagementExceptionsTab } from '../operations/exception-queue'
 
 export function SettingsPage() {
   const queryClient = useQueryClient()
-  const { authorization } = useOutletContext<Session>()
+  const { employee, authorization } = useOutletContext<Session>()
   const permissions = authorization.permissionKeys
 
   // Permissions check
@@ -62,10 +64,10 @@ export function SettingsPage() {
     enabled: canReadSettings,
   })
 
-  const { data: exceptionsSummaryData, refetch: refetchExceptions } = useQuery({
-    queryKey: ['management-exceptions-summary'],
-    queryFn: ({ signal }) => settingsApi.getManagementExceptionsSummary(signal),
-    enabled: canReadExceptions,
+  const { data: exceptionsSummaryData, isError: exceptionsSummaryError, error: exceptionsError, refetch: refetchExceptions } = useQuery({
+    queryKey: ['management-exceptions-summary', employee.id],
+    queryFn: ({ signal }) => operationsApi.getManagementExceptionsSummary(signal),
+    enabled: canReadExceptions && activeTab === 'exceptions',
   })
 
   const handleRefresh = () => {
@@ -223,7 +225,7 @@ export function SettingsPage() {
       </div>
 
       {/* Tab Panels */}
-      {activeTab === 'equipment' && (
+      {activeTab === 'equipment' && canReadEquipment && (
         <EquipmentTab
           canCreate={canCreateEquipment}
           canUpdate={canUpdateEquipment}
@@ -234,7 +236,7 @@ export function SettingsPage() {
         />
       )}
 
-      {activeTab === 'settings' && (
+      {activeTab === 'settings' && canReadSettings && (
         <SystemSettingsTab
           canUpdate={canUpdateSettings}
           canDelete={canDeleteSettings}
@@ -244,9 +246,10 @@ export function SettingsPage() {
         />
       )}
 
-      {activeTab === 'exceptions' && (
-        <ManagementExceptionsTab summary={exceptionsSummaryData} />
-      )}
+      {activeTab === 'exceptions' && canReadExceptions && <>
+        {exceptionsSummaryError && <p role="alert">{errorMessage(exceptionsError)}</p>}
+        <ManagementExceptionsTab summary={exceptionsSummaryError ? undefined : exceptionsSummaryData} />
+      </>}
     </div>
   )
 }

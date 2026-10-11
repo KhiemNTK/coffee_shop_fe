@@ -1,13 +1,17 @@
-import { lazy, Suspense } from 'react'
-import { BrowserRouter, Link, Route, Routes } from 'react-router-dom'
+import { lazy, Suspense, type ComponentType } from 'react'
+import { BrowserRouter, Route, Routes } from 'react-router-dom'
 import { MenuPage } from '../features/menu/menu-page'
 import { authConfig } from '../features/auth/auth.config'
 import {
   PermissionGate,
-  StaffHome,
   StaffLayout,
 } from '../features/auth/staff-layout'
 
+import { staffDestinations, type StaffDestination } from '../features/auth/staff-navigation'
+
+const StaffHome = lazy(() => import('../features/auth/staff-home'))
+const StaffAccount = lazy(() => import('../features/auth/staff-account'))
+const OperationsPage = lazy(() => import('../features/operations/operations-page'))
 const SignInPage = lazy(() => import('../features/auth/sign-in-page'))
 const SignUpPage = authConfig.signupEnabled ? lazy(() => import('../features/auth/sign-up-page')) : undefined
 const PasswordRecoveryPage = lazy(() => import('../features/auth/password-recovery-page'))
@@ -65,6 +69,15 @@ const PrintingPage = lazy(() =>
     default: m.PrintingPage,
   })),
 )
+const NotFoundPage = lazy(() => import('../features/not-found/not-found-page'))
+
+const staffPages: Record<StaffDestination, ComponentType> = {
+  operations: OperationsPage, pos: PosTablesPage, kitchen: KitchenPage,
+  'online-orders': StaffOnlineOrdersPage, shifts: CashierShiftPage, invoices: InvoicesPage,
+  reconciliation: ReconciliationPage, reservations: StaffReservationsPage, tables: DiningTablesPage,
+  inventory: InventoryPage, menu: StaffMenuPage, promotions: PromotionsPage, reports: ReportsPage,
+  employees: EmployeesPage, settings: SettingsPage, 'audit-logs': AuditLogsPage, printing: PrintingPage,
+}
 
 export function AppRouter() {
   return (
@@ -90,121 +103,19 @@ export function AppRouter() {
           <Route path="/auth/sign-in" element={<SignInPage />} />
           {SignUpPage && <Route path="/auth/sign-up" element={<SignUpPage />} />}
           <Route path="/staff" element={<StaffLayout />}>
-            <Route element={<PermissionGate anyOf={['/payment-reconciliation_read', '/bank-reconciliation_read', '/reports_read']} />}>
-              <Route path="reconciliation" element={<ReconciliationPage />} />
-            </Route>
             <Route index element={<StaffHome />} />
-            <Route element={<PermissionGate permission="/reservations_read" />}>
-              <Route path="reservations" element={<StaffReservationsPage />} />
-            </Route>
-            <Route element={<PermissionGate permission="/menu_read" />}>
-              <Route path="menu" element={<StaffMenuPage />} />
-            </Route>
-            <Route
-              element={
-                <PermissionGate
-                  anyOf={[
-                    '/cashier-shifts_current',
-                    '/cashier-shifts_read',
-                    '/cashier-shifts_open',
-                    '/cashier-shifts_expenses-review',
-                    '/cash-handovers_read',
-                    '/cash-handovers_create',
-                    '/funds_read',
-                    '/funds_manage',
-                  ]}
-                />
-              }
-            >
-              <Route path="shifts" element={<CashierShiftPage />} />
-            </Route>
-            <Route
-              element={
-                <PermissionGate
-                  anyOf={['/dining-tables_read', '/orders_sessions_read']}
-                />
-              }
-            >
-              <Route path="pos" element={<PosTablesPage />} />
-            </Route>
+            <Route path="account" element={<StaffAccount />} />
+            {staffDestinations.map(destination => {
+              const Page = staffPages[destination.path]
+              return <Route key={destination.path} element={<PermissionGate anyOf={destination.permissions} />}>
+                <Route path={destination.path} element={<Page />} />
+              </Route>
+            })}
             <Route element={<PermissionGate permission="/orders_sessions_read" />}>
               <Route path="pos/sessions/:sessionId" element={<PosSessionPage />} />
             </Route>
-            <Route
-              element={
-                <PermissionGate
-                  anyOf={['/kitchen-tickets_read', '/kitchen-stations_read']}
-                />
-              }
-            >
-              <Route path="kitchen" element={<KitchenPage />} />
-            </Route>
-            <Route
-              element={
-                <PermissionGate permission="/online-orders_read" />
-              }
-            >
-              <Route path="online-orders" element={<StaffOnlineOrdersPage />} />
-            </Route>
-            <Route element={<PermissionGate permission="/invoices_read" />}>
-              <Route path="invoices" element={<InvoicesPage />} />
-            </Route>
-            <Route element={<PermissionGate permission="/inventory_read" />}>
-              <Route path="inventory" element={<InventoryPage />} />
-            </Route>
-            <Route element={<PermissionGate permission="/reports_read" />}>
-              <Route path="reports" element={<ReportsPage />} />
-            </Route>
-            <Route element={<PermissionGate permission="/promotions_read" />}>
-              <Route path="promotions" element={<PromotionsPage />} />
-            </Route>
-            <Route element={<PermissionGate permission="/dining-tables_read" />}>
-              <Route path="tables" element={<DiningTablesPage />} />
-            </Route>
-            <Route
-              element={
-                <PermissionGate
-                  anyOf={['/employees_read', '/positions_read', '/roles_read']}
-                />
-              }
-            >
-              <Route path="employees" element={<EmployeesPage />} />
-            </Route>
-            <Route
-              element={
-                <PermissionGate
-                  anyOf={[
-                    '/equipment_read',
-                    '/system-settings_read',
-                    '/management-exceptions_read',
-                  ]}
-                />
-              }
-            >
-              <Route path="settings" element={<SettingsPage />} />
-            </Route>
-            <Route element={<PermissionGate permission="/audit-logs_read" />}>
-              <Route path="audit-logs" element={<AuditLogsPage />} />
-            </Route>
-            <Route
-              element={
-                <PermissionGate
-                  anyOf={['/print-devices_read', '/print-jobs_read', '/receipts_reprint']}
-                />
-              }
-            >
-              <Route path="printing" element={<PrintingPage />} />
-            </Route>
           </Route>
-          <Route
-            path="*"
-            element={
-              <main className="feedback">
-                <h1>Không tìm thấy trang</h1>
-                <Link to="/">Về thực đơn</Link>
-              </main>
-            }
-          />
+          <Route path="*" element={<NotFoundPage />} />
         </Routes>
       </Suspense>
     </BrowserRouter>

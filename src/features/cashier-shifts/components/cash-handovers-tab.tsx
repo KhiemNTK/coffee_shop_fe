@@ -167,6 +167,8 @@ export function CashHandoversTab({
       setCreateHandoverRetained('0')
       setCreateHandoverNote('')
       void queryClient.invalidateQueries({ queryKey: ['private', 'cash-handovers'] })
+      void queryClient.invalidateQueries({ queryKey: ['management-exceptions-summary'] })
+      void queryClient.invalidateQueries({ queryKey: ['management-exceptions-list'] })
       void queryClient.invalidateQueries({ queryKey: ['private', 'funds'] })
     },
     onError: (err) => {
@@ -185,6 +187,8 @@ export function CashHandoversTab({
       setSelectedHandover(null)
       setApproveNote('')
       void queryClient.invalidateQueries({ queryKey: ['private', 'cash-handovers'] })
+      void queryClient.invalidateQueries({ queryKey: ['management-exceptions-summary'] })
+      void queryClient.invalidateQueries({ queryKey: ['management-exceptions-list'] })
       void queryClient.invalidateQueries({ queryKey: ['private', 'funds'] })
     },
     onError: (err) => {
@@ -203,6 +207,8 @@ export function CashHandoversTab({
       setSelectedHandover(null)
       setRejectReason('')
       void queryClient.invalidateQueries({ queryKey: ['private', 'cash-handovers'] })
+      void queryClient.invalidateQueries({ queryKey: ['management-exceptions-summary'] })
+      void queryClient.invalidateQueries({ queryKey: ['management-exceptions-list'] })
     },
     onError: (err) => {
       onError(errorMessage(err))
@@ -229,6 +235,8 @@ export function CashHandoversTab({
       setSettleBankRef('')
       setSettleEvidenceRef('')
       void queryClient.invalidateQueries({ queryKey: ['private', 'cash-handovers'] })
+      void queryClient.invalidateQueries({ queryKey: ['management-exceptions-summary'] })
+      void queryClient.invalidateQueries({ queryKey: ['management-exceptions-list'] })
       void queryClient.invalidateQueries({ queryKey: ['private', 'funds'] })
     },
     onError: (err) => {
@@ -241,6 +249,8 @@ export function CashHandoversTab({
     onSuccess: () => {
       onSuccess('Đã hủy biên bản bàn giao thành công!')
       void queryClient.invalidateQueries({ queryKey: ['private', 'cash-handovers'] })
+      void queryClient.invalidateQueries({ queryKey: ['management-exceptions-summary'] })
+      void queryClient.invalidateQueries({ queryKey: ['management-exceptions-list'] })
     },
     onError: (err) => {
       onError(errorMessage(err))

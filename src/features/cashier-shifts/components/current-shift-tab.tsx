@@ -350,6 +350,7 @@ export function CurrentShiftTab({
             <span className="text-xs text-muted-foreground mt-1 block">
               {shift.reconciliation?.paidInvoiceCount || 0} đơn thanh toán
             </span>
+            <p className="mt-2 text-xs text-rose-800">Chi hoàn tiền: {formatPrice(shift.reconciliation?.cashRefundAmount ?? '0')}</p>
           </CardContent>
         </Card>
 
@@ -378,7 +379,7 @@ export function CurrentShiftTab({
               )}
             </p>
             <span className="text-xs text-muted-foreground mt-1 block">
-              = Tiền đầu ca + Tiền mặt thu được
+              Đã tính các khoản thu, chi và hoàn tiền trong ca
             </span>
           </CardContent>
         </Card>

@@ -40,6 +40,7 @@ export type FundsPage = z.infer<typeof fundsPageSchema>
 export const shiftReconciliationSchema = z.object({
   paidInvoiceCount: z.number().int().nonnegative().optional(),
   cashSales: moneySchema.optional(),
+  cashRefundAmount: moneySchema.optional(),
   nonCashSales: moneySchema.optional(),
   totalSales: moneySchema.optional(),
   actualEndingCash: moneySchema.optional(),

@@ -9,6 +9,7 @@ import {
   RefreshCw,
   TrendingUp,
   Star,
+  Sparkles,
 } from 'lucide-react'
 import { type Session } from '../auth/session'
 import {
@@ -33,6 +34,7 @@ import { KitchenOperationsTab } from './components/kitchen-operations-tab'
 import { DailySalesCloseTab } from './components/daily-sales-close-tab'
 import { OnlineBusinessTab } from './components/online-business-tab'
 import { FeedbackReport } from './components/feedback-report'
+import { BusinessInsightsTab } from './components/business-insights-tab'
 
 function getPresetDates(preset: 'today' | '7days' | '30days' | 'month') {
   const now = new Date()
@@ -78,7 +80,7 @@ export default function ReportsPage() {
   const [dateRange, setDateRange] = useState(() => getPresetDates('today'))
   const [granularity, setGranularity] = useState<'day' | 'hour'>('day')
   const [activeTab, setActiveTab] = useState<
-    'overview' | 'kitchen' | 'daily-close' | 'online' | 'feedback'
+    'overview' | 'kitchen' | 'daily-close' | 'online' | 'feedback' | 'insights'
   >('overview')
   const [isExporting, setIsExporting] = useState(false)
   const [exportError, setExportError] = useState<string | null>(null)
@@ -356,7 +358,20 @@ export default function ReportsPage() {
             <Star className="h-4 w-4" />
             Phản hồi khách
           </TabsTrigger>
+          <TabsTrigger value="insights" className="gap-2 whitespace-normal">
+            <Sparkles className="h-4 w-4 shrink-0" aria-hidden="true" />
+            Phân tích kinh doanh
+          </TabsTrigger>
         </TabsList>
+        <BusinessInsightsTab
+          key={employee.id}
+          employeeId={employee.id}
+          from={dateRange.from}
+          to={dateRange.to}
+          active={activeTab === 'insights'}
+          canRead={permissions.includes('/reports_read')}
+          canGenerate={permissions.includes('/reports_insights_generate')}
+        />
         <TabsContent value="feedback">
           <FeedbackReport
             key={`${dateRange.from}:${dateRange.to}`}

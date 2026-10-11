@@ -220,53 +220,6 @@ export interface GetSystemSettingsQuery {
 }
 
 // ==========================================
-// 3. MANAGEMENT EXCEPTIONS SCHEMAS & TYPES
-// ==========================================
-
-export const ManagementExceptionsSummarySchema = z.object({
-  counts: z.object({
-    PAYMENT: z.number().default(0),
-    CASH_EXPENSE: z.number().default(0),
-    CASH_HANDOVER: z.number().default(0),
-    FEEDBACK: z.number().default(0),
-  }),
-  total: z.number().default(0),
-})
-export type ManagementExceptionsSummary = z.infer<typeof ManagementExceptionsSummarySchema>
-
-export const ManagementExceptionItemSchema = z.object({
-  id: z.string(),
-  type: z.string().optional(),
-  title: z.string().optional(),
-  detectedAt: z.string().optional(),
-  paymentAttemptId: z.string().nullable().optional(),
-  paymentRefundId: z.string().nullable().optional(),
-  amount: z.union([z.string(), z.number()]).optional(),
-  description: z.string().nullable().optional(),
-  createdAt: z.string().optional(),
-  requestedById: z.string().nullable().optional(),
-  shiftId: z.string().nullable().optional(),
-  status: z.string().optional(),
-  settlementStatus: z.string().nullable().optional(),
-  varianceAmount: z.union([z.string(), z.number()]).optional(),
-  transferAmount: z.union([z.string(), z.number()]).optional(),
-  settlementDueAt: z.string().nullable().optional(),
-  rating: z.number().optional(),
-  comment: z.string().nullable().optional(),
-  invoiceId: z.string().nullable().optional(),
-})
-export type ManagementExceptionItem = z.infer<typeof ManagementExceptionItemSchema>
-
-export const ManagementExceptionsListResponseSchema = z.object({
-  kind: z.enum(['PAYMENT', 'CASH_EXPENSE', 'CASH_HANDOVER', 'FEEDBACK']),
-  list: z.array(ManagementExceptionItemSchema),
-  totalPages: z.number(),
-  totalItems: z.number(),
-  currentPage: z.number(),
-})
-export type ManagementExceptionsListResponse = z.infer<typeof ManagementExceptionsListResponseSchema>
-
-// ==========================================
 // 4. API CLIENT CALLS
 // ==========================================
 
@@ -361,27 +314,4 @@ export const settingsApi = {
       undefined,
     ),
 
-  // Management Exceptions
-  getManagementExceptionsSummary: (signal?: AbortSignal): Promise<ManagementExceptionsSummary> =>
-    apiGet('/management/exceptions/summary', ManagementExceptionsSummarySchema, signal, true),
-
-  getManagementExceptions: (
-    query: {
-      kind: 'PAYMENT' | 'CASH_EXPENSE' | 'CASH_HANDOVER' | 'FEEDBACK'
-      page?: number
-      itemPerPage?: number
-    },
-    signal?: AbortSignal,
-  ): Promise<ManagementExceptionsListResponse> => {
-    const params = new URLSearchParams()
-    params.set('kind', query.kind)
-    if (query.page) params.set('page', String(query.page))
-    if (query.itemPerPage) params.set('itemPerPage', String(query.itemPerPage))
-    return apiGet(
-      `/management/exceptions?${params.toString()}`,
-      ManagementExceptionsListResponseSchema,
-      signal,
-      true,
-    )
-  },
 }

@@ -1,23 +1,23 @@
 @import "tailwindcss";
 
 @theme {
-  --color-primary: #174f3f;
-  --color-primary-hover: #123e32;
-  --color-primary-light: #e0ece5;
+  --color-primary: #144637;
+  --color-primary-hover: #0f3529;
+  --color-primary-light: #e2ece7;
   --color-primary-foreground: #ffffff;
   --color-background: #fafcfb;
-  --color-foreground: #202d29;
+  --color-foreground: #1c2824;
   --color-card: #ffffff;
-  --color-card-foreground: #202d29;
+  --color-card-foreground: #1c2824;
   --color-border: #dce5df;
   --color-input: #cbd7cf;
-  --color-ring: #174f3f;
+  --color-ring: #144637;
   --color-muted: #f1f5f3;
   --color-muted-foreground: #53675e;
-  --color-secondary: #e9f0f8;
-  --color-secondary-foreground: #24527a;
-  --color-accent: #e9f0f8;
-  --color-accent-foreground: #24527a;
+  --color-secondary: #f0f5f2;
+  --color-secondary-foreground: #144637;
+  --color-accent: #d97706;
+  --color-accent-foreground: #ffffff;
   --color-destructive: #b4233f;
   --color-destructive-foreground: #ffffff;
   --color-brand-50: #f2f7f4;
@@ -25,17 +25,21 @@
   --color-brand-200: #cbded2;
   --color-brand-600: #39735b;
   --color-brand-700: #286048;
-  --color-brand-800: #174f3f;
-  --color-brand-900: #123e32;
-  --color-coffee-dark: #202d29;
+  --color-brand-800: #144637;
+  --color-brand-900: #0f3529;
+  --color-coffee-dark: #1c2824;
   --color-coffee-muted: #68776f;
   --color-coffee-border: #dce5df;
   --color-coffee-bg: #fafcfb;
 }
 
 :root {
-  font-family: 'Segoe UI', Arial, sans-serif;
-  color: #202d29;
+  font-family: 'Be Vietnam Pro', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+  font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  color: #1c2824;
   background: #fafcfb;
   font-synthesis: none;
   line-height: 1.5;
@@ -78,7 +82,8 @@ summary {
   outline-offset: 4px;
 }
 :focus-visible {
-  outline: 2px solid #174f3f;
+  outline: 2px solid #144637;
+  outline-offset: 2px;
 }
 h1,
 h2,

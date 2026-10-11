@@ -255,6 +255,7 @@ export function ShiftHistoryTab() {
                 ["Tiền đầu ca", detail.data.startingCash],
                 ["Lệch đầu ca", detail.data.openingDifference],
                 ["Doanh thu tiền mặt", detail.data.reconciliation?.cashSales],
+                ["Chi hoàn tiền mặt", detail.data.reconciliation?.cashRefundAmount],
                 [
                   "Doanh thu không tiền mặt",
                   detail.data.reconciliation?.nonCashSales,

@@ -13,6 +13,7 @@ import {
 import type { Session } from '../../auth/session'
 import { errorMessage } from '@/shared/api/client'
 import { Button, Badge, Dialog, Input } from '@/shared/ui'
+import { groupPermissions, isSensitivePermission } from '../permission-groups'
 
 export function RolesTab({
   roles,
@@ -65,42 +66,44 @@ export function RolesTab({
                 </p>
                 {role.isSystemRole && <Badge variant="outline">Hệ thống</Badge>}
               </div>
-              {!role.isSystemRole && (
-                <div className="flex flex-wrap gap-2">
-                  {canManagePermissions && can('/permissions_read') && (
-                    <Button
-                      variant="outline"
-                      onClick={() => setPermissionsFor(role)}
-                    >
-                      <ShieldCheck size={16} />
-                      Phân quyền
-                    </Button>
-                  )}
-                  {can('/roles_update') && (
-                    <Button
-                      variant="outline"
-                      aria-label={'Sửa vai trò ' + role.name}
-                      title="Sửa vai trò"
-                      onClick={() => setEditing(role)}
-                    >
-                      <Pencil size={16} />
-                    </Button>
-                  )}
-                  {can('/roles_delete') && (
-                    <Button
-                      variant="outline"
-                      aria-label={'Xóa vai trò ' + role.name}
-                      title="Xóa vai trò"
-                      onClick={() => {
-                        setDeleting(role)
-                        remove.reset()
-                      }}
-                    >
-                      <Trash2 size={16} />
-                    </Button>
-                  )}
-                </div>
-              )}
+              <div className="flex flex-wrap gap-2">
+                {can('/roles_permissions_read') && (
+                  <Button
+                    variant="outline"
+                    onClick={() => setPermissionsFor(role)}
+                  >
+                    <ShieldCheck size={16} />
+                    {canManagePermissions &&
+                    can('/permissions_read') &&
+                    !role.isSystemRole
+                      ? 'Phân quyền'
+                      : 'Xem quyền'}
+                  </Button>
+                )}
+                {!role.isSystemRole && can('/roles_update') && (
+                  <Button
+                    variant="outline"
+                    aria-label={'Sửa vai trò ' + role.name}
+                    title="Sửa vai trò"
+                    onClick={() => setEditing(role)}
+                  >
+                    <Pencil size={16} />
+                  </Button>
+                )}
+                {!role.isSystemRole && can('/roles_delete') && (
+                  <Button
+                    variant="outline"
+                    aria-label={'Xóa vai trò ' + role.name}
+                    title="Xóa vai trò"
+                    onClick={() => {
+                      setDeleting(role)
+                      remove.reset()
+                    }}
+                  >
+                    <Trash2 size={16} />
+                  </Button>
+                )}
+              </div>
             </div>
           ))}
         </div>
@@ -228,10 +231,14 @@ function RolePermissions({
   onClose: () => void
   onToast: (message: string) => void
 }) {
-  const { employee } = useOutletContext<Session>()
+  const { employee, authorization } = useOutletContext<Session>()
   const client = useQueryClient()
   const flight = useRef(false)
   const [selected, setSelected] = useState<string[] | null>(null)
+  const [search, setSearch] = useState('')
+  const [reviewRequired, setReviewRequired] = useState(false)
+  const granted = new Set(authorization.permissionKeys)
+  const canReadCatalog = granted.has('/permissions_read')
   const query = useQuery({
     queryKey: ['private', employee.id, 'role-permissions', role.id],
     queryFn: ({ signal }) => getRolePermissions(role.id, signal),
@@ -241,6 +248,7 @@ function RolePermissions({
   const catalog = useQuery({
     queryKey: ['private', employee.id, 'permissions'],
     queryFn: ({ signal }) => getAllPermissions(signal),
+    enabled: canReadCatalog,
     retry: false,
   })
   const ids =
@@ -248,11 +256,27 @@ function RolePermissions({
     query.data?.rolePermissions?.map((item) => item.permission.id) ??
     []
   const ready =
+    canReadCatalog &&
+    granted.has('/roles_permissions_update') &&
     query.isSuccess &&
     catalog.isSuccess &&
     !query.isFetching &&
-    !catalog.isFetching
+    !catalog.isFetching &&
+    query.data.canManagePermissions &&
+    !reviewRequired
+  const needle = search.trim().toLocaleLowerCase('vi')
+  const grouped = groupPermissions(
+    (canReadCatalog
+      ? (catalog.data ?? [])
+      : (query.data?.rolePermissions.map((entry) => entry.permission) ?? [])
+    ).filter((permission) =>
+      [permission.name, permission.key, permission.description ?? ''].some(
+        (value) => value.toLocaleLowerCase('vi').includes(needle),
+      ),
+    ),
+  )
   const mutation = useMutation({
+    retry: false,
     mutationFn: (permissionIds: string[]) =>
       replaceRolePermissions(role.id, permissionIds),
     onSuccess: () => {
@@ -263,6 +287,7 @@ function RolePermissions({
     onSettled: () => {
       flight.current = false
     },
+    onError: () => setReviewRequired(true),
   })
   return (
     <Dialog
@@ -273,19 +298,19 @@ function RolePermissions({
       }}
     >
       <h2 className="pr-8 text-lg font-semibold">
-        Phân quyền vai trò: {role.name}
+        Quyền của vai trò: {role.name}
       </h2>
-      {(query.isPending || catalog.isPending) && (
+      {(query.isPending || (canReadCatalog && catalog.isPending)) && (
         <p role="status">Đang tải quyền hiện tại...</p>
       )}
-      {(query.isError || catalog.isError) && (
+      {(query.isError || (canReadCatalog && catalog.isError)) && (
         <div role="alert" className="space-y-2 py-3">
           <p>{errorMessage(query.error || catalog.error)}</p>
           <Button
             variant="outline"
             onClick={() => {
               void query.refetch()
-              void catalog.refetch()
+              if (canReadCatalog) void catalog.refetch()
             }}
           >
             <RefreshCw size={16} />
@@ -293,40 +318,113 @@ function RolePermissions({
           </Button>
         </div>
       )}
-      <fieldset
-        disabled={!ready || mutation.isPending}
-        className="my-4 grid max-h-80 grid-cols-1 gap-2 overflow-auto sm:grid-cols-2"
-      >
-        {catalog.data?.map((permission) => (
-          <label
-            key={permission.id}
-            className="flex min-w-0 items-start gap-2 border-b py-2 text-sm"
+      {query.isSuccess && !query.data.canManagePermissions && (
+        <p role="status" className="my-3 text-sm text-muted-foreground">
+          Không được thay đổi quyền của vai trò này.
+        </p>
+      )}
+      <label className="my-3 block text-sm">
+        Tìm quyền
+        <Input
+          type="search"
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+        />
+      </label>
+      <p className="text-sm text-muted-foreground">
+        {ids.length} quyền được chọn
+      </p>
+      <div className="my-4 max-h-80 space-y-4 overflow-auto">
+        {grouped.map(([label, permissions]) => (
+          <fieldset
+            key={label}
+            disabled={!ready || mutation.isPending}
+            className="min-w-0 border-0 p-0"
           >
-            <input
-              type="checkbox"
-              checked={ids.includes(permission.id)}
-              onChange={(event) =>
-                setSelected(
-                  event.target.checked
-                    ? [...ids, permission.id]
-                    : ids.filter((id) => id !== permission.id),
-                )
-              }
-            />
-            <span className="min-w-0 break-words">
-              {permission.name}
-              <span className="block break-all text-xs text-muted-foreground">
-                {permission.key}
-              </span>
-            </span>
-          </label>
+            <legend className="mb-2 text-sm font-semibold">{label}</legend>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              {permissions.map((permission) => (
+                <label
+                  key={permission.id}
+                  className="flex min-w-0 items-start gap-2 border-b py-2 text-sm"
+                >
+                  <input
+                    type="checkbox"
+                    checked={ids.includes(permission.id)}
+                    disabled={!granted.has(permission.key)}
+                    onChange={(event) =>
+                      setSelected(
+                        event.target.checked
+                          ? [...ids, permission.id]
+                          : ids.filter((id) => id !== permission.id),
+                      )
+                    }
+                  />
+                  <span className="min-w-0 break-words">
+                    {permission.name}
+                    {isSensitivePermission(permission.key) && (
+                      <Badge variant="warning" className="ml-2">
+                        Nhạy cảm
+                      </Badge>
+                    )}
+                    <span className="block break-all text-xs text-muted-foreground">
+                      {permission.key}
+                    </span>
+                    {!granted.has(permission.key) && (
+                      <span className="block text-xs text-muted-foreground">
+                        Ngoài phạm vi được cấp
+                      </span>
+                    )}
+                  </span>
+                </label>
+              ))}
+            </div>
+          </fieldset>
         ))}
-      </fieldset>
+        {(canReadCatalog ? catalog.isSuccess : query.isSuccess) &&
+          grouped.length === 0 && (
+            <p className="text-sm">Không có quyền phù hợp.</p>
+          )}
+      </div>
+      {reviewRequired && (
+        <Button
+          variant="outline"
+          disabled={query.isFetching || catalog.isFetching}
+          onClick={async () => {
+            const [current, permissions] = await Promise.all([
+              query.refetch(),
+              catalog.refetch(),
+            ])
+            if (current.isSuccess && permissions.isSuccess) {
+              setSelected(null)
+              setReviewRequired(false)
+              mutation.reset()
+            }
+          }}
+        >
+          <RefreshCw size={16} /> Đối chiếu quyền
+        </Button>
+      )}
       {mutation.isError && <p role="alert">{errorMessage(mutation.error)}</p>}
       <Button
         disabled={!ready || mutation.isPending}
         onClick={() => {
           if (!ready || flight.current) return
+          const previousIds = new Set(
+            query.data?.rolePermissions.map((entry) => entry.permission.id),
+          )
+          const changedSensitive = catalog.data?.some(
+            (permission) =>
+              isSensitivePermission(permission.key) &&
+              previousIds.has(permission.id) !== ids.includes(permission.id),
+          )
+          if (
+            changedSensitive &&
+            !window.confirm(
+              'Thay đổi quyền nhạy cảm cho vai trò ' + role.name + '?',
+            )
+          )
+            return
           if (
             !ids.length &&
             !window.confirm('Thu hồi toàn bộ quyền của vai trò này?')

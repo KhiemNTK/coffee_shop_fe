@@ -1,4 +1,6 @@
 import { useState, useMemo, useDeferredValue } from 'react'
+import { useOutletContext } from 'react-router-dom'
+import type { Session } from '../../auth/session'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Users,
@@ -63,6 +65,7 @@ export function EmployeesListTab({
   isCreateOpen,
   setIsCreateOpen,
 }: EmployeesListTabProps) {
+  const { employee } = useOutletContext<Session>()
   const queryClient = useQueryClient()
 
   // Filter & Search
@@ -118,8 +121,14 @@ export function EmployeesListTab({
     useState<EmployeeListItem | null>(null)
   const [selectedRoleIds, setSelectedRoleIds] = useState<string[] | null>(null)
   const [roleAssignError, setRoleAssignError] = useState<string | null>(null)
+  const [roleReviewRequired, setRoleReviewRequired] = useState(false)
   const assignment = useQuery({
-    queryKey: ['private', 'employee-role-assignment', roleAssignEmployee?.id],
+    queryKey: [
+      'private',
+      employee.id,
+      'employee-role-assignment',
+      roleAssignEmployee?.id,
+    ],
     queryFn: ({ signal }) => getEmployeeRoles(roleAssignEmployee!.id, signal),
     enabled: Boolean(roleAssignEmployee),
     retry: false,
@@ -130,7 +139,11 @@ export function EmployeesListTab({
     assignment.data?.employeeRoles.map((item) => item.role.id) ??
     []
   const assignmentReady =
-    rolesLoaded && assignment.isSuccess && !assignment.isFetching
+    rolesLoaded &&
+    assignment.isSuccess &&
+    !assignment.isFetching &&
+    assignment.data.canManageRoles &&
+    !roleReviewRequired
 
   // Queries
   const {
@@ -213,6 +226,7 @@ export function EmployeesListTab({
   })
 
   const replaceRolesMutation = useMutation({
+    retry: false,
     mutationFn: ({ id, roleIds }: { id: string; roleIds: string[] }) =>
       replaceEmployeeRoles(id, roleIds),
     onSuccess: () => {
@@ -222,7 +236,10 @@ export function EmployeesListTab({
       setSelectedRoleIds([])
       setRoleAssignError(null)
     },
-    onError: (err) => setRoleAssignError(errorMessage(err)),
+    onError: (err) => {
+      setRoleAssignError(errorMessage(err))
+      setRoleReviewRequired(true)
+    },
   })
 
   // Position Map for quick lookup
@@ -239,9 +256,10 @@ export function EmployeesListTab({
   const handleOpenRoleAssign = (emp: EmployeeListItem) => {
     setRoleAssignEmployee(emp)
     setRoleAssignError(null)
+    setRoleReviewRequired(false)
     setSelectedRoleIds(null)
     void queryClient.invalidateQueries({
-      queryKey: ['private', 'employee-role-assignment', emp.id],
+      queryKey: ['private', employee.id, 'employee-role-assignment', emp.id],
     })
   }
 
@@ -889,6 +907,27 @@ export function EmployeesListTab({
             {!rolesLoaded && (
               <p role="alert">Danh sách vai trò chưa tải thành công.</p>
             )}
+            {assignment.isSuccess && !assignment.data.canManageRoles && (
+              <p role="status" className="mt-3 text-sm text-muted-foreground">
+                Không được thay đổi vai trò của tài khoản này.
+              </p>
+            )}
+            {roleReviewRequired && (
+              <Button
+                variant="outline"
+                disabled={assignment.isFetching}
+                onClick={async () => {
+                  const current = await assignment.refetch()
+                  if (current.isSuccess) {
+                    setSelectedRoleIds(null)
+                    setRoleReviewRequired(false)
+                    setRoleAssignError(null)
+                  }
+                }}
+              >
+                <RefreshCw size={16} /> Đối chiếu vai trò
+              </Button>
+            )}
             <fieldset
               disabled={!assignmentReady || replaceRolesMutation.isPending}
               className="mt-4 space-y-2 max-h-60 overflow-y-auto pr-1"
@@ -904,6 +943,9 @@ export function EmployeesListTab({
                     <input
                       type="checkbox"
                       checked={isChecked}
+                      disabled={
+                        !assignment.data?.assignableRoleIds.includes(role.id)
+                      }
                       onChange={(e) => {
                         if (e.target.checked) {
                           setSelectedRoleIds([...roleIds, role.id])
@@ -922,6 +964,14 @@ export function EmployeesListTab({
                       <div className="text-muted-foreground">
                         {role.description || '—'}
                       </div>
+                      {assignment.isSuccess &&
+                        !assignment.data.assignableRoleIds.includes(
+                          role.id,
+                        ) && (
+                          <span className="text-muted-foreground">
+                            Ngoài phạm vi được cấp
+                          </span>
+                        )}
                     </div>
                   </label>
                 )
@@ -943,6 +993,22 @@ export function EmployeesListTab({
                 size="sm"
                 onClick={() => {
                   if (!assignmentReady || replaceRolesMutation.isPending) return
+                  const previousIds = assignment.data.employeeRoles.map(
+                    (entry) => entry.role.id,
+                  )
+                  if (
+                    roles.some(
+                      (role) =>
+                        role.isSystemRole &&
+                        role.name === 'OWNER' &&
+                        previousIds.includes(role.id) !==
+                          roleIds.includes(role.id),
+                    ) &&
+                    !window.confirm(
+                      'Thay đổi quyền chủ sở hữu của tài khoản này?',
+                    )
+                  )
+                    return
                   if (
                     !roleIds.length &&
                     !window.confirm(

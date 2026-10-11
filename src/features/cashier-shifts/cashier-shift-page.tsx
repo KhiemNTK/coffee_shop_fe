@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { useOutletContext } from 'react-router-dom'
+import { useOutletContext, useSearchParams } from 'react-router-dom'
 import {
   AlertCircle,
   Building2,
@@ -60,17 +60,21 @@ export default function CashierShiftPage() {
   const canManageFunds =
     canReadFunds && authorization.permissionKeys.includes('/funds_manage')
 
-  // Tabs state
-  const [activeTab, setActiveTab] = useState<MainTab>(() => {
-    const tab = new URLSearchParams(window.location.search).get('tab')
-    if (tab === 'expenses' && canReviewExpenses) return 'expenses'
-    if (tab === 'handovers' && canReadHandovers) return 'handovers'
-    if (canReadCurrent) return 'current'
-    if (canReadShifts) return 'history'
-    if (canReadHandovers || canCreateHandover) return 'handovers'
-    if (canReviewExpenses) return 'expenses'
-    return 'funds'
-  })
+  const [params, setParams] = useSearchParams()
+  const availableTabs: MainTab[] = []
+  if (canReadCurrent) availableTabs.push('current')
+  if (canReadShifts) availableTabs.push('history')
+  if (canReadHandovers || canCreateHandover) availableTabs.push('handovers')
+  if (canReviewExpenses) availableTabs.push('expenses')
+  if (canReadFunds) availableTabs.push('funds')
+  const activeTab = availableTabs.find(tab => tab === params.get('tab')) ?? availableTabs[0]
+  function setActiveTab(tab: MainTab) {
+    setParams(previous => {
+      const next = new URLSearchParams(previous)
+      next.set('tab', tab)
+      return next
+    })
+  }
 
   // Stable timestamp for pure renders
   const [nowTimestamp] = useState(() => Date.now())
@@ -255,6 +259,8 @@ export default function CashierShiftPage() {
           </button>
         )}
       </div>
+
+      {!availableTabs.length && <p role="alert">Cần quyền đọc ca hoặc quỹ tương ứng để mở nghiệp vụ.</p>}
 
       {/* ACTIVE TAB CONTENT */}
       {activeTab === 'current' && canReadCurrent && (

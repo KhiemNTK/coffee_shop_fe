@@ -7,36 +7,14 @@ import {
   useNavigate,
   useOutletContext,
 } from 'react-router-dom'
-import {
-  BarChart3,
-  BookOpen,
-  Boxes,
-  CalendarDays,
-  ChefHat,
-  Coffee,
-  Coins,
-  Cpu,
-  ExternalLink,
-  LogOut,
-  LayoutGrid,
-  Printer,
-  Receipt,
-  ScrollText,
-  ShoppingBag,
-  Ticket,
-  UserRound,
-  Users,
-  UtensilsCrossed,
-} from 'lucide-react'
+import { Coffee, ExternalLink, LayoutDashboard, LogOut, UserRound } from 'lucide-react'
 import { useSession, type Session } from './session'
-import { GoogleAccount } from './google-account'
+import { visibleStaffDestinations } from './staff-navigation'
 import { authCommand, ApiError, errorMessage } from '../../shared/api/client'
 import { announceSessionChange, clearIdentity } from '../../app/query-client'
 import { clearPrivatePendingOperations } from '../../shared/api/idempotency'
-import { Card, CardHeader, CardTitle, CardContent } from '../../shared/ui/card'
 import { Button } from '../../shared/ui/button'
 import { buttonVariants } from '../../shared/ui/button-variants'
-import { Badge } from '../../shared/ui/badge'
 import { cn } from '../../shared/ui/utils'
 
 export function PermissionGate({
@@ -44,7 +22,7 @@ export function PermissionGate({
   anyOf,
 }: {
   permission?: string
-  anyOf?: string[]
+  anyOf?: readonly string[]
 }) {
   const session = useOutletContext<Session>()
   const hasPermission = permission
@@ -62,7 +40,7 @@ export function PermissionGate({
     >
       <h2 className="text-lg font-bold text-destructive">Không có quyền truy cập</h2>
       <Link to="/staff" className={cn(buttonVariants({ variant: 'outline' }), 'mt-4')}>
-        Về tài khoản
+        Về bàn làm việc
       </Link>
     </div>
   )
@@ -146,130 +124,12 @@ export function StaffLayout() {
   const permissions = session.data.authorization.permissionKeys
 
   const navItems = [
-    { to: '/staff/reconciliation', end: false, label: 'Đối soát & Khiếu nại', icon: Receipt,
-      visible: permissions.some(key => ['/payment-reconciliation_read', '/bank-reconciliation_read', '/reports_read'].includes(key)) },
-    { to: '/staff', end: true, label: 'Tài khoản', icon: UserRound, visible: true },
-    {
-      to: '/staff/reservations',
-      end: false,
-      label: 'Đặt bàn',
-      icon: CalendarDays,
-      visible: permissions.includes('/reservations_read'),
-    },
-    {
-      to: '/staff/pos',
-      end: false,
-      label: 'Bán hàng (POS)',
-      icon: UtensilsCrossed,
-      visible: permissions.some((k) => ['/dining-tables_read', '/orders_sessions_read'].includes(k)),
-    },
-    {
-      to: '/staff/tables',
-      end: false,
-      label: 'Sơ đồ bàn',
-      icon: LayoutGrid,
-      visible: permissions.includes('/dining-tables_read'),
-    },
-    {
-      to: '/staff/kitchen',
-      end: false,
-      label: 'Bếp & Pha chế',
-      icon: ChefHat,
-      visible: permissions.some((k) => ['/kitchen-tickets_read', '/kitchen-stations_read'].includes(k)),
-    },
-    {
-      to: '/staff/online-orders',
-      end: false,
-      label: 'Đơn mang đi',
-      icon: ShoppingBag,
-      visible: permissions.includes('/online-orders_read'),
-    },
-    {
-      to: '/staff/shifts',
-      end: false,
-      label: 'Ca & Quỹ tiền mặt',
-      icon: Coins,
-      visible: permissions.some((k) =>
-        [
-          '/cashier-shifts_current',
-          '/cashier-shifts_read',
-          '/cashier-shifts_open',
-          '/cash-handovers_read',
-          '/cash-handovers_create',
-          '/funds_read',
-        ].includes(k),
-      ),
-    },
-    {
-      to: '/staff/invoices',
-      end: false,
-      label: 'Hóa đơn & TT',
-      icon: Receipt,
-      visible: permissions.includes('/invoices_read'),
-    },
-    {
-      to: '/staff/inventory',
-      end: false,
-      label: 'Kho hàng',
-      icon: Boxes,
-      visible: permissions.includes('/inventory_read'),
-    },
-    {
-      to: '/staff/menu',
-      end: false,
-      label: 'Thực đơn',
-      icon: BookOpen,
-      visible: permissions.includes('/menu_read'),
-    },
-    {
-      to: '/staff/promotions',
-      end: false,
-      label: 'Khuyến mãi',
-      icon: Ticket,
-      visible: permissions.includes('/promotions_read'),
-    },
-    {
-      to: '/staff/reports',
-      end: false,
-      label: 'Báo cáo',
-      icon: BarChart3,
-      visible: permissions.includes('/reports_read'),
-    },
-    {
-      to: '/staff/employees',
-      end: false,
-      label: 'Nhân sự',
-      icon: Users,
-      visible: permissions.some((k) =>
-        ['/employees_read', '/positions_read', '/roles_read'].includes(k),
-      ),
-    },
-    {
-      to: '/staff/settings',
-      end: false,
-      label: 'Cài đặt & Thiết bị',
-      icon: Cpu,
-      visible: permissions.some((k) =>
-        ['/equipment_read', '/system-settings_read', '/management-exceptions_read'].includes(k),
-      ),
-    },
-    {
-      to: '/staff/audit-logs',
-      end: false,
-      label: 'Nhật ký kiểm toán',
-      icon: ScrollText,
-      visible: permissions.includes('/audit-logs_read'),
-    },
-    {
-      to: '/staff/printing',
-      end: false,
-      label: 'Máy in & Lệnh in',
-      icon: Printer,
-      visible: permissions.some((k) =>
-        ['/print-devices_read', '/print-jobs_read', '/receipts_reprint'].includes(k),
-      ),
-    },
-  ].filter((item) => item.visible)
+    { to: '/staff', end: true, label: 'Bàn làm việc', icon: LayoutDashboard },
+    ...visibleStaffDestinations(permissions).map(item => ({
+      to: '/staff/' + item.path, end: false, label: item.label, icon: item.icon,
+    })),
+    { to: '/staff/account', end: true, label: 'Tài khoản', icon: UserRound },
+  ]
 
   return (
     <div className="min-h-screen bg-muted/20">
@@ -362,62 +222,6 @@ export function StaffLayout() {
           <Outlet context={session.data} />
         </main>
       </div>
-    </div>
-  )
-}
-
-export function StaffHome() {
-  const { employee, authorization } = useOutletContext<Session>()
-  return (
-    <div className="space-y-6">
-      <div>
-        <p className="text-xs font-bold uppercase tracking-wider text-primary">TÀI KHOẢN</p>
-        <h1 className="text-2xl font-bold tracking-tight text-foreground">{employee.fullName}</h1>
-      </div>
-      <GoogleAccount linked={employee.googleLinked} />
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base font-bold text-foreground">Thông tin nhân sự</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <dl className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            <div className="rounded-lg border border-border bg-muted/30 p-3.5">
-              <dt className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Email</dt>
-              <dd className="mt-1 text-sm font-bold text-foreground">{employee.email}</dd>
-            </div>
-            <div className="rounded-lg border border-border bg-muted/30 p-3.5">
-              <dt className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Chức danh</dt>
-              <dd className="mt-1 text-sm font-bold text-foreground">{employee.position?.name ?? 'Chưa có'}</dd>
-            </div>
-            <div className="rounded-lg border border-border bg-muted/30 p-3.5">
-              <dt className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Vai trò</dt>
-              <dd className="mt-1 text-sm font-bold text-foreground">{authorization.roleNames.join(', ') || 'Chưa được gán'}</dd>
-            </div>
-          </dl>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between pb-2">
-          <CardTitle className="text-base font-bold text-foreground">
-            Quyền hạn được cấp ({authorization.permissionKeys.length})
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {authorization.permissionKeys.length ? (
-            <div className="flex flex-wrap gap-2">
-              {authorization.permissionKeys.map((key) => (
-                <Badge key={key} variant="secondary" className="font-mono text-xs">
-                  {key}
-                </Badge>
-              ))}
-            </div>
-          ) : (
-            <p className="text-sm text-muted-foreground italic">Chưa được cấp quyền nghiệp vụ.</p>
-          )}
-        </CardContent>
-      </Card>
     </div>
   )
 }
