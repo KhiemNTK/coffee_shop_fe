@@ -1,19 +1,16 @@
-import { AlertCircle, ArrowLeft, Eye, RefreshCw, Search } from 'lucide-react'
-import {
-  type InvoicesFilters,
-  type InvoicesResponse,
-  type Invoice,
-  type PaymentMethod,
-  type PaymentStatus,
-} from '../invoices.api'
+import { AlertCircle, Eye, RefreshCw, Search } from 'lucide-react'
+import type { Dispatch, SetStateAction } from 'react'
+import type { InvoicesFilters, InvoicesResponse, Invoice, PaymentMethod, PaymentStatus } from '../invoices.api'
 import { formatPrice } from '../../menu/menu.api'
+import { formatStoreDateTime } from '../../../shared/lib/store-time'
 import { errorMessage } from '../../../shared/api/client'
-import { Button, Card, CardContent, Input } from '../../../shared/ui'
+import { Button, Input } from '../../../shared/ui'
+import { Pagination } from '../../../shared/ui/pagination'
 import { PaymentMethodBadge, PaymentStatusBadge } from './invoice-badges'
 
 interface InvoicesListTableProps {
   filters: InvoicesFilters
-  setFilters: React.Dispatch<React.SetStateAction<InvoicesFilters>>
+  setFilters: Dispatch<SetStateAction<InvoicesFilters>>
   searchKeyword: string
   setSearchKeyword: (val: string) => void
   displayList: Invoice[]
@@ -26,248 +23,60 @@ interface InvoicesListTableProps {
   onSelectInvoice: (id: string) => void
 }
 
-const STATUS_FILTERS = [
-  { value: '', label: 'Tất cả trạng thái' },
-  { value: 'PAID', label: 'Đã thanh toán' },
-  { value: 'UNPAID', label: 'Chờ thanh toán' },
-  { value: 'VOIDED', label: 'Đã hủy' },
-  { value: 'REFUNDED', label: 'Hoàn tiền' },
-] as const
-
-const METHOD_FILTERS = [
-  { value: '', label: 'Tất cả PTTT' },
-  { value: 'CASH', label: 'Tiền mặt' },
-  { value: 'TRANSFER', label: 'Chuyển khoản' },
-  { value: 'CARD', label: 'Thẻ' },
-] as const
-
-export function InvoicesListTable({
-  filters,
-  setFilters,
-  searchKeyword,
-  setSearchKeyword,
-  displayList,
-  data,
-  isLoading,
-  isError,
-  error,
-  isFetching,
-  onRefetch,
-  onSelectInvoice,
+export function InvoicesListTable({ filters, setFilters, searchKeyword, setSearchKeyword,
+  displayList, data, isLoading, isError, error, isFetching, onRefetch, onSelectInvoice,
 }: InvoicesListTableProps) {
-  return (
-    <div className="space-y-4">
-      {/* Filter Bar */}
-      <Card className="border-border/80 shadow-xs">
-        <CardContent className="p-4 space-y-3">
-          <div className="flex flex-col sm:flex-row gap-3">
-            {/* Search Input */}
-            <div className="relative flex-1">
-              <Search className="h-4 w-4 absolute left-3 top-3 text-muted-foreground pointer-events-none" />
-              <Input
-                type="search"
-                placeholder="Tìm mã hóa đơn, bàn, nhân viên…"
-                value={searchKeyword}
-                onChange={(e) => setSearchKeyword(e.target.value)}
-                className="pl-9"
-              />
-            </div>
-
-            {/* Status Filter */}
-            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0 scrollbar-none">
-              {STATUS_FILTERS.map((st) => (
-                <Button
-                  key={st.value}
-                  type="button"
-                  size="sm"
-                  variant={filters.paymentStatus === st.value ? 'default' : 'outline'}
-                  onClick={() =>
-                    setFilters((prev) => ({
-                      ...prev,
-                      paymentStatus: st.value as PaymentStatus | '',
-                      page: 1,
-                    }))
-                  }
-                  className="min-h-[36px] px-3.5 rounded-full text-xs font-semibold whitespace-nowrap cursor-pointer active:scale-95 transition-transform"
-                >
-                  {st.label}
-                </Button>
-              ))}
-            </div>
-
-            {/* Method Filter */}
-            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0 scrollbar-none">
-              {METHOD_FILTERS.map((method) => (
-                <Button
-                  key={method.value}
-                  type="button"
-                  size="sm"
-                  variant={filters.paymentMethod === method.value ? 'default' : 'outline'}
-                  onClick={() =>
-                    setFilters((prev) => ({
-                      ...prev,
-                      paymentMethod: method.value as PaymentMethod | '',
-                      page: 1,
-                    }))
-                  }
-                  className="min-h-[36px] px-3.5 rounded-full text-xs font-semibold whitespace-nowrap cursor-pointer active:scale-95 transition-transform"
-                >
-                  {method.label}
-                </Button>
-              ))}
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Main Table */}
-      <Card className="border-border/80 shadow-xs overflow-hidden">
-        {isLoading && (
-          <div className="flex flex-col items-center justify-center py-20 text-muted-foreground gap-3">
-            <RefreshCw className="h-6 w-6 animate-spin text-brand-700" />
-            <p className="text-sm">Đang tải danh sách hóa đơn…</p>
-          </div>
-        )}
-
-        {isError && (
-          <div className="p-6 bg-destructive/10 text-destructive flex items-center justify-between m-4 rounded-xl">
-            <div className="flex items-center gap-2 text-sm font-medium">
-              <AlertCircle className="h-5 w-5 shrink-0" />
-              <span>{errorMessage(error)}</span>
-            </div>
-            <Button variant="outline" size="sm" onClick={onRefetch}>
-              Thử lại
-            </Button>
-          </div>
-        )}
-
-        {data && (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[800px] text-left text-sm border-collapse">
-              <thead className="bg-stone-50 border-b border-border text-xs uppercase text-muted-foreground font-semibold">
-                <tr>
-                  <th className="py-3.5 px-4 sm:px-6">Mã Hóa đơn</th>
-                  <th className="py-3.5 px-4">Bàn / Đơn</th>
-                  <th className="py-3.5 px-4">Thời gian</th>
-                  <th className="py-3.5 px-4">Thu ngân</th>
-                  <th className="py-3.5 px-4">Phương thức</th>
-                  <th className="py-3.5 px-4">Trạng thái</th>
-                  <th className="py-3.5 px-4 text-right">Tổng tiền</th>
-                  <th className="py-3.5 px-4 sm:px-6 text-center">Thao tác</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border/60">
-                {displayList.length === 0 ? (
-                  <tr>
-                    <td colSpan={8} className="py-12 text-center text-muted-foreground">
-                      Không tìm thấy hóa đơn nào phù hợp với bộ lọc.
-                    </td>
-                  </tr>
-                ) : (
-                  displayList.map((invoice) => (
-                    <tr
-                      key={invoice.id}
-                      tabIndex={0}
-                      aria-label={`Chi tiết hóa đơn ${invoice.invoiceNumber}`}
-                      className="hover:bg-stone-50/70 focus-visible:bg-stone-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 transition-colors group cursor-pointer"
-                      onClick={() => onSelectInvoice(invoice.id)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          e.preventDefault()
-                          onSelectInvoice(invoice.id)
-                        }
-                      }}
-                    >
-                      <td className="py-3.5 px-4 sm:px-6">
-                        <code className="text-xs font-mono font-bold text-brand-900 bg-brand-50 border border-brand-200 px-2 py-0.5 rounded">
-                          {invoice.invoiceNumber}
-                        </code>
-                      </td>
-                      <td className="py-3.5 px-4 font-semibold text-foreground">
-                        {invoice.orderSession?.table?.name ?? 'Mang đi / Quầy'}
-                      </td>
-                      <td className="py-3.5 px-4 text-xs text-muted-foreground">
-                        {new Date(invoice.createdAt).toLocaleTimeString([], {
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        })}{' '}
-                        •{' '}
-                        {new Date(invoice.createdAt).toLocaleDateString([], {
-                          day: '2-digit',
-                          month: '2-digit',
-                          year: 'numeric',
-                        })}
-                      </td>
-                      <td className="py-3.5 px-4 text-xs text-muted-foreground">
-                        {invoice.employee?.fullName ?? 'Hệ thống'}
-                      </td>
-                      <td className="py-3.5 px-4">
-                        <PaymentMethodBadge method={invoice.paymentMethod} />
-                      </td>
-                      <td className="py-3.5 px-4">
-                        <PaymentStatusBadge status={invoice.paymentStatus} />
-                      </td>
-                      <td className="py-3.5 px-4 text-right font-bold text-brand-800 text-sm">
-                        {formatPrice(String(invoice.totalAmount))}
-                      </td>
-                      <td
-                        className="py-3.5 px-4 sm:px-6 text-center"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => onSelectInvoice(invoice.id)}
-                          className="h-9 w-9 p-0 text-muted-foreground hover:text-foreground inline-flex items-center justify-center rounded-lg hover:bg-muted cursor-pointer"
-                          title="Xem chi tiết & Thanh toán"
-                        >
-                          <Eye className="h-4 w-4" />
-                        </Button>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        )}
-
-        {/* Pagination */}
-        {data && data.totalPages > 1 && (
-          <div className="p-4 border-t border-border flex items-center justify-between text-xs text-muted-foreground">
-            <span>
-              Trang {data.currentPage} / {data.totalPages} (Tổng {data.totalItems} hóa đơn)
-            </span>
-            <div className="flex items-center gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={filters.page! <= 1 || isFetching}
-                onClick={() =>
-                  setFilters((prev) => ({ ...prev, page: (prev.page ?? 1) - 1 }))
-                }
-                className="h-8 gap-1"
-              >
-                <ArrowLeft className="h-3.5 w-3.5" /> Trước
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={filters.page! >= data.totalPages || isFetching}
-                onClick={() =>
-                  setFilters((prev) => ({ ...prev, page: (prev.page ?? 1) + 1 }))
-                }
-                className="h-8 gap-1"
-              >
-                Sau
-              </Button>
-            </div>
-          </div>
-        )}
-      </Card>
+  return <section aria-label="Danh sách hóa đơn" className="space-y-4">
+    <div className="grid items-end gap-3 sm:grid-cols-[minmax(0,1fr)_180px_160px]">
+      <label className="block min-w-0 space-y-1.5 text-xs font-medium">
+        <span>Tìm trong trang hiện tại</span>
+        <div className="relative"><Search className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-muted-foreground" aria-hidden="true" />
+          <Input type="search" placeholder="Mã hóa đơn, bàn, nhân viên…" value={searchKeyword} onChange={event => setSearchKeyword(event.target.value)} className="pl-9" />
+        </div>
+      </label>
+      <label className="space-y-1.5 text-xs font-medium"><span>Trạng thái thanh toán</span>
+        <select value={filters.paymentStatus ?? ''} onChange={event => setFilters(previous => ({ ...previous, paymentStatus: event.target.value as PaymentStatus | '', page: 1 }))} className="h-10 w-full rounded-md border border-input bg-card px-3 text-sm">
+          <option value="">Tất cả trạng thái</option><option value="UNPAID">Chờ thanh toán</option><option value="PAID">Đã thanh toán</option><option value="PARTIALLY_REFUNDED">Hoàn một phần</option><option value="REFUNDED">Hoàn toàn bộ</option><option value="VOIDED">Đã hủy</option>
+        </select>
+      </label>
+      <label className="space-y-1.5 text-xs font-medium"><span>Phương thức</span>
+        <select value={filters.paymentMethod ?? ''} onChange={event => setFilters(previous => ({ ...previous, paymentMethod: event.target.value as PaymentMethod | '', page: 1 }))} className="h-10 w-full rounded-md border border-input bg-card px-3 text-sm">
+          <option value="">Tất cả phương thức</option><option value="CASH">Tiền mặt</option><option value="TRANSFER">Chuyển khoản</option><option value="CARD">Thẻ</option>
+        </select>
+      </label>
     </div>
-  )
+    {isLoading && <div role="status" className="flex items-center justify-center gap-2 border-y border-border py-16 text-sm text-muted-foreground"><RefreshCw size={18} className="animate-spin" aria-hidden="true" />Đang tải danh sách hóa đơn…</div>}
+    {isError && <div role="alert" className="flex flex-wrap items-center justify-between gap-3 border-l-2 border-destructive bg-destructive/5 p-4 text-sm text-destructive">
+      <span className="flex items-center gap-2"><AlertCircle size={18} aria-hidden="true" />{errorMessage(error)}</span>
+      <Button variant="outline" size="sm" onClick={onRefetch} disabled={isFetching}><RefreshCw size={16} aria-hidden="true" />Thử lại</Button>
+    </div>}
+    {data && <>
+      <div className="overflow-x-auto border-y border-border" aria-busy={isFetching}>
+        <table className="w-full min-w-[800px] border-collapse text-left text-sm">
+          <thead className="border-b border-border bg-muted/50 text-xs font-medium text-muted-foreground"><tr>
+            <th className="px-4 py-3">Mã hóa đơn</th><th className="px-4 py-3">Bàn / Đơn</th><th className="px-4 py-3">Thời gian</th><th className="px-4 py-3">Thu ngân</th><th className="px-4 py-3">Phương thức</th><th className="px-4 py-3">Trạng thái</th><th className="px-4 py-3 text-right">Tổng tiền</th><th className="px-4 py-3 text-right">Thao tác</th>
+          </tr></thead>
+          <tbody className="divide-y divide-border">
+            {!displayList.length && <tr><td colSpan={8} className="py-12 text-center text-sm text-muted-foreground">Không tìm thấy hóa đơn nào phù hợp với bộ lọc.</td></tr>}
+            {displayList.map(invoice => <tr key={invoice.id} tabIndex={0} aria-label={`Chi tiết hóa đơn ${invoice.invoiceNumber}`} className="cursor-pointer transition-colors hover:bg-muted/50 focus-visible:bg-muted/50" onClick={() => onSelectInvoice(invoice.id)} onKeyDown={event => {
+              if (event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); onSelectInvoice(invoice.id) }
+            }}>
+              <td className="whitespace-nowrap px-4 py-4 font-mono text-xs font-semibold text-primary">{invoice.invoiceNumber}</td>
+              <td className="px-4 py-4 font-medium">{invoice.orderSession?.table?.name ?? 'Mang đi / Quầy'}</td>
+              <td className="whitespace-nowrap px-4 py-4 text-xs text-muted-foreground">{formatStoreDateTime(invoice.createdAt)}</td>
+              <td className="px-4 py-4 text-xs text-muted-foreground">{invoice.employee?.fullName ?? 'Hệ thống'}</td>
+              <td className="px-4 py-4"><PaymentMethodBadge method={invoice.paymentMethod} /></td>
+              <td className="px-4 py-4"><PaymentStatusBadge status={invoice.paymentStatus} /></td>
+              <td className="whitespace-nowrap px-4 py-4 text-right font-semibold tabular-nums">{formatPrice(invoice.totalAmount)}</td>
+              <td className="px-4 py-4 text-right" onClick={event => event.stopPropagation()}><Button variant="ghost" size="icon" title="Xem chi tiết & Thanh toán" aria-label={`Xem chi tiết hóa đơn ${invoice.invoiceNumber}`} onClick={() => onSelectInvoice(invoice.id)}><Eye size={17} aria-hidden="true" /></Button></td>
+            </tr>)}
+          </tbody>
+        </table>
+      </div>
+      <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+        <span>{displayList.length} / {data.totalItems} hóa đơn</span>
+        <Pagination page={filters.page ?? 1} totalPages={data.totalPages} disabled={isFetching} onPage={page => setFilters(previous => ({ ...previous, page }))} />
+      </div>
+    </>}
+  </section>
 }

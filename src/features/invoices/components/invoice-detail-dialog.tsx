@@ -1,9 +1,11 @@
 import { useRef, useState } from 'react'
 import { OrderOptions } from '../../../shared/ui/order-options'
-import { useQuery, useMutation } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useOutletContext } from 'react-router-dom'
 import type { Session } from '../../auth/session'
 import { RefundsPanel } from './refunds-panel'
+import { CashRefundsPanel } from './cash-refunds-panel'
+import { RemakesPanel } from './remakes-panel'
 import { PaymentGatewayPanel } from './payment-gateway-panel'
 import { PickupCodePanel } from '../../online-orders/components/pickup-panels'
 import {
@@ -16,6 +18,7 @@ import {
   QrCode,
   Receipt,
   RefreshCw,
+  RotateCcw,
 } from 'lucide-react'
 import { printingApi } from '../../printing/printing.api'
 import {
@@ -29,7 +32,8 @@ import { formatPrice } from '../../menu/menu.api'
 import { formatLineAmount } from '../../../shared/lib/format'
 import { ApiError, errorMessage } from '../../../shared/api/client'
 import { Button, Dialog, Input, cn } from '../../../shared/ui'
-import { PaymentStatusBadge } from './invoice-badges'
+import { PaymentMethodBadge, PaymentStatusBadge } from './invoice-badges'
+import { formatStoreDateTime } from '../../../shared/lib/store-time'
 import { isUnresolvedPayment } from '../payment-status'
 import { moneySchema } from '../../menu/menu.api'
 import { decimalAmount, minorAmount } from '../../../shared/lib/money'
@@ -46,9 +50,10 @@ export function InvoiceDetailDialog({
   onUpdated,
 }: InvoiceDetailDialogProps) {
   const { employee, authorization } = useOutletContext<Session>()
+  const client = useQueryClient()
   const can = (key: string) => authorization.permissionKeys.includes(key)
-  const [activeTab, setActiveTab] = useState<
-    'items' | 'gateway' | 'pay_manual'
+  const [selectedTab, setActiveTab] = useState<
+    'items' | 'gateway' | 'pay_manual' | 'aftersales'
   >('items')
 
   const [manualMethod, setManualMethod] = useState<'CASH' | 'CARD'>('CASH')
@@ -60,8 +65,11 @@ export function InvoiceDetailDialog({
   const manualFlight = useRef(false)
   const voidFlight = useRef(false)
   const [refundLocked, setRefundLocked] = useState(false)
+  const [cashRefundLocked, setCashRefundLocked] = useState(false)
+  const [remakeLocked, setRemakeLocked] = useState(false)
   const [gatewayLocked, setGatewayLocked] = useState(false)
   const [recoveryRequired, setRecoveryRequired] = useState(false)
+  const activeTab = cashRefundLocked || remakeLocked ? 'aftersales' : selectedTab
 
   // In lại hóa đơn (Reprint receipt)
   const [reprintOpen, setReprintOpen] = useState(false)
@@ -143,10 +151,10 @@ export function InvoiceDetailDialog({
   const paymentLocked =
     ((updatePaymentMutation.isPending || Boolean(submittedManual)) &&
       (!inv || inv.paymentStatus === 'UNPAID' || invoiceQuery.isError)) ||
-    refundLocked || gatewayLocked || voidMutation.isPending
+    refundLocked || cashRefundLocked || remakeLocked || gatewayLocked || voidMutation.isPending
   const manualBlocked =
     invoiceQuery.isPending || invoiceQuery.isError || invoiceQuery.isFetching ||
-    recoveryRequired || voidMutation.isPending || refundLocked || gatewayLocked ||
+    recoveryRequired || voidMutation.isPending || refundLocked || cashRefundLocked || remakeLocked || gatewayLocked ||
     unresolvedOnline ||
     (can('/payment-attempts_read') &&
       (attemptsQuery.isPending || attemptsQuery.isError || attemptsQuery.isFetching))
@@ -154,6 +162,18 @@ export function InvoiceDetailDialog({
   const tenderedMinor = parsedTendered.success ? minorAmount(parsedTendered.data) : null
   const totalMinor = inv ? minorAmount(inv.totalAmount) : null
   const tenderedEnough = tenderedMinor !== null && totalMinor !== null && tenderedMinor >= totalMinor
+  const compensationBlocked = invoiceQuery.isError || invoiceQuery.isFetching ||
+    updatePaymentMutation.isPending || voidMutation.isPending || gatewayLocked || refundLocked
+  const canAftersales = can('/payment-refunds_read') || can('/cash-refunds_create') || can('/orders_items_remake') || can('/payment-refunds_create')
+  function updateAftersales() {
+    void invoiceQuery.refetch()
+    for (const scope of ['cashier-shift', 'cashier-shifts', 'orders', 'kitchen', 'inventory-waste', 'dashboard-report', 'online-journey', 'recommendation-experiment', 'daily-sales-close']) {
+      void client.invalidateQueries({ queryKey: ['private', employee.id, scope] })
+    }
+    void client.invalidateQueries({ queryKey: ['private', 'funds'] })
+    void client.invalidateQueries({ queryKey: ['private', employee.id, 'takeaway-handoff'] })
+    onUpdated()
+  }
 
   async function refreshStatus() {
     const result = await invoiceQuery.refetch()
@@ -205,41 +225,45 @@ export function InvoiceDetailDialog({
       showCloseButton={false}
       maxWidth="lg"
       label="Chi tiết hóa đơn"
+      className="p-0"
     >
-      <div className="flex flex-col max-h-[90vh]">
+      <div className="flex max-h-[calc(100dvh-2rem)] flex-col">
         {/* Modal Header */}
-        <div className="p-5 pr-10 border-b border-border flex items-center justify-between bg-stone-50/50">
-          <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-xl bg-brand-800 text-white flex items-center justify-center shadow-xs">
-              <Receipt className="h-5 w-5" />
+        <div className="border-b border-border bg-muted/40 p-4 sm:p-5">
+          <div className="flex items-start gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-border bg-card text-primary">
+              <Receipt className="h-5 w-5" aria-hidden="true" />
             </div>
             <div>
-              <div className="flex items-center gap-2">
-                <h3 className="font-bold text-lg text-foreground">
+              <div className="flex flex-wrap items-center gap-2">
+                <h3 className="text-base font-semibold text-foreground sm:text-lg">
                   Hóa đơn #{inv?.invoiceNumber ?? '…'}
                 </h3>
                 {inv && <PaymentStatusBadge status={inv.paymentStatus} />}
               </div>
               <p className="text-xs text-muted-foreground">
                 Bàn:{' '}
-                <strong>{inv?.orderSession?.table?.name ?? 'Mang đi'}</strong> •
+                <strong>{inv?.orderSession?.table?.name ?? 'Mang đi'}</strong> ·
                 Thu ngân: {inv?.employee?.fullName ?? 'Hệ thống'}
               </p>
+              {inv && <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground"><PaymentMethodBadge method={inv.paymentMethod} /><span>{formatStoreDateTime(inv.createdAt)}</span></div>}
             </div>
           </div>
         </div>
 
         {inv?.paymentStatus === 'PAID' &&
+          inv.orderItems.some(item => item.serveStatus !== 'SERVED') &&
           inv.orderSession &&
           !inv.orderSession.tableId && (
             <PickupCodePanel invoiceId={invoiceId} />
           )}
 
         {/* Modal Navigation Tabs */}
-        <div className="flex flex-wrap border-b border-border px-5 bg-card">
+        <nav aria-label="Thông tin hóa đơn" className="flex shrink-0 flex-wrap border-b border-border bg-card px-3 sm:px-5">
           <button
             type="button"
             disabled={paymentLocked}
+            aria-current={activeTab === 'items' ? 'page' : undefined}
             onClick={() => setActiveTab('items')}
             className={cn(
               'px-4 py-2.5 text-xs font-semibold border-b-2 transition-colors',
@@ -250,6 +274,11 @@ export function InvoiceDetailDialog({
           >
             Chi tiết món ({inv?.orderItems.length ?? 0})
           </button>
+          {inv && canAftersales && (inv.paymentStatus !== 'UNPAID' && inv.paymentStatus !== 'VOIDED' || cashRefundLocked || remakeLocked) && <button
+            type="button" disabled={paymentLocked} aria-current={activeTab === 'aftersales' ? 'page' : undefined}
+            onClick={() => setActiveTab('aftersales')}
+            className={cn('flex items-center gap-1.5 border-b-2 px-4 py-2.5 text-xs font-semibold transition-colors', activeTab === 'aftersales' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground')}
+          ><RotateCcw size={14} aria-hidden="true" />Hoàn tiền & làm lại</button>}
           {inv?.paymentStatus === 'UNPAID' &&
             (can('/invoices_update') || can('/payment-attempts_read')) && (
               <>
@@ -287,10 +316,10 @@ export function InvoiceDetailDialog({
                 )}
               </>
             )}
-        </div>
+        </nav>
 
         {/* Modal Body */}
-        <div className="p-5 overflow-y-auto space-y-6 flex-1">
+        <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-4 sm:p-5">
           <Button type="button" variant="outline" size="sm"
             disabled={invoiceQuery.isFetching || attemptsQuery.isFetching || updatePaymentMutation.isPending || voidMutation.isPending || refundLocked || gatewayLocked}
             onClick={() => void refreshStatus()}>
@@ -345,7 +374,7 @@ export function InvoiceDetailDialog({
           {inv && activeTab === 'items' && (
             <div className="space-y-6">
               {/* Order items list */}
-              <div className="border border-border rounded-lg overflow-x-auto shadow-xs">
+              <div className="overflow-x-auto">
                 <table className="w-full min-w-[320px] text-left text-xs border-collapse">
                   <thead className="bg-stone-50 border-b border-border text-muted-foreground font-semibold">
                     <tr>
@@ -361,6 +390,7 @@ export function InvoiceDetailDialog({
                         <td className="py-2.5 px-3 font-semibold text-foreground">
                           {it.menuItem?.name ?? 'Món'}
                           <OrderOptions options={it.selectedOptions} />
+                          {it.originalRemake && <p className="mt-1 text-xs font-medium text-sky-800">Đã yêu cầu làm lại · {it.originalRemake.reason}</p>}
                           {it.note && (
                             <p className="text-[11px] text-muted-foreground font-normal italic">
                               Ghi chú: {it.note}
@@ -383,7 +413,7 @@ export function InvoiceDetailDialog({
               </div>
 
               {/* Financial Breakdown */}
-              <div className="bg-stone-50 border border-stone-200 rounded-xl p-4 space-y-2 text-xs">
+              <div className="space-y-2 border-t border-border pt-4 text-sm">
                 <div className="flex justify-between text-muted-foreground">
                   <span>Tiền hàng (Tạm tính):</span>
                   <span>{formatPrice(String(inv.subTotal))}</span>
@@ -401,7 +431,7 @@ export function InvoiceDetailDialog({
                   </div>
                 )}
                 <div className="flex justify-between text-sm font-bold text-brand-900 pt-2 border-t border-stone-200">
-                  <span>Tổng thực thu:</span>
+                  <span>Tổng hóa đơn:</span>
                   <span>{formatPrice(String(inv.totalAmount))}</span>
                 </div>
                 {inv.amountTendered && (
@@ -424,7 +454,13 @@ export function InvoiceDetailDialog({
             <PaymentGatewayPanel invoiceId={invoiceId} onLockChange={setGatewayLocked} />
           )}
 
-          {inv && (
+          {inv && <div hidden={activeTab !== 'aftersales'} className="space-y-5">
+            {inv.paymentMethod === 'CASH' && (can('/payment-refunds_read') || can('/cash-refunds_create')) && <CashRefundsPanel
+              invoice={inv} active={activeTab === 'aftersales'} blocked={compensationBlocked || remakeLocked}
+              onUpdated={updateAftersales} onLockChange={setCashRefundLocked}
+            />}
+            <RemakesPanel invoice={inv} blocked={compensationBlocked || cashRefundLocked}
+              onUpdated={updateAftersales} onLockChange={setRemakeLocked} />
             <RefundsPanel
               attempts={attemptsQuery.data?.list ?? []}
               invoiceStatus={inv.paymentStatus}
@@ -434,7 +470,7 @@ export function InvoiceDetailDialog({
                 onUpdated()
               }}
             />
-          )}
+          </div>}
 
           {/* Tab 3: Pay manual (Cash or Card) */}
           {inv?.paymentStatus === 'UNPAID' && activeTab === 'pay_manual' && (
@@ -528,8 +564,8 @@ export function InvoiceDetailDialog({
         </div>
 
         {/* Modal Footer */}
-        <div className="p-4 border-t border-border bg-stone-50/50 flex items-center justify-between">
-          <div className="flex items-center gap-2">
+        <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-border bg-muted/40 p-4">
+          <div className="flex flex-wrap items-center gap-2">
             {inv?.paymentStatus === 'UNPAID' && can('/invoices_update') && (
               <Button
                 type="button"
@@ -549,6 +585,7 @@ export function InvoiceDetailDialog({
                   type="button"
                   variant="outline"
                   size="sm"
+                  disabled={paymentLocked}
                   onClick={() => {
                     setActionError(null)
                     setReprintSuccess(null)

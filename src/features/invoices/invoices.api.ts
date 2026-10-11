@@ -3,6 +3,7 @@ import { apiGet, apiMutate } from '../../shared/api/client'
 import { apiIdempotentMutate } from '../../shared/api/idempotency'
 import { moneySchema } from '../menu/menu.api'
 import { selectedOptionsSchema } from '../../shared/api/order-options'
+import { originalRemakeSchema } from '../../shared/api/order-remakes'
 
 export const invoiceItemSchema = z.object({
   id: z.string(),
@@ -10,6 +11,9 @@ export const invoiceItemSchema = z.object({
   priceAtTime: moneySchema,
   note: z.string().nullable().optional(),
   selectedOptions: selectedOptionsSchema,
+  serveStatus: z.enum(['PENDING', 'COOKING', 'READY', 'SERVED', 'CANCELLED']).optional(),
+  isPaid: z.boolean().optional(),
+  originalRemake: originalRemakeSchema.nullish(),
   menuItem: z
     .object({
       id: z.string(),

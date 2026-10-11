@@ -12,6 +12,7 @@ import { Button, cn } from '../../shared/ui'
 import { InvoicesKpis } from './components/invoices-kpis'
 import { InvoicesListTable } from './components/invoices-list-table'
 import { InvoiceDetailDialog } from './components/invoice-detail-dialog'
+import { decimalAmount, minorAmount } from '../../shared/lib/money'
 
 const EMPTY_INVOICES: Invoice[] = []
 
@@ -41,10 +42,10 @@ export default function InvoicesPage() {
   // Quick statistics calculation from current page/data
   const invoices = invoicesQuery.data?.list ?? EMPTY_INVOICES
   const totalPaidAmount = invoices
-    .filter((inv) => inv.paymentStatus === 'PAID')
-    .reduce((sum, inv) => sum + Number(inv.totalAmount || 0), 0)
+    .filter((inv) => ['PAID', 'PARTIALLY_REFUNDED', 'REFUNDED'].includes(inv.paymentStatus))
+    .reduce((sum, inv) => sum + minorAmount(inv.totalAmount), 0n)
   const unpaidCount = invoices.filter((inv) => inv.paymentStatus === 'UNPAID').length
-  const voidedCount = invoices.filter((inv) => inv.paymentStatus === 'VOIDED').length
+  const voidedCount = invoices.filter((inv) => ['VOIDED', 'PARTIALLY_REFUNDED', 'REFUNDED'].includes(inv.paymentStatus)).length
 
   // Filtered by client search keyword if provided
   const displayList = useMemo(() => {
@@ -63,15 +64,15 @@ export default function InvoicesPage() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <div className="flex items-center gap-2.5">
-            <div className="h-9 w-9 rounded-xl bg-brand-800 text-white flex items-center justify-center shadow-xs">
-              <Receipt className="h-5 w-5" />
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-border bg-card text-primary">
+              <Receipt className="h-5 w-5" aria-hidden="true" />
             </div>
             <div>
-              <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground">
-                Quản lý Hóa đơn & Thanh toán
+              <h1 className="text-xl font-semibold text-foreground sm:text-2xl">
+                Hóa đơn & thanh toán
               </h1>
               <p className="text-xs sm:text-sm text-muted-foreground">
-                Theo dõi lịch sử hóa đơn bán hàng, cổng thanh toán VNPay, MoMo và đối soát giao dịch
+                {invoicesQuery.data?.totalItems ?? '—'} hóa đơn theo bộ lọc
               </p>
             </div>
           </div>
@@ -93,12 +94,12 @@ export default function InvoicesPage() {
       </div>
 
       {/* Overview Stats Cards */}
-      <InvoicesKpis
-        totalPaidAmount={totalPaidAmount}
+      {invoicesQuery.data && !invoicesQuery.isError && <InvoicesKpis
+        totalPaidAmount={decimalAmount(totalPaidAmount)}
         totalItems={invoicesQuery.data?.totalItems ?? 0}
         unpaidCount={unpaidCount}
         voidedCount={voidedCount}
-      />
+      />}
 
       {/* Main Table and Filters */}
       <InvoicesListTable

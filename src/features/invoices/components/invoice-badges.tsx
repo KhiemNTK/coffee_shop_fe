@@ -14,8 +14,8 @@ export function PaymentStatusBadge({ status }: { status: PaymentStatus }) {
   }
   if (status === 'REFUNDED' || status === 'PARTIALLY_REFUNDED') {
     return (
-      <Badge variant="secondary" className="bg-purple-50 text-purple-800 border-purple-200">
-        Hoàn trả
+      <Badge variant="secondary" className="border-sky-200 bg-sky-50 text-sky-800">
+        {status === 'PARTIALLY_REFUNDED' ? 'Hoàn một phần' : 'Hoàn toàn bộ'}
       </Badge>
     )
   }
