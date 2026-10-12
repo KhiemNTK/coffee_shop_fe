@@ -1,11 +1,9 @@
+import { useTranslation } from 'react-i18next'
 import { lazy, Suspense, type ComponentType } from 'react'
 import { BrowserRouter, Route, Routes } from 'react-router-dom'
 import { MenuPage } from '../features/menu/menu-page'
 import { authConfig } from '../features/auth/auth.config'
-import {
-  PermissionGate,
-  StaffLayout,
-} from '../features/auth/staff-layout'
+import { PermissionGate, StaffLayout } from '../features/auth/staff-layout'
 
 import { staffDestinations, type StaffDestination } from '../features/auth/staff-navigation'
 
@@ -13,22 +11,20 @@ const StaffHome = lazy(() => import('../features/auth/staff-home'))
 const StaffAccount = lazy(() => import('../features/auth/staff-account'))
 const OperationsPage = lazy(() => import('../features/operations/operations-page'))
 const SignInPage = lazy(() => import('../features/auth/sign-in-page'))
-const SignUpPage = authConfig.signupEnabled ? lazy(() => import('../features/auth/sign-up-page')) : undefined
+const SignUpPage = authConfig.signupEnabled
+  ? lazy(() => import('../features/auth/sign-up-page'))
+  : undefined
 const PasswordRecoveryPage = lazy(() => import('../features/auth/password-recovery-page'))
 const PaymentReturnPage = lazy(() => import('../features/invoices/payment-return-page'))
 const ReorderPage = lazy(() => import('../features/online-orders/reorder-page'))
 const PickupPage = lazy(() => import('../features/online-orders/pickup-page'))
 const ReconciliationPage = lazy(() => import('../features/reconciliation/reconciliation-page'))
 const StaffMenuPage = lazy(() => import('../features/menu/staff-menu-page'))
-const CashierShiftPage = lazy(
-  () => import('../features/cashier-shifts/cashier-shift-page'),
-)
+const CashierShiftPage = lazy(() => import('../features/cashier-shifts/cashier-shift-page'))
 const PosTablesPage = lazy(() => import('../features/pos/pos-tables-page'))
 const PosSessionPage = lazy(() => import('../features/pos/pos-session-page'))
 const KitchenPage = lazy(() => import('../features/kitchen/kitchen-page'))
-const OnlineOrderPage = lazy(
-  () => import('../features/online-orders/online-order-page'),
-)
+const OnlineOrderPage = lazy(() => import('../features/online-orders/online-order-page'))
 const StaffOnlineOrdersPage = lazy(
   () => import('../features/online-orders/staff-online-orders-page'),
 )
@@ -38,12 +34,8 @@ const ReportsPage = lazy(() => import('../features/reports/reports-page'))
 const PublicReservationsPage = lazy(
   () => import('../features/reservations/public-reservations-page'),
 )
-const StaffReservationsPage = lazy(
-  () => import('../features/reservations/staff-reservations-page'),
-)
-const PromotionsPage = lazy(
-  () => import('../features/promotions/promotions-page'),
-)
+const StaffReservationsPage = lazy(() => import('../features/reservations/staff-reservations-page'))
+const PromotionsPage = lazy(() => import('../features/promotions/promotions-page'))
 const DiningTablesPage = lazy(() =>
   import('../features/dining-tables/dining-tables-page').then((m) => ({
     default: m.DiningTablesPage,
@@ -72,20 +64,33 @@ const PrintingPage = lazy(() =>
 const NotFoundPage = lazy(() => import('../features/not-found/not-found-page'))
 
 const staffPages: Record<StaffDestination, ComponentType> = {
-  operations: OperationsPage, pos: PosTablesPage, kitchen: KitchenPage,
-  'online-orders': StaffOnlineOrdersPage, shifts: CashierShiftPage, invoices: InvoicesPage,
-  reconciliation: ReconciliationPage, reservations: StaffReservationsPage, tables: DiningTablesPage,
-  inventory: InventoryPage, menu: StaffMenuPage, promotions: PromotionsPage, reports: ReportsPage,
-  employees: EmployeesPage, settings: SettingsPage, 'audit-logs': AuditLogsPage, printing: PrintingPage,
+  operations: OperationsPage,
+  pos: PosTablesPage,
+  kitchen: KitchenPage,
+  'online-orders': StaffOnlineOrdersPage,
+  shifts: CashierShiftPage,
+  invoices: InvoicesPage,
+  reconciliation: ReconciliationPage,
+  reservations: StaffReservationsPage,
+  tables: DiningTablesPage,
+  inventory: InventoryPage,
+  menu: StaffMenuPage,
+  promotions: PromotionsPage,
+  reports: ReportsPage,
+  employees: EmployeesPage,
+  settings: SettingsPage,
+  'audit-logs': AuditLogsPage,
+  printing: PrintingPage,
 }
 
 export function AppRouter() {
+  const { t: translate } = useTranslation()
   return (
     <BrowserRouter>
       <Suspense
         fallback={
           <div className="feedback" role="status">
-            Đang tải…
+            {translate('common.loading')}
           </div>
         }
       >
@@ -105,11 +110,16 @@ export function AppRouter() {
           <Route path="/staff" element={<StaffLayout />}>
             <Route index element={<StaffHome />} />
             <Route path="account" element={<StaffAccount />} />
-            {staffDestinations.map(destination => {
+            {staffDestinations.map((destination) => {
               const Page = staffPages[destination.path]
-              return <Route key={destination.path} element={<PermissionGate anyOf={destination.permissions} />}>
-                <Route path={destination.path} element={<Page />} />
-              </Route>
+              return (
+                <Route
+                  key={destination.path}
+                  element={<PermissionGate anyOf={destination.permissions} />}
+                >
+                  <Route path={destination.path} element={<Page />} />
+                </Route>
+              )
             })}
             <Route element={<PermissionGate permission="/orders_sessions_read" />}>
               <Route path="pos/sessions/:sessionId" element={<PosSessionPage />} />

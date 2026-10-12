@@ -1,11 +1,41 @@
 # Coffee Shop Frontend
 
+## payOS Payments
+
+payOS shares the existing staff invoice gateway with VNPay/MoMo. Provider availability
+comes from the backend; credentials belong only in backend environment variables.
+Creation and explicit link recovery keep the same payment attempt and idempotency
+identity. PAYOS creation has a 25-second client budget for the bounded create/query
+recovery path; ordinary reads retain their existing deadline.
+
+`/payment/payos/return` reads the server-issued UUID/HMAC `state`, removes it from
+the address bar and preserves it only in the current browser history entry for
+reload. Browser `status`, `cancel`, `code` and `orderCode` do not confirm payment.
+The backend's signed webhook/outbox reconciliation is authoritative.
+
+Deploy the matching backend migration `20261012010000_add_payos_provider` before
+starting the new API. Configure merchant keys and the HTTPS webhook only after
+deployment; no frontend payOS SDK or secret is needed. Automatic payOS refunds and
+public online-order prepayment are not implemented by this integration.
+
 React + TypeScript SPA, maintained separately from the sibling Nest backend.
 Includes public menu/reservations/takeaway ordering, staff authentication,
 POS, kitchen, invoices, payments/refunds, inventory/procurement and administration.
 Implementation and verification boundaries are recorded in [Integration Delivery Ledger](docs/PRODUCTION-ROADMAP.md).
 
 ## Local Development
+
+The audit-hardening UI requires the matching backend and migration
+`20261012000000_payment_link_recovery_and_retention`. Transfers/merges/clears send
+the session identity observed by the operator; stale sessions return a conflict.
+The payment panel reopens the existing attempt URL through an explicit protected
+POST, without creating another payment. Pin CI `BACKEND_REF` to that backend
+revision before running the live contract suite.
+
+Checkout and reorder read public intake availability. New ASAP orders stop
+outside configured shop hours; uncertain existing submissions keep their original
+identity and can be checked again. KDS events coalesce refreshes over 250 ms,
+with 60-second fallback polling while connected and faster polling when offline.
 
 Use Node 24 LTS and pnpm 9.15.9. From this repo:
 

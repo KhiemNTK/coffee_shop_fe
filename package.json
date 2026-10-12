@@ -17,10 +17,12 @@
   },
   "dependencies": {
     "@tanstack/react-query": "^5.104.0",
+    "i18next": "^26.4.3",
     "lucide-react": "^1.48.0",
     "qrcode": "^1.5.4",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
+    "react-i18next": "^17.0.16",
     "react-router-dom": "^7.18.4",
     "zod": "^4.6.5"
   },

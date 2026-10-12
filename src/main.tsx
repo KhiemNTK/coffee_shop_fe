@@ -6,14 +6,19 @@ import { queryClient } from './app/query-client'
 import { AppRouter } from './app/router'
 import { AppErrorBoundary } from './app/error-boundary'
 import { ConnectionStatus } from './app/connection-status'
+import { initializeI18n } from './shared/i18n'
+import { LanguageSelector } from './shared/i18n/language-selector'
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <AppErrorBoundary>
-        <ConnectionStatus />
-        <AppRouter />
-      </AppErrorBoundary>
-    </QueryClientProvider>
-  </StrictMode>,
+void initializeI18n().then(() =>
+  createRoot(document.getElementById('root')!).render(
+    <StrictMode>
+      <QueryClientProvider client={queryClient}>
+        <AppErrorBoundary>
+          <LanguageSelector />
+          <ConnectionStatus />
+          <AppRouter />
+        </AppErrorBoundary>
+      </QueryClientProvider>
+    </StrictMode>,
+  ),
 )
