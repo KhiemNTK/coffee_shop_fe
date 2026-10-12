@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { Coffee, Search } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { Button } from '../../../shared/ui/button'
@@ -42,11 +43,12 @@ export function PosMenuCatalog({
   error,
   onRetry,
 }: PosMenuCatalogProps) {
+  const { t: translate } = useTranslation()
   return (
     <Card className="lg:col-span-7 p-5">
       <CardContent className="p-0">
         <h2 className="mb-4 flex items-center gap-2 text-lg font-bold text-foreground">
-          <Coffee className="h-5 w-5 text-primary" /> Chọn món
+          <Coffee className="h-5 w-5 text-primary" /> {translate('menu.chooseItem')}
         </h2>
 
         {/* Ô tìm kiếm & lọc danh mục */}
@@ -55,7 +57,7 @@ export function PosMenuCatalog({
             <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input
               type="search"
-              placeholder="Tìm món nhanh…"
+              placeholder={translate('menu.searchQuick')}
               value={keyword}
               onChange={(e) => onKeywordChange(e.target.value)}
               className="pl-9"
@@ -67,7 +69,7 @@ export function PosMenuCatalog({
             onChange={(e) => onSelectCategory(e.target.value)}
             className="h-9 rounded-md border border-input bg-card px-3 text-sm font-medium text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
           >
-            <option value="">Tất cả danh mục</option>
+            <option value="">{translate('menu.allCategories')}</option>
             {categories?.map((cat) => (
               <option key={cat.id} value={cat.id}>
                 {cat.name}
@@ -91,19 +93,16 @@ export function PosMenuCatalog({
           >
             <p className="font-semibold">{error}</p>
             <Button variant="outline" size="sm" onClick={onRetry} className="mt-3">
-              Thử lại
+              {translate('common.retry')}
             </Button>
           </div>
         ) : isLoadingMenu ? (
-          <p
-            className="py-8 text-center text-sm text-muted-foreground animate-pulse"
-            role="status"
-          >
-            Đang tải món…
+          <p className="py-8 text-center text-sm text-muted-foreground animate-pulse" role="status">
+            {translate('menu.loadingItems')}
           </p>
         ) : menuItems?.length === 0 ? (
           <p className="py-8 text-center text-sm text-muted-foreground">
-            Không tìm thấy món phù hợp.
+            {translate('menu.noMatchesSentence')}
           </p>
         ) : (
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">

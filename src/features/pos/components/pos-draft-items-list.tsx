@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { Minus, Plus, Send } from 'lucide-react'
 import { Button } from '../../../shared/ui/button'
 import { formatLineAmount } from '../../../shared/lib/format'
@@ -20,13 +21,15 @@ export function PosDraftItemsList({
   isSubmitting,
   isLocked,
 }: PosDraftItemsListProps) {
+  const { t: translate } = useTranslation()
   if (draftItems.length === 0) return null
 
   return (
     <div className="mt-5 border-t-2 border-dashed border-primary/20 pt-4">
       <div className="mb-2 flex items-center justify-between">
         <span className="text-xs font-bold uppercase tracking-wider text-primary">
-          Món mới chọn ({draftItems.length})
+          {translate('pos.newItemsPrefix')}
+          {draftItems.length})
         </span>
         <button
           type="button"
@@ -34,7 +37,7 @@ export function PosDraftItemsList({
           onClick={onClearDraft}
           className="text-xs font-semibold text-destructive hover:underline cursor-pointer"
         >
-          Xóa tất cả
+          {translate('pos.clearDraft')}
         </button>
       </div>
 
@@ -67,7 +70,7 @@ export function PosDraftItemsList({
                 disabled={isSubmitting || isLocked}
                 onClick={() => onUpdateQuantity(item.id, -1)}
                 className="flex h-8 w-8 items-center justify-center rounded-lg border border-border bg-card text-foreground hover:bg-muted active:scale-90 transition-transform cursor-pointer disabled:opacity-50"
-                aria-label="Giảm số lượng"
+                aria-label={translate('common.decreaseQuantity')}
               >
                 <Minus className="h-3.5 w-3.5" />
               </button>
@@ -79,7 +82,7 @@ export function PosDraftItemsList({
                 disabled={isSubmitting || isLocked}
                 onClick={() => onUpdateQuantity(item.id, 1)}
                 className="flex h-8 w-8 items-center justify-center rounded-lg border border-border bg-card text-foreground hover:bg-muted active:scale-90 transition-transform cursor-pointer disabled:opacity-50"
-                aria-label="Tăng số lượng"
+                aria-label={translate('common.increaseQuantity')}
               >
                 <Plus className="h-3.5 w-3.5" />
               </button>
@@ -95,9 +98,18 @@ export function PosDraftItemsList({
         className="w-full min-h-[44px] flex items-center justify-center gap-2 font-bold cursor-pointer"
       >
         <Send className="h-4 w-4" />
-        <span>{isSubmitting ? 'Đang gửi món…' : isLocked ? 'Kiểm tra lại lần gửi món' : 'Gửi order vào bếp'}</span>
+        <span>
+          {isSubmitting
+            ? translate('pos.sendingItems')
+            : isLocked
+              ? translate('pos.reviewBatch')
+              : translate('pos.sendKitchen')}
+        </span>
         {!isSubmitting && !isLocked && (
-          <kbd aria-hidden="true" className="hidden sm:inline-block ml-1 rounded bg-primary-foreground/20 px-1.5 py-0.5 text-[10px] font-mono font-medium tracking-tight">
+          <kbd
+            aria-hidden="true"
+            className="hidden sm:inline-block ml-1 rounded bg-primary-foreground/20 px-1.5 py-0.5 text-[10px] font-mono font-medium tracking-tight"
+          >
             Ctrl+↵
           </kbd>
         )}

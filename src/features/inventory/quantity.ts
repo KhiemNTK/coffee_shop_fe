@@ -1,11 +1,19 @@
 import { z } from 'zod'
+import { currentLanguage } from '../../shared/i18n/index.js'
 
-export const quantitySchema = z.union([
-  z.string(),
-  z.number().finite().min(-Number.MAX_SAFE_INTEGER / 10000).max(Number.MAX_SAFE_INTEGER / 10000).transform(String),
-]).pipe(z.string().regex(/^-?\d{1,14}(\.\d{1,4})?$/))
+export const quantitySchema = z
+  .union([
+    z.string(),
+    z
+      .number()
+      .finite()
+      .min(-Number.MAX_SAFE_INTEGER / 10000)
+      .max(Number.MAX_SAFE_INTEGER / 10000)
+      .transform(String),
+  ])
+  .pipe(z.string().regex(/^-?\d{1,14}(\.\d{1,4})?$/))
 
-const integerFormatter = new Intl.NumberFormat('vi-VN')
+const integerFormatters = { vi: new Intl.NumberFormat('vi-VN'), en: new Intl.NumberFormat('en-GB') }
 
 export function quantityDifference(counted: string, expected: string): string {
   const scaled = (value: string) => {
@@ -22,5 +30,5 @@ export function formatQuantity(value: string): string {
   const negative = value.startsWith('-')
   const [integer = '0', fraction = ''] = (negative ? value.slice(1) : value).split('.')
   const decimals = fraction.replace(/0+$/, '')
-  return `${negative ? '-' : ''}${integerFormatter.format(BigInt(integer))}${decimals ? ',' + decimals : ''}`
+  return `${negative ? '-' : ''}${integerFormatters[currentLanguage()].format(BigInt(integer))}${decimals ? (currentLanguage() === 'en' ? '.' : ',') + decimals : ''}`
 }

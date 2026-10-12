@@ -31,21 +31,13 @@ export const diningTableAdminSchema = z.object({
 export type DiningTableAdmin = z.infer<typeof diningTableAdminSchema>
 
 export const createDiningTableSchema = z.object({
-  name: z
-    .string()
-    .trim()
-    .min(1, 'Tên bàn không được để trống')
-    .max(50, 'Tên bàn tối đa 50 ký tự'),
+  name: z.string().trim().min(1, 'Tên bàn không được để trống').max(50, 'Tên bàn tối đa 50 ký tự'),
 })
 
 export type CreateDiningTableInput = z.infer<typeof createDiningTableSchema>
 
 export const updateDiningTableSchema = z.object({
-  name: z
-    .string()
-    .trim()
-    .min(1, 'Tên bàn không được để trống')
-    .max(50, 'Tên bàn tối đa 50 ký tự'),
+  name: z.string().trim().min(1, 'Tên bàn không được để trống').max(50, 'Tên bàn tối đa 50 ký tự'),
 })
 
 export type UpdateDiningTableInput = z.infer<typeof updateDiningTableSchema>
@@ -57,14 +49,12 @@ export const tableActionResponseSchema = z.object({
 
 export type TableActionResponse = z.infer<typeof tableActionResponseSchema>
 
-export async function getDiningTablesAdmin(
-  signal: AbortSignal,
-): Promise<DiningTableAdmin[]> {
+export async function getDiningTablesAdmin(signal: AbortSignal): Promise<DiningTableAdmin[]> {
   return apiGet('/dining-tables', z.array(diningTableAdminSchema), signal, true)
 }
 
 export async function createDiningTable(
-  payload: CreateDiningTableInput,
+  payload: CreateDiningTableInput
 ): Promise<DiningTableAdmin> {
   return apiMutate('/dining-tables', 'POST', diningTableAdminSchema, {
     name: payload.name.trim(),
@@ -73,55 +63,48 @@ export async function createDiningTable(
 
 export async function updateDiningTable(
   id: string,
-  payload: UpdateDiningTableInput,
+  payload: UpdateDiningTableInput
 ): Promise<DiningTableAdmin> {
   return apiMutate(`/dining-tables/${id}`, 'PATCH', diningTableAdminSchema, {
     name: payload.name.trim(),
   })
 }
 
-export async function deleteDiningTable(
-  id: string,
-): Promise<TableActionResponse> {
-  return apiMutate(
-    `/dining-tables/${id}`,
-    'DELETE',
-    tableActionResponseSchema,
-    undefined,
-  )
+export async function deleteDiningTable(id: string): Promise<TableActionResponse> {
+  return apiMutate(`/dining-tables/${id}`, 'DELETE', tableActionResponseSchema, undefined)
 }
 
 export async function clearDiningTable(
   id: string,
+  expectedOrderSessionId: string | null
 ): Promise<TableActionResponse> {
-  return apiMutate(
-    `/orders/tables/${id}/clear`,
-    'POST',
-    tableActionResponseSchema,
-    {},
-  )
+  return apiMutate(`/orders/tables/${id}/clear`, 'POST', tableActionResponseSchema, {
+    expectedOrderSessionId,
+  })
 }
 
 export async function transferTable(
   fromTableId: string,
   toTableId: string,
+  sourceOrderSessionId: string
 ): Promise<TableActionResponse> {
-  return apiMutate(
-    '/orders/sessions/transfer-table',
-    'POST',
-    tableActionResponseSchema,
-    { fromTableId, toTableId },
-  )
+  return apiMutate('/orders/sessions/transfer-table', 'POST', tableActionResponseSchema, {
+    fromTableId,
+    toTableId,
+    sourceOrderSessionId,
+  })
 }
 
 export async function mergeTables(
   sourceTableIds: string[],
   destinationTableId: string,
+  sourceOrderSessionIds: string[],
+  destinationOrderSessionId: string
 ): Promise<TableActionResponse> {
-  return apiMutate(
-    '/orders/sessions/merge',
-    'POST',
-    tableActionResponseSchema,
-    { sourceTableIds, destinationTableId },
-  )
+  return apiMutate('/orders/sessions/merge', 'POST', tableActionResponseSchema, {
+    sourceTableIds,
+    destinationTableId,
+    sourceOrderSessionIds,
+    destinationOrderSessionId,
+  })
 }

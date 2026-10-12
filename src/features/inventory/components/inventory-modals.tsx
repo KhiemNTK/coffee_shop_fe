@@ -431,7 +431,6 @@ export function EditItemDialog({
 }) {
   const [name, setName] = useState(item.name)
   const [categoryId, setCategoryId] = useState(item.categoryId)
-  const [unitId, setUnitId] = useState(item.unitId)
   const [reorderPoint, setReorderPoint] = useState(String(item.reorderPoint ?? 10))
   const [error, setError] = useState<string | null>(null)
 
@@ -440,7 +439,6 @@ export function EditItemDialog({
       updateInventoryItem(item.id, {
         name: name.trim(),
         categoryId,
-        unitId,
         reorderPoint: Number(reorderPoint) || 0,
       }),
     onSuccess,
@@ -497,17 +495,7 @@ export function EditItemDialog({
             <label className="text-xs font-semibold text-foreground block mb-1">
               Đơn vị tính
             </label>
-            <select
-              value={unitId}
-              onChange={(e) => setUnitId(e.target.value)}
-              className="w-full text-xs p-2.5 rounded-lg border border-border bg-white"
-            >
-              {units.map((u) => (
-                <option key={u.id} value={u.id}>
-                  {u.name}
-                </option>
-              ))}
-            </select>
+            <Input aria-label="Đơn vị tính cố định" readOnly value={units.find((unit) => unit.id === item.unitId)?.name ?? item.unit?.name ?? ''} />
           </div>
         </div>
 

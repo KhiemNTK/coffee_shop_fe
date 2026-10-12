@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { Sparkles, Plus } from 'lucide-react'
 import { formatPrice, type MenuItem } from '../../menu/menu.api'
 
@@ -12,13 +13,14 @@ export function PosRecommendationsStrip({
   onSelectItem,
   disabled = false,
 }: PosRecommendationsStripProps) {
+  const { t: translate } = useTranslation()
   if (!recommendations || recommendations.length === 0) return null
 
   return (
     <div className="mb-4 rounded-xl border border-primary/20 bg-primary/5 p-3">
       <div className="mb-2 flex items-center gap-1.5 text-xs font-bold text-primary">
         <Sparkles className="h-3.5 w-3.5" />
-        <span>Gợi ý món gọi kèm thông minh</span>
+        <span>{translate('pos.suggestions')}</span>
       </div>
 
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">

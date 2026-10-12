@@ -14,10 +14,13 @@ export const moneySchema = z.union([
     .pipe(decimalSchema),
 ])
 const categorySchema = z.object({ id: z.uuid(), name: z.string() })
+export const menuImageUrlSchema = z.url().max(2048).refine(value => { const url = new URL(value); return url.protocol === 'https:' && !url.username && !url.password })
 export const itemSchema = z.object({
   id: z.uuid(),
   name: z.string(),
   price: moneySchema,
+  description: z.string().max(1000).nullish(),
+  imageUrl: menuImageUrlSchema.nullish(),
   category: categorySchema,
   optionGroups: z.array(
     z.object({
@@ -40,6 +43,10 @@ const pageSchema = z.object({
 
 export type MenuItem = z.infer<typeof itemSchema>
 export type MenuFilters = { keyword: string; categoryId: string; page: number }
+
+export function getPublicStore(signal: AbortSignal) {
+  return apiGet('/menu/public/store', z.object({ name: z.string().max(120).nullable(), address: z.string().max(255).nullable(), phone: z.string().max(24).nullable() }), signal)
+}
 
 export function getCategories(signal: AbortSignal) {
   return apiGet('/menu/public/categories', z.array(categorySchema), signal)

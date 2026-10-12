@@ -4,6 +4,7 @@ import { type AdminMenuItem, type AdminMenuItemDetail, createMenuItem, getAdminI
 import { ApiError, errorMessage } from '../../../shared/api/client'
 import { Button, Input, Dialog, DialogFooter, DialogHeader, DialogTitle } from '../../../shared/ui'
 import { CatalogPicker, type CatalogSelection } from './catalog-picker'
+import { menuImageUrlSchema } from '../menu.api'
 
 type ItemModalProps = { employeeId: string; canReadStations: boolean; onClose: () => void; onSuccess: () => void; onSettled: () => void }
 
@@ -28,6 +29,8 @@ export function EditMenuItemModal(props: ItemModalProps & { item: AdminMenuItem 
 function MenuItemEditor({ initial, onReload, ...props }: ItemModalProps & { initial?: AdminMenuItemDetail; onReload?: () => void }) {
   const id = useId()
   const [name, setName] = useState(initial?.name ?? '')
+  const [description, setDescription] = useState(initial?.description ?? '')
+  const [imageUrl, setImageUrl] = useState(initial?.imageUrl ?? '')
   const [price, setPrice] = useState(initial?.price ?? '')
   const [category, setCategory] = useState<CatalogSelection>(initial?.category ?? null)
   const [station, setStation] = useState<CatalogSelection>(initial?.kitchenStationId
@@ -47,6 +50,10 @@ function MenuItemEditor({ initial, onReload, ...props }: ItemModalProps & { init
     <form className="space-y-4" onSubmit={event => {
       event.preventDefault()
       if (mutation.isPending || uncertain) return
+      if (imageUrl.trim() && !menuImageUrlSchema.safeParse(imageUrl.trim()).success) {
+        setValidation('Ảnh món phải là URL HTTPS, không chứa thông tin đăng nhập.')
+        requestAnimationFrame(() => errorRef.current?.focus()); return
+      }
       if (!name.trim() || !/^(0|[1-9]\d{0,14})(\.\d{1,2})?$/.test(price.trim()) || !category) {
         setValidation('Kiểm tra tên món, danh mục và giá không âm, tối đa 2 chữ số thập phân.')
         requestAnimationFrame(() => errorRef.current?.focus()); return
@@ -54,10 +61,13 @@ function MenuItemEditor({ initial, onReload, ...props }: ItemModalProps & { init
       setValidation('')
       if (!initial) {
         mutation.mutate({ name: name.trim(), price: price.trim(), categoryId: category.id,
+          description: description.trim() || null, imageUrl: imageUrl.trim() || null,
           ...(props.canReadStations ? { kitchenStationId: station?.id ?? null } : {}) })
         return
       }
       const changes: Parameters<typeof updateMenuItem>[1] = {
+        ...((description.trim() || null) !== (initial.description ?? null) ? { description: description.trim() || null } : {}),
+        ...((imageUrl.trim() || null) !== (initial.imageUrl ?? null) ? { imageUrl: imageUrl.trim() || null } : {}),
         ...(name.trim() !== initial.name ? { name: name.trim() } : {}),
         ...(price.trim() !== initial.price ? { price: price.trim() } : {}),
         ...(category.id !== initial.categoryId ? { categoryId: category.id } : {}),
@@ -70,6 +80,8 @@ function MenuItemEditor({ initial, onReload, ...props }: ItemModalProps & { init
       <fieldset disabled={mutation.isPending || uncertain} className="space-y-4">
         <div className="space-y-1"><label htmlFor={`${id}-name`} className="text-sm font-medium">Tên món</label>
           <Input id={`${id}-name`} value={name} onChange={event => setName(event.target.value)} required maxLength={160} /></div>
+        <div className="space-y-1"><label htmlFor={`${id}-description`} className="text-sm font-medium">Mô tả món</label><textarea id={`${id}-description`} className="w-full rounded-md border border-border p-2 text-sm" rows={3} value={description} maxLength={1000} onChange={event => setDescription(event.target.value)} /></div>
+        <div className="space-y-1"><label htmlFor={`${id}-image`} className="text-sm font-medium">Ảnh món (HTTPS)</label><Input id={`${id}-image`} type="url" value={imageUrl} maxLength={2048} onChange={event => setImageUrl(event.target.value)} /></div>
         <div className="space-y-1"><label htmlFor={`${id}-price`} className="text-sm font-medium">Đơn giá (VNĐ)</label>
           <Input id={`${id}-price`} type="text" inputMode="decimal" value={price} onChange={event => setPrice(event.target.value)} required maxLength={18} /></div>
         <CatalogPicker employeeId={props.employeeId} resource="category" label="Danh mục món" selected={category}

@@ -34,9 +34,15 @@ export default function KitchenPage() {
   const selectedStationId = z.uuid().safeParse(params.get('stationId')).data ?? ''
   const includeCompleted = params.get('includeCompleted') === 'true'
   const [displayIncludeCompleted, setDisplayIncludeCompleted] = useOptimistic(includeCompleted)
-  const page = z.coerce.number().int().min(1).max(100_000).safeParse(params.get('page') ?? 1).data ?? 1
+  const page =
+    z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(100_000)
+      .safeParse(params.get('page') ?? 1).data ?? 1
   function setFilters(changes: Record<string, string | null>) {
-    setParams(previous => {
+    setParams((previous) => {
       const next = new URLSearchParams(previous)
       for (const [key, value] of Object.entries(changes)) {
         if (value === null) next.delete(key)
@@ -66,7 +72,7 @@ export default function KitchenPage() {
   const { status: sseStatus, lastRefreshedAt } = useKitchenSse(
     employee.id,
     canReadTickets && !management,
-    { soundEnabled },
+    { soundEnabled }
   )
 
   // Queries
@@ -80,7 +86,7 @@ export default function KitchenPage() {
     queryKey: kitchenKeys.workload(employee.id),
     queryFn: ({ signal }) => getKitchenWorkload(signal),
     enabled: canReadTickets && !management,
-    refetchInterval: 15_000,
+    refetchInterval: sseStatus !== 'connected' ? 15_000 : 60_000,
   })
 
   const ticketsQuery = useQuery({
@@ -196,7 +202,10 @@ export default function KitchenPage() {
             }}
             title={soundEnabled ? 'Tắt âm báo vé mới' : 'Bật âm báo vé mới'}
             aria-label={soundEnabled ? 'Tắt âm báo vé mới' : 'Bật âm báo vé mới'}
-            className={cn('h-8 w-8 cursor-pointer', !soundEnabled && 'text-muted-foreground opacity-60')}
+            className={cn(
+              'h-8 w-8 cursor-pointer',
+              !soundEnabled && 'text-muted-foreground opacity-60'
+            )}
           >
             {soundEnabled ? (
               <Volume2 className="h-4 w-4 text-primary" />

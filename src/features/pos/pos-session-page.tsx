@@ -1,10 +1,6 @@
+import { useTranslation } from 'react-i18next'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import {
-  useParams,
-  useNavigate,
-  useOutletContext,
-  Link,
-} from 'react-router-dom'
+import { useParams, useNavigate, useOutletContext, Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   AlertCircle,
@@ -16,14 +12,15 @@ import {
   UtensilsCrossed,
 } from 'lucide-react'
 import { ApiError, errorMessage } from '../../shared/api/client'
-import { pendingIntentKey, readPendingIntent, writePendingIntent, isPendingIntentExpired, type PendingIntent } from '../../shared/api/pending-intent'
-import { decimalAmount, minorAmount } from '../../shared/lib/money'
 import {
-  getCategories,
-  getMenu,
-  formatPrice,
-  type MenuItem,
-} from '../menu/menu.api'
+  pendingIntentKey,
+  readPendingIntent,
+  writePendingIntent,
+  isPendingIntentExpired,
+  type PendingIntent,
+} from '../../shared/api/pending-intent'
+import { decimalAmount, minorAmount } from '../../shared/lib/money'
+import { getCategories, getMenu, formatPrice, type MenuItem } from '../menu/menu.api'
 import { CheckoutModal } from './checkout-modal'
 import { kitchenKeys } from '../kitchen/kitchen.api'
 import {
@@ -52,6 +49,7 @@ import { posKeys } from './pos.keys'
 import type { Session } from '../auth/session'
 import { Pagination } from '../../shared/ui/pagination'
 import { CancelSessionAction } from './components/cancel-session-action'
+import { CompleteSessionAction } from './components/complete-session-action'
 
 export default function PosSessionRoute() {
   const { sessionId } = useParams()
@@ -59,6 +57,7 @@ export default function PosSessionRoute() {
 }
 
 function PosSessionPage() {
+  const { t: translate } = useTranslation()
   const { sessionId } = useParams<{ sessionId: string }>()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
@@ -95,7 +94,7 @@ function PosSessionPage() {
   }, [draftItems, sessionId, draftKey])
 
   const [submittedItems, setSubmittedItems] = useState<PendingIntent<AddOrderItemPayload[]> | null>(
-    () => readPendingIntent(submissionKey, orderItemBatchSchema),
+    () => readPendingIntent(submissionKey, orderItemBatchSchema)
   )
   const orderFlight = useRef(false)
 
@@ -124,16 +123,9 @@ function PosSessionPage() {
   })
 
   const menuQuery = useQuery({
-    queryKey: [
-      'public-menu',
-      'items',
-      { keyword, categoryId: selectedCategoryId, page: menuPage },
-    ],
+    queryKey: ['public-menu', 'items', { keyword, categoryId: selectedCategoryId, page: menuPage }],
     queryFn: ({ signal }) =>
-      getMenu(
-        { keyword, categoryId: selectedCategoryId, page: menuPage },
-        signal,
-      ),
+      getMenu({ keyword, categoryId: selectedCategoryId, page: menuPage }, signal),
   })
 
   const tablesQuery = useQuery({
@@ -153,18 +145,18 @@ function PosSessionPage() {
         ...new Set(
           sessionQuery.data?.orderItems
             .filter((item) => item.serveStatus !== 'CANCELLED')
-            .map((item) => item.menuItem.id),
+            .map((item) => item.menuItem.id)
         ),
       ].sort(),
     ],
     queryFn: ({ signal }) => getPosRecommendations(sessionId!, signal),
-    enabled:
-      Boolean(sessionId) && (sessionQuery.data?.orderItems.length ?? 0) > 0,
+    enabled: Boolean(sessionId) && (sessionQuery.data?.orderItems.length ?? 0) > 0,
     staleTime: 60_000,
   })
 
   const addItemsMutation = useMutation({
-    mutationFn: (intent: PendingIntent<AddOrderItemPayload[]>) => addOrderItems(sessionId!, intent.payload, intent.idempotencyKey),
+    mutationFn: (intent: PendingIntent<AddOrderItemPayload[]>) =>
+      addOrderItems(sessionId!, intent.payload, intent.idempotencyKey),
     retry: false,
     onSuccess: () => {
       sessionStorage.removeItem(submissionKey)
@@ -175,7 +167,7 @@ function PosSessionPage() {
       } catch {
         // Ignore
       }
-      setActionSuccess('Đã gửi món vào bếp thành công')
+      setActionSuccess(translate('pos.sentNotice'))
     },
     onSettled: () => {
       orderFlight.current = false
@@ -186,14 +178,24 @@ function PosSessionPage() {
     },
     onError: (err, intent) => {
       setActionError(errorMessage(err))
-      if (!intent.uncertain && err instanceof ApiError && err.status >= 400 && err.status < 500 && err.status !== 408 && err.status !== 429) {
+      if (
+        !intent.uncertain &&
+        err instanceof ApiError &&
+        err.status >= 400 &&
+        err.status < 500 &&
+        err.status !== 408 &&
+        err.status !== 429
+      ) {
         sessionStorage.removeItem(submissionKey)
         setSubmittedItems(null)
       } else {
         const unresolved = { ...intent, uncertain: true }
         setSubmittedItems(unresolved)
-        try { writePendingIntent(submissionKey, unresolved) }
-        catch { setActionError('Không lưu được trạng thái chưa xác nhận. Không đóng tab; liên hệ quản lý để đối soát.') }
+        try {
+          writePendingIntent(submissionKey, unresolved)
+        } catch {
+          setActionError(translate('pos.storageUncertain'))
+        }
       }
     },
   })
@@ -208,22 +210,31 @@ function PosSessionPage() {
     )
       return
     if (submittedItems && isPendingIntentExpired(submittedItems)) {
-      setActionError('Yêu cầu đã quá thời hạn phục hồi an toàn. Liên hệ quản lý để đối soát món đã gửi; không gửi lại batch này.')
+      setActionError(translate('pos.recoveryExpired'))
       return
     }
-    const payload = submittedItems?.payload ?? draftItems.map((item) => ({
-      menuItemId: item.menuItem.id,
-      quantity: item.quantity,
-      note: item.note.trim() || undefined,
-      optionIds: item.selectedOptionIds.length ? item.selectedOptionIds : undefined,
-    }))
+    const payload =
+      submittedItems?.payload ??
+      draftItems.map((item) => ({
+        menuItemId: item.menuItem.id,
+        quantity: item.quantity,
+        note: item.note.trim() || undefined,
+        optionIds: item.selectedOptionIds.length ? item.selectedOptionIds : undefined,
+      }))
     const parsed = orderItemBatchSchema.safeParse(payload)
-    if (!parsed.success) { setActionError(parsed.error.issues[0]?.message ?? 'Batch món chưa hợp lệ.'); return }
-    const intent = submittedItems ?? { payload: parsed.data, createdAt: Date.now(), idempotencyKey: crypto.randomUUID() }
+    if (!parsed.success) {
+      setActionError(parsed.error.issues[0]?.message ?? translate('pos.invalidBatch'))
+      return
+    }
+    const intent = submittedItems ?? {
+      payload: parsed.data,
+      createdAt: Date.now(),
+      idempotencyKey: crypto.randomUUID(),
+    }
     try {
       writePendingIntent(submissionKey, intent)
     } catch {
-      setActionError('Không lưu được yêu cầu phục hồi. Chưa gửi món; kiểm tra bộ nhớ trình duyệt.')
+      setActionError(translate('pos.cannotSaveIntent'))
       return
     }
     orderFlight.current = true
@@ -238,22 +249,17 @@ function PosSessionPage() {
     draftItems,
     addItemsMutation,
     submissionKey,
+    translate,
   ])
 
   const cancelItemMutation = useMutation({
-    mutationFn: async ({
-      itemId,
-      reason,
-    }: {
-      itemId: string
-      reason: string
-    }) => {
+    mutationFn: async ({ itemId, reason }: { itemId: string; reason: string }) => {
       setActionError(null)
       setActionSuccess(null)
       return cancelOrderItem(itemId, reason)
     },
     onSuccess: () => {
-      setActionSuccess('Đã hủy món thành công')
+      setActionSuccess(translate('pos.cancelledItemNotice'))
     },
     onSettled: () => {
       void queryClient.invalidateQueries({ queryKey: ['private', employee.id, 'inventory-waste'] })
@@ -273,13 +279,13 @@ function PosSessionPage() {
       setActionSuccess(null)
       const currentTableId = sessionQuery.data?.table?.id
       if (!currentTableId || !targetTableId) {
-        throw new Error('Vui lòng chọn bàn đích hợp lệ')
+        throw new Error(translate('pos.chooseValidTable'))
       }
-      return transferTable(currentTableId, targetTableId)
+      return transferTable(currentTableId, targetTableId, sessionId!)
     },
     onSuccess: () => {
       setShowTransferModal(false)
-      setActionSuccess('Đã chuyển bàn thành công')
+      setActionSuccess(translate('pos.transferredNotice'))
       void queryClient.invalidateQueries({
         queryKey: posKeys.session(employee.id, sessionId),
       })
@@ -322,7 +328,7 @@ function PosSessionPage() {
       if (e.key === 'F2' || ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k')) {
         const orderItems = sessionQuery.data?.orderItems ?? []
         const hasUnpaid = orderItems.some(
-          (item) => !item.isPaid && !item.invoiceId && item.serveStatus !== 'CANCELLED',
+          (item) => !item.isPaid && !item.invoiceId && item.serveStatus !== 'CANCELLED'
         )
         const isSessionOpen =
           sessionQuery.data?.sessionStatus !== 'COMPLETED' &&
@@ -370,14 +376,9 @@ function PosSessionPage() {
   if (!sessionId) {
     return (
       <main className="mx-auto my-12 max-w-md rounded-lg border border-destructive/20 bg-destructive/5 p-6 text-center">
-        <p className="font-semibold text-destructive">
-          Không tìm thấy mã phiên phục vụ.
-        </p>
-        <Link
-          to="/staff/pos"
-          className={cn(buttonVariants({ variant: 'outline' }), 'mt-4')}
-        >
-          Về sơ đồ bàn
+        <p className="font-semibold text-destructive">{translate('pos.noSessionId')}</p>
+        <Link to="/staff/pos" className={cn(buttonVariants({ variant: 'outline' }), 'mt-4')}>
+          {translate('pos.backToTables')}
         </Link>
       </main>
     )
@@ -389,7 +390,7 @@ function PosSessionPage() {
         className="flex min-h-[300px] items-center justify-center p-8 text-muted-foreground"
         role="status"
       >
-        <p className="animate-pulse">Đang tải chi tiết đơn hàng…</p>
+        <p className="animate-pulse">{translate('pos.loadingOrder')}</p>
       </main>
     )
   }
@@ -401,17 +402,11 @@ function PosSessionPage() {
           {errorMessage(sessionQuery.error)}
         </p>
         <div className="mt-4 flex justify-center gap-3">
-          <Button
-            onClick={() => void sessionQuery.refetch()}
-            disabled={sessionQuery.isFetching}
-          >
-            Thử lại
+          <Button onClick={() => void sessionQuery.refetch()} disabled={sessionQuery.isFetching}>
+            {translate('common.retry')}
           </Button>
-          <Link
-            to="/staff/pos"
-            className={buttonVariants({ variant: 'outline' })}
-          >
-            Về sơ đồ bàn
+          <Link to="/staff/pos" className={buttonVariants({ variant: 'outline' })}>
+            {translate('pos.backToTables')}
           </Link>
         </div>
       </main>
@@ -424,16 +419,15 @@ function PosSessionPage() {
 
   // Tính tổng tiền các món chưa thanh toán
   const unpaidItems = session.orderItems.filter(
-    (item) =>
-      !item.isPaid && !item.invoiceId && item.serveStatus !== 'CANCELLED',
+    (item) => !item.isPaid && !item.invoiceId && item.serveStatus !== 'CANCELLED'
   )
   const existingUnpaidTotal = unpaidItems.reduce(
     (sum, item) => sum + minorAmount(item.priceAtTime) * BigInt(item.quantity),
-    0n,
+    0n
   )
   const draftTotal = draftItems.reduce(
     (sum, item) => sum + minorAmount(item.calculatedPrice) * BigInt(item.quantity),
-    0n,
+    0n
   )
   const grandTotal = existingUnpaidTotal + draftTotal
 
@@ -461,7 +455,7 @@ function PosSessionPage() {
     item: MenuItem,
     selectedOptionIds: string[],
     note: string,
-    calculatedPrice: string,
+    calculatedPrice: string
   ) {
     if (orderFlight.current || orderWriteLocked) return
     setDraftItems((prev) => [
@@ -481,12 +475,8 @@ function PosSessionPage() {
     if (orderFlight.current || orderWriteLocked) return
     setDraftItems((prev) =>
       prev
-        .map((item) =>
-          item.id === draftId
-            ? { ...item, quantity: item.quantity + delta }
-            : item,
-        )
-        .filter((item) => item.quantity > 0),
+        .map((item) => (item.id === draftId ? { ...item, quantity: item.quantity + delta } : item))
+        .filter((item) => item.quantity > 0)
     )
   }
 
@@ -502,17 +492,21 @@ function PosSessionPage() {
             onClick={() => navigate('/staff/pos')}
             className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground cursor-pointer"
           >
-            <ArrowLeft className="h-4 w-4" /> Sơ đồ bàn
+            <ArrowLeft className="h-4 w-4" /> {translate('nav.tables')}
           </Button>
           <div>
             <h1 className="text-2xl font-bold tracking-tight text-foreground">
               {session.table
-                ? `Bàn: ${session.table.name}`
-                : `Đơn mang đi #${session.id.slice(0, 8)}`}
+                ? translate('pos.tableName', { name: session.table.name })
+                : translate('pos.takeawayReference', { id: session.id.slice(0, 8) })}
             </h1>
             <span className="text-xs text-muted-foreground">
-              Nhân viên: {session.employee.fullName} •{' '}
-              {session.guestCount ? `${session.guestCount} khách` : 'Mang đi'}
+              {translate('pos.staffPrefix')} {session.employee.fullName} •{' '}
+              {session.table
+                ? session.guestCount
+                  ? translate('pos.guestCount', { count: session.guestCount })
+                  : translate('pos.dineIn')
+                : translate('pos.takeaway')}
             </span>
           </div>
         </div>
@@ -524,56 +518,53 @@ function PosSessionPage() {
                 to="/staff/invoices"
                 className={buttonVariants({ variant: 'outline', size: 'sm' })}
               >
-                Hóa đơn đang chờ
+                {translate('pos.pendingInvoice')}
               </Link>
             )}
           <PosSessionActions
             session={session}
-            disabled={
-              draftItems.length > 0 ||
-              addItemsMutation.isPending ||
-              transferMutation.isPending
-            }
+            disabled={draftItems.length > 0 || orderWriteLocked || transferMutation.isPending}
           />
           <CancelSessionAction
             session={session}
-            disabled={
-              draftItems.length > 0 ||
-              addItemsMutation.isPending ||
-              transferMutation.isPending
-            }
+            disabled={draftItems.length > 0 || orderWriteLocked || transferMutation.isPending}
           />
-          {session.table &&
-            can('/orders_tables_transfer') &&
-            !isCompleted &&
-            !isCancelled && (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={orderWriteLocked || transferMutation.isPending}
-                onClick={() => setShowTransferModal(true)}
-                className="flex items-center gap-1.5 cursor-pointer"
-              >
-                <RefreshCw className="h-4 w-4" /> Chuyển bàn
-              </Button>
-            )}
+          {session.table && (
+            <CompleteSessionAction
+              session={session}
+              disabled={
+                draftItems.length > 0 ||
+                orderWriteLocked ||
+                transferMutation.isPending ||
+                cancelItemMutation.isPending
+              }
+            />
+          )}
+          {session.table && can('/orders_tables_transfer') && !isCompleted && !isCancelled && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={orderWriteLocked || transferMutation.isPending}
+              onClick={() => setShowTransferModal(true)}
+              className="flex items-center gap-1.5 cursor-pointer"
+            >
+              <RefreshCw className="h-4 w-4" /> {translate('pos.transfer')}
+            </Button>
+          )}
 
-          {can('/invoices_create') &&
-            !isCompleted &&
-            !isCancelled &&
-            existingUnpaidTotal > 0 && (
-              <Button
-                type="button"
-                size="default"
-                disabled={orderWriteLocked}
-                onClick={() => setShowCheckoutModal(true)}
-                className="flex items-center gap-1.5 shadow-sm cursor-pointer"
-              >
-                <DollarSign className="h-4 w-4" /> Thanh toán (
-                {formatPrice(decimalAmount(existingUnpaidTotal))})
-              </Button>
-            )}
+          {can('/invoices_create') && !isCompleted && !isCancelled && existingUnpaidTotal > 0 && (
+            <Button
+              type="button"
+              size="default"
+              disabled={orderWriteLocked}
+              onClick={() => setShowCheckoutModal(true)}
+              className="flex items-center gap-1.5 shadow-sm cursor-pointer"
+            >
+              <DollarSign className="h-4 w-4" /> {translate('pos.checkoutPrefix')}
+              {formatPrice(decimalAmount(existingUnpaidTotal))})
+            </Button>
+          )}
         </div>
       </div>
 
@@ -596,12 +587,24 @@ function PosSessionPage() {
           <span>{actionSuccess}</span>
         </div>
       )}
-      {submittedItems && !addItemsMutation.isPending && <div className="space-y-2">
-        <p role="status" className="text-sm">{isPendingIntentExpired(submittedItems)
-          ? 'Yêu cầu đã quá thời hạn phục hồi an toàn. Liên hệ quản lý để đối soát món đã gửi; không gửi lại batch này.'
-          : 'Chưa xác nhận được lần gửi món. Kiểm tra lại cùng nội dung trước khi thêm món khác hoặc thanh toán.'}</p>
-        {draftItems.length === 0 && can('/orders_items_create') && <Button variant="outline" disabled={isPendingIntentExpired(submittedItems)} onClick={submitDraft}>Kiểm tra lại cùng batch</Button>}
-      </div>}
+      {submittedItems && !addItemsMutation.isPending && (
+        <div className="space-y-2">
+          <p role="status" className="text-sm">
+            {isPendingIntentExpired(submittedItems)
+              ? translate('pos.recoveryExpired')
+              : translate('pos.batchUncertain')}
+          </p>
+          {draftItems.length === 0 && can('/orders_items_create') && (
+            <Button
+              variant="outline"
+              disabled={isPendingIntentExpired(submittedItems)}
+              onClick={submitDraft}
+            >
+              {translate('pos.retrySameBatch')}
+            </Button>
+          )}
+        </div>
+      )}
 
       {isCompleted && (
         <div
@@ -610,10 +613,10 @@ function PosSessionPage() {
         >
           <div>
             <strong className="text-base font-bold text-emerald-800">
-              Đơn hàng này đã hoàn tất thanh toán.
+              {translate('pos.sessionComplete')}
             </strong>
             <p className="mt-0.5 text-xs text-emerald-700">
-              Bàn đã được chốt và đưa về trạng thái trống.
+              {session.table ? translate('pos.tableServiceEnded') : translate('pos.takeawayPaid')}
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -624,7 +627,7 @@ function PosSessionPage() {
                 onClick={() => navigate('/staff/invoices')}
                 className="shrink-0 cursor-pointer"
               >
-                <Receipt className="h-4 w-4 mr-1.5" /> Xem danh sách hóa đơn
+                <Receipt className="h-4 w-4 mr-1.5" /> {translate('pos.viewInvoices')}
               </Button>
             )}
             <Button
@@ -632,7 +635,7 @@ function PosSessionPage() {
               onClick={() => navigate('/staff/pos')}
               className="shrink-0 cursor-pointer"
             >
-              Quay lại sơ đồ bàn
+              {translate('pos.backToTableMap')}
             </Button>
           </div>
         </div>
@@ -675,16 +678,14 @@ function PosSessionPage() {
         <Card className="lg:col-span-5 p-5">
           <CardContent className="p-0">
             <h2 className="mb-4 flex items-center gap-2 text-lg font-bold text-foreground">
-              <UtensilsCrossed className="h-5 w-5 text-primary" /> Món trong đơn
+              <UtensilsCrossed className="h-5 w-5 text-primary" /> {translate('pos.items')}
             </h2>
 
             {/* Danh sách món đã gửi trước đó */}
             <PosOrderItemsList
               orderItems={session.orderItems}
               canCancel={can('/orders_items_cancel') && !orderWriteLocked}
-              onCancelItem={(itemId, reason) =>
-                cancelItemMutation.mutate({ itemId, reason })
-              }
+              onCancelItem={(itemId, reason) => cancelItemMutation.mutate({ itemId, reason })}
               isCancelling={cancelItemMutation.isPending}
             />
 
@@ -692,7 +693,9 @@ function PosSessionPage() {
             <PosDraftItemsList
               draftItems={draftItems}
               onUpdateQuantity={updateDraftQuantity}
-              onClearDraft={() => { if (!orderFlight.current && !orderWriteLocked) setDraftItems([]) }}
+              onClearDraft={() => {
+                if (!orderFlight.current && !orderWriteLocked) setDraftItems([])
+              }}
               onSubmitOrder={submitDraft}
               isSubmitting={addItemsMutation.isPending}
               isLocked={Boolean(submittedItems)}
@@ -702,7 +705,7 @@ function PosSessionPage() {
             <div className="mt-5 border-t border-border pt-4">
               <div className="mb-4 flex items-center justify-between">
                 <span className="text-sm font-semibold text-muted-foreground">
-                  Tổng tiền tạm tính:
+                  {translate('pos.subtotal')}
                 </span>
                 <span className="text-xl font-bold tracking-tight text-primary">
                   {formatPrice(decimalAmount(grandTotal))}
@@ -721,7 +724,7 @@ function PosSessionPage() {
                     className="w-full min-h-[44px] flex items-center justify-center gap-2 font-bold shadow-sm cursor-pointer"
                   >
                     <DollarSign className="h-5 w-5" />
-                    <span>Thanh toán hóa đơn</span>
+                    <span>{translate('pos.checkout')}</span>
                     <kbd className="hidden sm:inline-block ml-1 rounded bg-primary-foreground/20 px-1.5 py-0.5 text-[10px] font-mono font-medium tracking-tight">
                       F2
                     </kbd>

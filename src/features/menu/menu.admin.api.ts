@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { apiGet, apiMutate } from '../../shared/api/client'
-import { moneySchema } from './menu.api'
+import { menuImageUrlSchema, moneySchema } from './menu.api'
 import { quantitySchema } from '../inventory/quantity'
 
 // --- Categories ---
@@ -57,6 +57,8 @@ export const adminMenuItemSchema = z.object({
   id: z.string(),
   name: z.string(),
   price: moneySchema,
+  description: z.string().max(1000).nullish(),
+  imageUrl: menuImageUrlSchema.nullish(),
   isAvailable: z.boolean(),
   categoryId: z.string().optional(),
   kitchenStationId: z.string().nullable().optional(),
@@ -119,6 +121,8 @@ export function getAdminItems(
 
 export function createMenuItem(data: {
   name: string
+  description?: string | null
+  imageUrl?: string | null
   price: string | number
   categoryId: string
   kitchenStationId?: string | null
@@ -130,6 +134,8 @@ export function updateMenuItem(
   id: string,
   data: {
     name?: string
+    description?: string | null
+    imageUrl?: string | null
     price?: string | number
     categoryId?: string
     kitchenStationId?: string | null

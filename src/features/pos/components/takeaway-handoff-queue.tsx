@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useOutletContext } from 'react-router-dom'
@@ -7,10 +8,18 @@ import { getHandoffQueue, handoffItem } from '../pos.api'
 import { kitchenKeys } from '../../kitchen/kitchen.api'
 import { errorMessage } from '../../../shared/api/client'
 import { formatStoreDateTime } from '../../../shared/lib/store-time'
-import { Badge, Button, Dialog, DialogTitle, DialogDescription, DialogFooter } from '../../../shared/ui'
+import {
+  Badge,
+  Button,
+  Dialog,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from '../../../shared/ui'
 import { Pagination } from '../../../shared/ui/pagination'
 
 export function TakeawayHandoffQueue() {
+  const { t: translate } = useTranslation()
   const { employee, authorization } = useOutletContext<Session>()
   const [page, setPage] = useState(1)
   const flight = useRef(false)
@@ -52,18 +61,18 @@ export function TakeawayHandoffQueue() {
   return (
     <section className="space-y-3 border-t pt-4">
       <div className="flex items-center justify-between gap-2">
-        <h2 className="text-base font-semibold">Mang đi tại quầy - chờ giao món</h2>
+        <h2 className="text-base font-semibold">{translate('pos.handoffHeading')}</h2>
         <Button
           variant="outline"
           size="sm"
-          aria-label="Làm mới món chờ giao"
+          aria-label={translate('pos.refreshHandoff')}
           onClick={() => void review()}
           disabled={query.isFetching || mutation.isPending}
         >
           <RefreshCw size={16} />
         </Button>
       </div>
-      {query.isPending && <p role="status">Đang tải món chờ giao…</p>}
+      {query.isPending && <p role="status">{translate('pos.loadingHandoff')}</p>}
       {query.isError && (
         <p role="alert" className="text-destructive">
           {errorMessage(query.error)}
@@ -76,16 +85,19 @@ export function TakeawayHandoffQueue() {
           onClick={() => void review()}
         >
           <RefreshCw size={16} aria-hidden="true" />
-          Đối chiếu món chờ giao
+          {translate('pos.reviewHandoff')}
         </Button>
       )}
       {query.isSuccess && query.data.list.length === 0 && (
-        <p className="text-sm text-muted-foreground">Không có món chờ giao tại quầy.</p>
+        <p className="text-sm text-muted-foreground">{translate('pos.noHandoff')}</p>
       )}
       <ul className="divide-y">
         {query.isSuccess &&
           query.data.list.map((item) => (
-            <li key={item.id} className="flex flex-wrap items-center justify-between gap-3 py-3 min-w-0">
+            <li
+              key={item.id}
+              className="flex flex-wrap items-center justify-between gap-3 py-3 min-w-0"
+            >
               <div className="min-w-0 flex-1">
                 <p
                   className="break-words line-clamp-2 text-sm font-medium leading-snug"
@@ -93,10 +105,17 @@ export function TakeawayHandoffQueue() {
                 >
                   {item.quantity} × {item.menuItem.name}
                 </p>
-                {item.replacementRemake && <div className="mt-1 space-y-1"><Badge variant="secondary">Làm lại · Không thu tiền</Badge><p className="break-words text-xs text-muted-foreground">{item.replacementRemake.reason}</p></div>}
+                {item.replacementRemake && (
+                  <div className="mt-1 space-y-1">
+                    <Badge variant="secondary">{translate('pos.remake')}</Badge>
+                    <p className="break-words text-xs text-muted-foreground">
+                      {item.replacementRemake.reason}
+                    </p>
+                  </div>
+                )}
                 <p className="text-xs text-muted-foreground truncate">
                   {item.ticketNumber ?? item.orderSessionId.slice(0, 8)} ·{' '}
-                  {item.readyAt ? formatStoreDateTime(item.readyAt) : 'Sẵn sàng'}
+                  {item.readyAt ? formatStoreDateTime(item.readyAt) : translate('common.ready')}
                 </p>
               </div>
               {canHandoff && (
@@ -111,7 +130,7 @@ export function TakeawayHandoffQueue() {
                   }}
                 >
                   <Check size={16} />
-                  Giao món
+                  {translate('pos.handoff')}
                 </Button>
               )}
             </li>
@@ -125,7 +144,7 @@ export function TakeawayHandoffQueue() {
       />
       {query.isSuccess && page > Math.max(1, query.data.totalPages) && (
         <Button variant="outline" onClick={() => setPage(1)}>
-          Về trang đầu
+          {translate('common.firstPage')}
         </Button>
       )}
       <Dialog
@@ -134,7 +153,7 @@ export function TakeawayHandoffQueue() {
           if (!open && !flight.current) setTarget(null)
         }}
       >
-        <DialogTitle>Xác nhận giao món</DialogTitle>
+        <DialogTitle>{translate('pos.confirmHandoff')}</DialogTitle>
         <DialogDescription>{target?.name}</DialogDescription>
         {mutation.isError && (
           <div className="space-y-2">
@@ -143,13 +162,13 @@ export function TakeawayHandoffQueue() {
             </p>
             <Button variant="outline" disabled={query.isFetching} onClick={() => void review()}>
               <RefreshCw size={16} aria-hidden="true" />
-              Đối chiếu món chờ giao
+              {translate('pos.reviewHandoff')}
             </Button>
           </div>
         )}
         <DialogFooter>
           <Button variant="outline" disabled={mutation.isPending} onClick={() => setTarget(null)}>
-            Quay lại
+            {translate('common.back')}
           </Button>
           <Button
             isLoading={mutation.isPending}
@@ -169,7 +188,7 @@ export function TakeawayHandoffQueue() {
             }}
           >
             <Check size={16} />
-            Đã giao cho khách
+            {translate('pos.handedOver')}
           </Button>
         </DialogFooter>
       </Dialog>

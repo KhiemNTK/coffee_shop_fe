@@ -9,7 +9,7 @@ export type KitchenConnectionStatus = 'connected' | 'connecting' | 'disconnected
 export function useKitchenSse(
   employeeId: string,
   enabled = true,
-  options?: { soundEnabled?: boolean },
+  options?: { soundEnabled?: boolean }
 ) {
   const queryClient = useQueryClient()
   const soundEnabled = options?.soundEnabled ?? false
@@ -19,7 +19,7 @@ export function useKitchenSse(
   }, [soundEnabled])
 
   const [status, setStatus] = useState<KitchenConnectionStatus>(() =>
-    enabled ? 'connecting' : 'disconnected',
+    enabled ? 'connecting' : 'disconnected'
   )
   const [lastRefreshedAt, setLastRefreshedAt] = useState<string | null>(null)
   const reconnectTimeoutRef = useRef<number | null>(null)
@@ -29,6 +29,7 @@ export function useKitchenSse(
 
     let source: EventSource | null = null
     let active = true
+    let refreshTimeout: number | undefined
 
     function refresh() {
       void queryClient.invalidateQueries({ queryKey: kitchenKeys.tickets(employeeId) })
@@ -42,6 +43,16 @@ export function useKitchenSse(
       void queryClient.invalidateQueries({
         queryKey: posKeys.session(employeeId).slice(0, -1),
       })
+    }
+
+    function scheduleRefresh() {
+      if (refreshTimeout !== undefined) return
+      refreshTimeout = window.setTimeout(() => {
+        refreshTimeout = undefined
+        if (!active) return
+        if (soundEnabledRef.current) playKitchenChime()
+        refresh()
+      }, 250)
     }
 
     function connect() {
@@ -61,10 +72,7 @@ export function useKitchenSse(
       source.addEventListener('kitchen.refresh', () => {
         if (!active) return
         setLastRefreshedAt(new Date().toLocaleTimeString('vi-VN'))
-        if (soundEnabledRef.current) {
-          playKitchenChime()
-        }
-        refresh()
+        scheduleRefresh()
       })
 
       source.addEventListener('heartbeat', () => {
@@ -84,6 +92,7 @@ export function useKitchenSse(
 
     return () => {
       active = false
+      if (refreshTimeout !== undefined) window.clearTimeout(refreshTimeout)
       if (reconnectTimeoutRef.current) {
         window.clearTimeout(reconnectTimeoutRef.current)
       }

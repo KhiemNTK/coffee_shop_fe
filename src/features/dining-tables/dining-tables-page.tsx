@@ -47,7 +47,7 @@ export function DiningTablesPage() {
   const canClear = permissions.includes('/orders_tables_clear')
   const canTransfer = permissions.includes('/orders_tables_transfer')
   const canAccessPos = permissions.some((p: string) =>
-    ['/dining-tables_read', '/orders_sessions_read', '/orders_sessions_create'].includes(p),
+    ['/dining-tables_read', '/orders_sessions_read', '/orders_sessions_create'].includes(p)
   )
 
   // Filters & display state
@@ -119,8 +119,7 @@ export function DiningTablesPage() {
 
   // Update mutation
   const updateMutation = useMutation({
-    mutationFn: ({ id, name }: { id: string; name: string }) =>
-      updateDiningTable(id, { name }),
+    mutationFn: ({ id, name }: { id: string; name: string }) => updateDiningTable(id, { name }),
     onSuccess: (updatedTable) => {
       invalidateTableQueries()
       setActionSuccess(`Đã cập nhật tên bàn thành "${updatedTable.name}"`)
@@ -149,7 +148,7 @@ export function DiningTablesPage() {
 
   // Clear table mutation
   const clearMutation = useMutation({
-    mutationFn: (id: string) => clearDiningTable(id),
+    mutationFn: (id: string) => clearDiningTable(id, clearingTable?.orderSessions?.[0]?.id ?? null),
     onSuccess: () => {
       invalidateTableQueries()
       setActionSuccess('Đã dọn bàn và giải phóng trạng thái thành công')
@@ -163,8 +162,11 @@ export function DiningTablesPage() {
 
   // Transfer table mutation
   const transferMutation = useMutation({
-    mutationFn: ({ fromId, toId }: { fromId: string; toId: string }) =>
-      transferTable(fromId, toId),
+    mutationFn: ({ fromId, toId }: { fromId: string; toId: string }) => {
+      const sessionId = transferringTable?.orderSessions?.[0]?.id
+      if (!sessionId) throw new Error('Phiên bàn đã thay đổi. Vui lòng tải lại.')
+      return transferTable(fromId, toId, sessionId)
+    },
     onSuccess: () => {
       invalidateTableQueries()
       setActionSuccess('Đã chuyển bàn thành công')
@@ -412,14 +414,11 @@ export function DiningTablesPage() {
       ) : fetchError ? (
         <div className="flex flex-col items-center justify-center rounded-2xl border border-destructive/20 bg-destructive/5 py-12 text-center">
           <AlertCircle className="h-10 w-10 text-destructive" />
-          <h3 className="mt-3 text-base font-semibold text-foreground">Không thể tải dữ liệu bàn</h3>
+          <h3 className="mt-3 text-base font-semibold text-foreground">
+            Không thể tải dữ liệu bàn
+          </h3>
           <p className="mt-1 text-sm text-muted-foreground">{errorMessage(fetchError)}</p>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => void refetch()}
-            className="mt-4 gap-2"
-          >
+          <Button variant="outline" size="sm" onClick={() => void refetch()} className="mt-4 gap-2">
             <RefreshCw className="h-4 w-4" />
             Thử lại
           </Button>

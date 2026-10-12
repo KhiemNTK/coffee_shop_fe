@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { useState } from 'react'
 import {
   Dialog,
@@ -15,20 +16,27 @@ import { decimalAmount, minorAmount } from '../../../shared/lib/money'
 interface PosItemOptionsDialogProps {
   item: MenuItem | null
   onClose: () => void
-  onConfirm: (item: MenuItem, selectedOptionIds: string[], note: string, calculatedPrice: string) => void
+  onConfirm: (
+    item: MenuItem,
+    selectedOptionIds: string[],
+    note: string,
+    calculatedPrice: string,
+  ) => void
 }
 
 interface PosItemOptionsContentProps {
   item: MenuItem
   onClose: () => void
-  onConfirm: (item: MenuItem, selectedOptionIds: string[], note: string, calculatedPrice: string) => void
+  onConfirm: (
+    item: MenuItem,
+    selectedOptionIds: string[],
+    note: string,
+    calculatedPrice: string,
+  ) => void
 }
 
-function PosItemOptionsContent({
-  item,
-  onClose,
-  onConfirm,
-}: PosItemOptionsContentProps) {
+function PosItemOptionsContent({ item, onClose, onConfirm }: PosItemOptionsContentProps) {
+  const { t: translate } = useTranslation()
   const [configuredOptions, setConfiguredOptions] = useState<Record<string, string[]>>({})
   const [configuredNote, setConfiguredNote] = useState('')
 
@@ -53,10 +61,14 @@ function PosItemOptionsContent({
       <DialogHeader>
         <DialogTitle>{item.name}</DialogTitle>
         <DialogDescription>
-          Giá cơ bản: <strong className="text-primary font-bold">{formatPrice(item.price)}</strong>
+          {translate('takeaway.basePrice')}{' '}
+          <strong className="text-primary font-bold">{formatPrice(item.price)}</strong>
           {livePrice !== minorAmount(item.price) && (
             <span className="ml-2 text-foreground font-semibold">
-              → Tổng: <strong className="text-primary font-bold">{formatPrice(decimalAmount(livePrice))}</strong>
+              {translate('pos.totalArrow')}{' '}
+              <strong className="text-primary font-bold">
+                {formatPrice(decimalAmount(livePrice))}
+              </strong>
             </span>
           )}
         </DialogDescription>
@@ -66,7 +78,10 @@ function PosItemOptionsContent({
         {item.optionGroups.map((group) => (
           <div key={group.id} className="space-y-2">
             <span className="block text-xs font-bold uppercase tracking-wider text-muted-foreground">
-              {group.name} {group.maxSelected === 1 ? '(Chọn 1)' : `(Tối đa ${group.maxSelected})`}
+              {group.name}{' '}
+              {group.maxSelected === 1
+                ? translate('common.selectOneParen')
+                : `(Tối đa ${group.maxSelected})`}
             </span>
             <div className="space-y-1.5">
               {group.options.map((opt) => {
@@ -127,13 +142,13 @@ function PosItemOptionsContent({
             htmlFor="configuredNote"
             className="block text-xs font-bold text-muted-foreground uppercase tracking-wider"
           >
-            Ghi chú thêm (ít đá, không đường,...)
+            {translate('pos.extraNote')}
           </label>
           <Input
             id="configuredNote"
             type="text"
             maxLength={255}
-            placeholder="VD: Không đá, 50% đường"
+            placeholder={translate('pos.noteExample')}
             value={configuredNote}
             onChange={(e) => setConfiguredNote(e.target.value)}
             className="min-h-[42px]"
@@ -148,35 +163,27 @@ function PosItemOptionsContent({
           onClick={onClose}
           className="flex-1 min-h-[44px] cursor-pointer font-medium"
         >
-          Hủy
+          {translate('common.cancel')}
         </Button>
         <Button
           type="button"
           onClick={handleConfirm}
           className="flex-2 min-h-[44px] cursor-pointer font-bold"
         >
-          Thêm vào đơn ({formatPrice(decimalAmount(livePrice))})
+          {translate('pos.addToOrderPrefix')}
+          {formatPrice(decimalAmount(livePrice))})
         </Button>
       </DialogFooter>
     </div>
   )
 }
 
-export function PosItemOptionsDialog({
-  item,
-  onClose,
-  onConfirm,
-}: PosItemOptionsDialogProps) {
+export function PosItemOptionsDialog({ item, onClose, onConfirm }: PosItemOptionsDialogProps) {
   if (!item) return null
 
   return (
     <Dialog open={Boolean(item)} onClose={onClose} maxWidth="sm">
-      <PosItemOptionsContent
-        key={item.id}
-        item={item}
-        onClose={onClose}
-        onConfirm={onConfirm}
-      />
+      <PosItemOptionsContent key={item.id} item={item} onClose={onClose} onConfirm={onConfirm} />
     </Dialog>
   )
 }

@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useOutletContext } from 'react-router-dom'
@@ -6,13 +7,7 @@ import type { Session } from '../../auth/session'
 import { cancelSession, type SessionDetail } from '../pos.api'
 import { posKeys } from '../pos.keys'
 import { errorMessage } from '../../../shared/api/client'
-import {
-  Button,
-  Dialog,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-} from '../../../shared/ui'
+import { Button, Dialog, DialogTitle, DialogDescription, DialogFooter } from '../../../shared/ui'
 
 export function CancelSessionAction({
   session,
@@ -21,6 +16,7 @@ export function CancelSessionAction({
   session: SessionDetail
   disabled: boolean
 }) {
+  const { t: translate } = useTranslation()
   const [open, setOpen] = useState(false)
   const { employee, authorization } = useOutletContext<Session>()
   const client = useQueryClient()
@@ -44,9 +40,7 @@ export function CancelSessionAction({
     return null
   const blocked = session.orderItems.some(
     (item) =>
-      item.isPaid ||
-      item.invoiceId ||
-      ['COOKING', 'READY', 'SERVED'].includes(item.serveStatus),
+      item.isPaid || item.invoiceId || ['COOKING', 'READY', 'SERVED'].includes(item.serveStatus),
   )
   return (
     <>
@@ -54,16 +48,14 @@ export function CancelSessionAction({
         variant="outline"
         size="sm"
         disabled={disabled || blocked}
-        title={
-          blocked ? 'Phiên có món đã xử lý hoặc đã lập hóa đơn' : 'Hủy phiên'
-        }
+        title={blocked ? translate('pos.cannotCancel') : translate('pos.cancelSession')}
         onClick={() => {
           mutation.reset()
           setOpen(true)
         }}
       >
         <Trash2 size={16} />
-        Hủy phiên
+        {translate('pos.cancelSession')}
       </Button>
       <Dialog
         open={open}
@@ -71,22 +63,16 @@ export function CancelSessionAction({
           if (!mutation.isPending) setOpen(value)
         }}
       >
-        <DialogTitle>Hủy phiên phục vụ?</DialogTitle>
-        <DialogDescription>
-          Hủy toàn bộ món chưa xử lý và trả bàn về trạng thái trống.
-        </DialogDescription>
+        <DialogTitle>{translate('pos.cancelSessionHeading')}</DialogTitle>
+        <DialogDescription>{translate('pos.cancelSessionInfo')}</DialogDescription>
         {mutation.isError && (
           <p role="alert" className="text-sm text-destructive">
             {errorMessage(mutation.error)}
           </p>
         )}
         <DialogFooter>
-          <Button
-            variant="outline"
-            disabled={mutation.isPending}
-            onClick={() => setOpen(false)}
-          >
-            Quay lại
+          <Button variant="outline" disabled={mutation.isPending} onClick={() => setOpen(false)}>
+            {translate('common.back')}
           </Button>
           <Button
             variant="destructive"
@@ -94,7 +80,7 @@ export function CancelSessionAction({
             onClick={() => mutation.mutate()}
           >
             <Trash2 size={16} />
-            Xác nhận hủy phiên
+            {translate('pos.confirmCancelSession')}
           </Button>
         </DialogFooter>
       </Dialog>

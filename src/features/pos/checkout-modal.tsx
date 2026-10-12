@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useOutletContext } from 'react-router-dom'
@@ -36,6 +37,7 @@ export function CheckoutModal({
   onClose: () => void
   onCompleted: (invoice: Invoice) => void
 }) {
+  const { t: translate } = useTranslation()
   const [billableItems] = useState(items)
   const [selectedIds, setSelectedIds] = useState(() => items.map((item) => item.id))
   const [promotionId, setPromotionId] = useState('')
@@ -48,7 +50,11 @@ export function CheckoutModal({
   const [digitalUncertain, setDigitalUncertain] = useState(false)
   const [gatewayLocked, setGatewayLocked] = useState(false)
   const paymentLocked =
-    pending || Boolean(activeInvoiceId) || Boolean(submittedDirect) || digitalUncertain || gatewayLocked
+    pending ||
+    Boolean(activeInvoiceId) ||
+    Boolean(submittedDirect) ||
+    digitalUncertain ||
+    gatewayLocked
   const customInvoice = Boolean(promotionId) || selectedIds.length !== billableItems.length
   const quote = useQuery({
     queryKey: ['private', employee.id, 'pos-quote', sessionId, selectedIds, promotionId],
@@ -109,7 +115,7 @@ export function CheckoutModal({
   async function handleDirectCheckout(payMethod: 'CASH' | 'CARD') {
     if (flight.current || (!submittedDirect && !quoteReady)) return
     if (!submittedDirect && payMethod === 'CASH' && !tenderedEnough) {
-      setError('Tiền khách đưa không đủ thanh toán')
+      setError(translate('pos.insufficientCash'))
       return
     }
     const payload = submittedDirect ?? {
@@ -177,7 +183,7 @@ export function CheckoutModal({
         completed.current = true
         onCompleted(unpaid)
       } else if (unpaid.paymentStatus === 'UNPAID') setActiveInvoiceId(unpaid.id)
-      else setError('Hóa đơn không còn chờ thanh toán. Vui lòng kiểm tra lại.')
+      else setError(translate('pos.invoiceChanged'))
     } catch (err) {
       setError(errorMessage(err))
       if (
@@ -198,7 +204,8 @@ export function CheckoutModal({
     <Dialog
       open
       onOpenChange={(open) => {
-        if (!open && !flight.current && !submittedDirect && !digitalUncertain && !gatewayLocked) onClose()
+        if (!open && !flight.current && !submittedDirect && !digitalUncertain && !gatewayLocked)
+          onClose()
       }}
       maxWidth={invoice ? 'sm' : 'md'}
     >
@@ -208,38 +215,45 @@ export function CheckoutModal({
             <CheckCircle2 className="h-8 w-8" />
           </div>
           <DialogTitle className="text-center text-xl font-bold text-primary">
-            Thanh toán thành công!
+            {translate('pos.paymentSuccess')}
           </DialogTitle>
           <DialogDescription className="mt-1 text-center text-sm text-muted-foreground">
-            Hóa đơn số: <strong className="text-foreground">{invoice.invoiceNumber}</strong>
+            {translate('pos.invoiceNumber')}{' '}
+            <strong className="text-foreground">{invoice.invoiceNumber}</strong>
           </DialogDescription>
 
           <div className="my-5 rounded-lg border border-border bg-muted/40 p-4 text-left text-sm space-y-2.5">
             <div className="flex justify-between text-muted-foreground">
-              <span>Phương thức thanh toán:</span>
+              <span>{translate('pos.paymentMethod')}</span>
               <Badge variant="secondary" className="font-bold">
                 {invoice.paymentMethod === 'CASH'
-                  ? 'Tiền mặt'
+                  ? translate('pos.cash')
                   : invoice.paymentMethod === 'CARD'
-                    ? 'Thẻ POS'
-                    : 'Chuyển khoản'}
+                    ? translate('pos.card')
+                    : translate('pos.bankTransfer')}
               </Badge>
             </div>
             <div className="flex justify-between text-muted-foreground">
-              <span>Tổng tiền thanh toán:</span>
+              <span>{translate('pos.paymentTotal')}</span>
               <strong className="text-foreground">{formatPrice(invoice.totalAmount)}</strong>
             </div>
             {invoice.paymentMethod === 'CASH' && (
               <>
                 <div className="flex justify-between text-muted-foreground">
-                  <span>Tiền khách đưa:</span>
+                  <span>{translate('pos.cashReceived')}</span>
                   <span className="font-medium text-foreground">
-                    {invoice.amountTendered ? formatPrice(invoice.amountTendered) : 'Chưa xác định'}
+                    {invoice.amountTendered
+                      ? formatPrice(invoice.amountTendered)
+                      : translate('common.undetermined')}
                   </span>
                 </div>
                 <div className="flex justify-between border-t border-dashed border-border pt-2.5 text-base font-bold text-primary">
-                  <span>Tiền thừa:</span>
-                  <span>{invoice.changeAmount ? formatPrice(invoice.changeAmount) : 'Chưa xác định'}</span>
+                  <span>{translate('pos.change')}</span>
+                  <span>
+                    {invoice.changeAmount
+                      ? formatPrice(invoice.changeAmount)
+                      : translate('common.undetermined')}
+                  </span>
                 </div>
               </>
             )}
@@ -247,7 +261,7 @@ export function CheckoutModal({
 
           <DialogFooter>
             <Button className="w-full cursor-pointer font-bold" onClick={onClose}>
-              Hoàn tất & Đóng
+              {translate('pos.finishClose')}
             </Button>
           </DialogFooter>
         </div>
@@ -255,11 +269,9 @@ export function CheckoutModal({
         <div>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-lg font-bold text-foreground">
-              <DollarSign className="h-5 w-5 text-primary" /> Thanh toán đơn hàng
+              <DollarSign className="h-5 w-5 text-primary" /> {translate('pos.checkoutHeading')}
             </DialogTitle>
-            <DialogDescription>
-              Chọn phương thức thanh toán phù hợp với nhu cầu của khách hàng.
-            </DialogDescription>
+            <DialogDescription>{translate('pos.paymentDescription')}</DialogDescription>
           </DialogHeader>
 
           {error && (
@@ -279,7 +291,7 @@ export function CheckoutModal({
               }
               className="mt-4 space-y-2"
             >
-              <legend className="text-sm font-medium">Món trong hóa đơn</legend>
+              <legend className="text-sm font-medium">{translate('pos.invoiceItems')}</legend>
               <div className="max-h-48 overflow-y-auto divide-y">
                 {billableItems.map((item) => (
                   <label key={item.id} className="flex items-start gap-2 py-2 text-sm">
@@ -303,18 +315,18 @@ export function CheckoutModal({
               </div>
               {authorization.permissionKeys.includes('/promotions_read') && (
                 <label className="block text-sm">
-                  Khuyến mãi
+                  {translate('nav.promotions')}
                   <select
-                    aria-label="Khuyến mãi"
+                    aria-label={translate('nav.promotions')}
                     className="mt-1 w-full rounded-md border bg-background p-2"
                     value={promotionId}
                     disabled={!promotions.isSuccess}
                     onChange={(event) => setPromotionId(event.target.value)}
                   >
-                    <option value="">Không áp dụng</option>
+                    <option value="">{translate('pos.noPromotion')}</option>
                     {promotionId &&
                       !promotions.data?.list.some((promotion) => promotion.id === promotionId) && (
-                        <option value={promotionId}>Khuyến mãi đã chọn (chưa xác nhận)</option>
+                        <option value={promotionId}>{translate('pos.promotionUnconfirmed')}</option>
                       )}
                     {promotions.data?.list.map((promotion) => (
                       <option key={promotion.id} value={promotion.id}>
@@ -326,14 +338,14 @@ export function CheckoutModal({
               )}
               {promotionId && !promotions.isFetching && !promotionAvailable && (
                 <div role="alert" className="space-y-2 text-sm text-destructive">
-                  <p>Khuyến mãi đã chọn chưa được xác nhận còn hiệu lực.</p>
+                  <p>{translate('pos.promotionUnknown')}</p>
                   <Button
                     type="button"
                     variant="outline"
                     size="sm"
                     onClick={() => setPromotionId('')}
                   >
-                    Bỏ khuyến mãi
+                    {translate('pos.removePromotion')}
                   </Button>
                 </div>
               )}
@@ -341,32 +353,34 @@ export function CheckoutModal({
                 <p role="alert" className="text-sm text-destructive">
                   {errorMessage(promotions.error)}{' '}
                   <button type="button" onClick={() => void promotions.refetch()}>
-                    Thử lại
+                    {translate('common.retry')}
                   </button>
                 </p>
               )}
               {customInvoice && quote.isFetching && (
                 <p role="status" className="text-sm">
-                  Đang lấy báo giá…
+                  {translate('pos.loadingQuote')}
                 </p>
               )}
               {quote.isError && (
                 <p role="alert" className="text-sm text-destructive">
                   {errorMessage(quote.error)}{' '}
                   <button type="button" onClick={() => void quote.refetch()}>
-                    Thử lại báo giá
+                    {translate('pos.retryQuote')}
                   </button>
                 </p>
               )}
               {customInvoice && quote.data && (
-                <p className="text-sm">Giảm giá: {formatPrice(quote.data.discountAmount)}</p>
+                <p className="text-sm">
+                  {translate('pos.discount')} {formatPrice(quote.data.discountAmount)}
+                </p>
               )}
             </fieldset>
           )}
 
           {/* Tổng tiền cần thanh toán */}
           <div className="mt-4 flex items-center justify-between rounded-xl bg-primary/10 px-4 py-3 text-primary">
-            <span className="text-sm font-semibold">Tổng tiền thanh toán:</span>
+            <span className="text-sm font-semibold">{translate('pos.paymentTotal')}</span>
             <span className="text-xl font-bold">
               {quoteReady ? formatPrice(payableTotal) : '—'}
             </span>
@@ -390,7 +404,7 @@ export function CheckoutModal({
               )}
             >
               <DollarSign className="h-4 w-4" />
-              Tiền mặt
+              {translate('pos.cash')}
             </button>
 
             <button
@@ -409,7 +423,7 @@ export function CheckoutModal({
               )}
             >
               <CreditCard className="h-4 w-4" />
-              Quẹt thẻ POS
+              {translate('pos.swipeCard')}
             </button>
 
             <button
@@ -424,7 +438,7 @@ export function CheckoutModal({
               )}
             >
               <QrCode className="h-4 w-4" />
-              Quét mã QR
+              {translate('pos.qr')}
             </button>
           </div>
 
@@ -436,7 +450,7 @@ export function CheckoutModal({
                   htmlFor="amountTenderedInput"
                   className="block text-sm font-semibold text-foreground"
                 >
-                  Khách đưa (₫)
+                  {translate('pos.cashInput')}
                 </label>
                 <Input
                   id="amountTenderedInput"
@@ -463,15 +477,20 @@ export function CheckoutModal({
 
                   let colorClasses = 'border-border bg-card text-foreground hover:bg-muted'
                   if (isSelected) {
-                    colorClasses = 'border-primary bg-primary/10 text-primary ring-2 ring-primary/40 font-bold'
+                    colorClasses =
+                      'border-primary bg-primary/10 text-primary ring-2 ring-primary/40 font-bold'
                   } else if (isExact) {
-                    colorClasses = 'border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 font-bold'
+                    colorClasses =
+                      'border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 font-bold'
                   } else if (is500k) {
-                    colorClasses = 'border-sky-300 bg-sky-50 text-sky-800 hover:bg-sky-100 font-semibold'
+                    colorClasses =
+                      'border-sky-300 bg-sky-50 text-sky-800 hover:bg-sky-100 font-semibold'
                   } else if (is200k) {
-                    colorClasses = 'border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100 font-semibold'
+                    colorClasses =
+                      'border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100 font-semibold'
                   } else if (is100k) {
-                    colorClasses = 'border-teal-300 bg-teal-50 text-teal-800 hover:bg-teal-100 font-semibold'
+                    colorClasses =
+                      'border-teal-300 bg-teal-50 text-teal-800 hover:bg-teal-100 font-semibold'
                   }
 
                   return (
@@ -485,7 +504,9 @@ export function CheckoutModal({
                         colorClasses,
                       )}
                     >
-                      {isExact ? `Đúng tiền (${formatPrice(decimalAmount(val))})` : formatPrice(decimalAmount(val))}
+                      {isExact
+                        ? `Đúng tiền (${formatPrice(decimalAmount(val))})`
+                        : formatPrice(decimalAmount(val))}
                     </button>
                   )
                 })}
@@ -504,7 +525,7 @@ export function CheckoutModal({
               >
                 <div>
                   <span className="block text-xs font-semibold text-muted-foreground">
-                    {tenderedEnough ? 'Tiền thừa trả khách:' : 'Khách còn thiếu:'}
+                    {tenderedEnough ? translate('pos.cashChange') : translate('pos.cashShort')}
                   </span>
                   <span
                     className={cn(
@@ -517,7 +538,7 @@ export function CheckoutModal({
                     )}
                   >
                     {tenderedMinor === null
-                      ? 'Chưa xác định'
+                      ? translate('common.undetermined')
                       : tenderedEnough
                         ? formatPrice(decimalAmount(change))
                         : formatPrice(decimalAmount(totalMinor - tenderedMinor))}
@@ -525,17 +546,20 @@ export function CheckoutModal({
                 </div>
                 {tenderedEnough && change === 0n && (
                   <Badge variant="success" className="font-bold">
-                    Đủ tiền
+                    {translate('pos.enoughCash')}
                   </Badge>
                 )}
                 {tenderedEnough && change > 0n && (
-                  <Badge variant="outline" className="border-emerald-300 bg-white font-bold text-emerald-700">
-                    Trả lại {formatPrice(decimalAmount(change))}
+                  <Badge
+                    variant="outline"
+                    className="border-emerald-300 bg-white font-bold text-emerald-700"
+                  >
+                    {translate('pos.returnChange')} {formatPrice(decimalAmount(change))}
                   </Badge>
                 )}
                 {!tenderedEnough && tenderedMinor !== null && (
                   <Badge variant="warning" className="font-bold">
-                    Chưa đủ tiền
+                    {translate('pos.notEnoughCash')}
                   </Badge>
                 )}
               </div>
@@ -547,12 +571,9 @@ export function CheckoutModal({
             <div className="my-5 rounded-xl border border-border bg-muted/20 p-4 text-center space-y-2">
               <CreditCard className="mx-auto h-8 w-8 text-primary" />
               <p className="text-sm font-semibold text-foreground">
-                Quẹt thẻ thanh toán trên thiết bị POS ngân hàng
+                {translate('pos.bankTerminal')}
               </p>
-              <p className="text-xs text-muted-foreground">
-                Sau khi máy POS ngân hàng in biên lai thành công, bấm &quot;Xác nhận đã thanh
-                toán&quot; để chốt đơn.
-              </p>
+              <p className="text-xs text-muted-foreground">{translate('pos.cardConfirmInfo')}</p>
             </div>
           )}
 
@@ -578,7 +599,7 @@ export function CheckoutModal({
                   className="w-full"
                 >
                   <QrCode size={16} aria-hidden="true" />
-                  Kiểm tra hóa đơn trước khi tạo QR
+                  {translate('pos.reviewBeforeQr')}
                 </Button>
               )}
             </div>
@@ -592,7 +613,7 @@ export function CheckoutModal({
               disabled={pending || Boolean(submittedDirect) || digitalUncertain || gatewayLocked}
               className="flex-1 cursor-pointer"
             >
-              Hủy
+              {translate('common.cancel')}
             </Button>
 
             {method === 'CASH' && (
@@ -600,14 +621,10 @@ export function CheckoutModal({
                 type="button"
                 onClick={() => void handleDirectCheckout('CASH')}
                 isLoading={pending}
-                disabled={
-                  pending || (!submittedDirect && (!quoteReady || !tenderedEnough))
-                }
+                disabled={pending || (!submittedDirect && (!quoteReady || !tenderedEnough))}
                 className="flex-2 cursor-pointer font-bold"
               >
-                {submittedDirect
-                  ? 'Kiểm tra lại thanh toán tiền mặt'
-                  : 'Xác nhận thanh toán tiền mặt'}
+                {submittedDirect ? translate('pos.reviewCash') : translate('pos.confirmCash')}
               </Button>
             )}
 
@@ -619,7 +636,7 @@ export function CheckoutModal({
                 disabled={pending || (!submittedDirect && !quoteReady)}
                 className="flex-2 cursor-pointer font-bold"
               >
-                {submittedDirect ? 'Kiểm tra lại thanh toán thẻ' : 'Xác nhận quẹt thẻ thành công'}
+                {submittedDirect ? translate('pos.reviewCard') : translate('pos.confirmCard')}
               </Button>
             )}
           </DialogFooter>

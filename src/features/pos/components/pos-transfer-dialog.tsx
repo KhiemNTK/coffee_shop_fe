@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { useState } from 'react'
 import {
   Dialog,
@@ -28,25 +29,28 @@ export function PosTransferDialog({
   onConfirm,
   isPending,
 }: PosTransferDialogProps) {
+  const { t: translate } = useTranslation()
   const [targetTableId, setTargetTableId] = useState('')
 
   if (!open) return null
 
-  const emptyTables =
-    tables?.filter((t) => t.status === 'EMPTY' && t.id !== currentTableId) ?? []
+  const emptyTables = tables?.filter((t) => t.status === 'EMPTY' && t.id !== currentTableId) ?? []
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm">
       <DialogHeader>
-        <DialogTitle>Chuyển bàn phục vụ</DialogTitle>
+        <DialogTitle>{translate('pos.transferHeading')}</DialogTitle>
         <DialogDescription>
-          Bàn hiện tại: <strong className="text-foreground">{currentTableName || 'Không xác định'}</strong>
+          {translate('pos.currentTable')}{' '}
+          <strong className="text-foreground">
+            {currentTableName || translate('common.unknown')}
+          </strong>
         </DialogDescription>
       </DialogHeader>
 
       <div className="mt-4 space-y-2">
         <label htmlFor="transferSelect" className="block text-sm font-semibold text-foreground">
-          Chọn bàn trống muốn chuyển sang:
+          {translate('pos.chooseEmptyTable')}
         </label>
         <select
           id="transferSelect"
@@ -54,7 +58,7 @@ export function PosTransferDialog({
           onChange={(e) => setTargetTableId(e.target.value)}
           className="w-full rounded-md border border-input bg-card px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
         >
-          <option value="">-- Chọn bàn trống --</option>
+          <option value="">{translate('pos.chooseEmptyPlaceholder')}</option>
           {emptyTables.map((t) => (
             <option key={t.id} value={t.id}>
               {t.name}
@@ -62,20 +66,13 @@ export function PosTransferDialog({
           ))}
         </select>
         {emptyTables.length === 0 && (
-          <p className="text-xs text-destructive">
-            Hiện không có bàn trống nào để chuyển.
-          </p>
+          <p className="text-xs text-destructive">{translate('pos.noEmptyTable')}</p>
         )}
       </div>
 
       <DialogFooter className="mt-6 gap-2">
-        <Button
-          type="button"
-          variant="outline"
-          onClick={onClose}
-          className="flex-1 cursor-pointer"
-        >
-          Hủy
+        <Button type="button" variant="outline" onClick={onClose} className="flex-1 cursor-pointer">
+          {translate('common.cancel')}
         </Button>
         <Button
           type="button"
@@ -84,7 +81,7 @@ export function PosTransferDialog({
           disabled={isPending || !targetTableId}
           className="flex-2 cursor-pointer"
         >
-          Xác nhận chuyển
+          {translate('pos.confirmTransfer')}
         </Button>
       </DialogFooter>
     </Dialog>

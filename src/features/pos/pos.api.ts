@@ -9,6 +9,7 @@ export const diningTableSchema = z.object({
   id: z.uuid(),
   name: z.string(),
   status: z.enum(['EMPTY', 'OCCUPIED', 'RESERVED']),
+  orderSessions: z.array(z.object({ id: z.uuid(), sessionStatus: z.string() })).default([]),
 })
 
 export const activeSessionSchema = z.object({
@@ -91,28 +92,21 @@ export type SessionDetail = z.infer<typeof sessionDetailSchema>
 export type SessionItem = z.infer<typeof sessionItemSchema>
 export type Invoice = z.infer<typeof invoiceSchema>
 
-export async function getDiningTables(
-  signal: AbortSignal,
-): Promise<DiningTable[]> {
+export async function getDiningTables(signal: AbortSignal): Promise<DiningTable[]> {
   return apiGet('/dining-tables', z.array(diningTableSchema), signal, true)
 }
 
-export async function getActiveSessions(
-  signal: AbortSignal,
-): Promise<ActiveSession[]> {
+export async function getActiveSessions(signal: AbortSignal): Promise<ActiveSession[]> {
   return apiGet('/orders/sessions', z.array(activeSessionSchema), signal, true)
 }
 
-export async function getSessionDetail(
-  id: string,
-  signal: AbortSignal,
-): Promise<SessionDetail> {
+export async function getSessionDetail(id: string, signal: AbortSignal): Promise<SessionDetail> {
   return apiGet(`/orders/sessions/${id}`, sessionDetailSchema, signal, true)
 }
 
 export async function openOrderSession(
   tableId: string | null,
-  guestCount?: number,
+  guestCount?: number
 ): Promise<SessionDetail> {
   return apiMutate('/orders/sessions', 'POST', sessionDetailSchema, {
     tableId: tableId ?? null,
@@ -121,16 +115,29 @@ export async function openOrderSession(
 }
 
 export const orderItemPayloadSchema = z.object({
-  menuItemId: z.uuid(), quantity: z.number().int().positive(),
-  note: z.string().max(255).optional(), optionIds: z.array(z.uuid()).max(20)
-    .refine(ids => new Set(ids).size === ids.length).optional(),
+  menuItemId: z.uuid(),
+  quantity: z.number().int().positive(),
+  note: z.string().max(255).optional(),
+  optionIds: z
+    .array(z.uuid())
+    .max(20)
+    .refine((ids) => new Set(ids).size === ids.length)
+    .optional(),
 })
 export const orderItemBatchSchema = z.array(orderItemPayloadSchema).min(1).max(100)
 export type AddOrderItemPayload = z.infer<typeof orderItemPayloadSchema>
-export const draftItemsSchema = z.array(z.object({
-  id: z.string(), menuItem: itemSchema, quantity: z.number().int().positive(),
-  note: z.string(), selectedOptionIds: z.array(z.uuid()), calculatedPrice: moneySchema,
-})).max(100)
+export const draftItemsSchema = z
+  .array(
+    z.object({
+      id: z.string(),
+      menuItem: itemSchema,
+      quantity: z.number().int().positive(),
+      note: z.string(),
+      selectedOptionIds: z.array(z.uuid()),
+      calculatedPrice: moneySchema,
+    })
+  )
+  .max(100)
 
 export function splitSession(payload: {
   sourceOrderSessionId: string
@@ -145,14 +152,14 @@ export function splitSession(payload: {
     '/orders/sessions/split',
     'POST',
     z.object({ success: z.boolean(), message: z.string() }),
-    payload,
+    payload
   )
 }
 
 export async function addOrderItems(
   sessionId: string,
   items: AddOrderItemPayload[],
-  idempotencyKey?: string,
+  idempotencyKey?: string
 ): Promise<SessionDetail> {
   return apiIdempotentMutate(`/orders/sessions/${sessionId}/items`, sessionDetailSchema, {
     items,
@@ -160,10 +167,7 @@ export async function addOrderItems(
   })
 }
 
-export async function cancelOrderItem(
-  itemId: string,
-  reason?: string,
-): Promise<unknown> {
+export async function cancelOrderItem(itemId: string, reason?: string): Promise<unknown> {
   return apiMutate(`/orders/items/${itemId}/cancel`, 'PATCH', z.any(), {
     reason: reason?.trim() || undefined,
   })
@@ -172,10 +176,12 @@ export async function cancelOrderItem(
 export async function transferTable(
   fromTableId: string,
   toTableId: string,
+  sourceOrderSessionId: string
 ): Promise<unknown> {
   return apiMutate('/orders/sessions/transfer-table', 'POST', z.any(), {
     fromTableId,
     toTableId,
+    sourceOrderSessionId,
   })
 }
 
@@ -202,7 +208,7 @@ export async function checkoutInvoice(input: CheckoutInput): Promise<Invoice> {
 }
 
 export function quoteInvoice(
-  input: Pick<CheckoutInput, 'orderSessionId' | 'orderItemIds' | 'promotionId'>,
+  input: Pick<CheckoutInput, 'orderSessionId' | 'orderItemIds' | 'promotionId'>
 ) {
   return apiMutate(
     '/invoices/quote',
@@ -214,12 +220,20 @@ export function quoteInvoice(
       taxAmount: moneySchema,
       totalAmount: moneySchema,
     }),
-    input,
+    input
   )
 }
 
 export function cancelSession(id: string) {
   return apiMutate(`/orders/sessions/${id}`, 'DELETE', z.unknown())
+}
+
+export function completeSession(id: string) {
+  return apiMutate(
+    `/orders/sessions/${id}/complete`,
+    'POST',
+    z.object({ success: z.boolean(), message: z.string() })
+  )
 }
 
 export function getHandoffQueue(page: number, signal?: AbortSignal) {
@@ -235,14 +249,14 @@ export function getHandoffQueue(page: number, signal?: AbortSignal) {
           menuItem: z.object({ name: z.string() }),
           ticketNumber: z.string().nullable(),
           replacementRemake: replacementRemakeSchema.nullish(),
-        }),
+        })
       ),
       totalPages: z.number(),
       totalItems: z.number(),
       currentPage: z.number(),
     }),
     signal,
-    true,
+    true
   )
 }
 
