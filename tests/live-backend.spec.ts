@@ -1011,7 +1011,7 @@ test.describe('real Docker backend contract', () => {
     }, { menu: ids.menu })
     await page.goto('/staff/invoices')
     await page.getByRole('row').filter({ hasText: invoice.invoiceNumber }).getByTitle('Xem chi tiết & Thanh toán').click()
-    await page.getByRole('button', { name: 'Cổng thanh toán (VNPay / MoMo)', exact: true }).click()
+    await page.getByRole('button', { name: 'Cổng thanh toán (VNPay / MoMo / payOS)', exact: true }).click()
     const creation = page.waitForResponse(res => res.request().method() === 'POST' && new URL(res.url()).pathname === `/api/v1/invoices/${invoice.id}/payment-attempts`)
     await page.getByRole('button', { name: 'Tạo phiên VNPAY', exact: true }).click()
     const created = await creation

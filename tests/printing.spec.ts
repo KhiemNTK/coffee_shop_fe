@@ -235,7 +235,7 @@ test.describe('Printing & Print Jobs Management', () => {
     await page.route('**/api/v1/printing/invoices/*/reprint', (route) => {
       return route.fulfill({
         json: envelope({
-          id: 'job-reprint-888',
+          id: '70000000-0000-4000-8000-000000000001',
           type: 'RECEIPT',
           status: 'PENDING',
           copies: 1,
@@ -362,9 +362,9 @@ test.describe('Printing & Print Jobs Management', () => {
     await expect(retryDialog).not.toBeVisible()
   })
 
-  test('switches to Reprint Receipt tab and submits reprint request', async ({
+  test('reprint submits with Enter and announces success without mobile overflow', async ({
     page,
-  }) => {
+  }, info) => {
     await page.goto('/staff/printing')
 
     // Click "In lại Hóa đơn" tab
@@ -379,11 +379,165 @@ test.describe('Printing & Print Jobs Management', () => {
       .fill('Khách xin thêm phiếu tính tiền')
 
     // Submit
-    await page.getByRole('button', { name: /Gửi lệnh in lại hóa đơn/i }).click()
+    await page.getByLabel(/Lý do in lại/i).press('Enter')
 
     // Expect success message
-    await expect(
-      page.getByText(/Đã tạo lệnh in lại trong hàng đợi/i),
-    ).toBeVisible()
+    await expect(page.getByRole('status')).toContainText('Đã tạo lệnh in lại trong hàng đợi')
+    await expect(page.getByLabel(/Mã Hóa đơn/i)).toHaveValue('')
+    await expect(page.getByLabel(/Lý do in lại/i)).toHaveValue('')
+    await expect(page.locator('form svg:not([aria-hidden="true"])')).toHaveCount(0)
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+    await page.screenshot({ path: info.outputPath('reprint-success.png'), fullPage: true })
+  })
+
+  test('reprint validates trimmed fields and the 500-character reason boundary', async ({ page }) => {
+    const writes: Array<{ reason: string; copies: number }> = []
+    await page.route('**/api/v1/printing/invoices/*/reprint', (route) => {
+      writes.push(route.request().postDataJSON())
+      return route.fulfill({ json: envelope({ ...mockJobs[0], status: 'PENDING' }) })
+    })
+    await page.goto('/staff/printing')
+    await page.getByRole('button', { name: 'In lại Hóa đơn', exact: true }).click()
+    const invoice = page.getByLabel(/Mã Hóa đơn/i)
+    const reason = page.getByLabel(/Lý do in lại/i)
+    const submit = page.getByRole('button', { name: 'Gửi lệnh in lại hóa đơn', exact: true })
+    await expect(invoice).toHaveAttribute('required', '')
+    await expect(reason).toHaveAttribute('required', '')
+    await expect(reason).toHaveAttribute('minlength', '3')
+    await expect(reason).toHaveAttribute('maxlength', '500')
+    await invoice.fill('inv-1001')
+    for (const value of ['   ', ' ab ']) {
+      await reason.fill(value)
+      await expect(submit).toBeDisabled()
+      await page.locator('form').dispatchEvent('submit')
+    }
+    await reason.fill('Valid reason')
+    await invoice.fill(' ')
+    await expect(submit).toBeDisabled()
+    await page.locator('form').dispatchEvent('submit')
+    expect(writes).toHaveLength(0)
+    await invoice.fill(' inv-1001 ')
+    // Bypass native maxlength to exercise the submit guard as well as the input limit.
+    await reason.evaluate((input: HTMLInputElement) => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, 'r'.repeat(501))
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    await expect(submit).toBeDisabled()
+    await page.locator('form').dispatchEvent('submit')
+    expect(writes).toHaveLength(0)
+    await reason.fill('r'.repeat(500))
+    await expect(submit).toBeEnabled()
+    await reason.press('Enter')
+    await expect(page.getByRole('status')).toBeVisible()
+    expect(writes).toHaveLength(1)
+    expect(writes[0]?.reason).toBe('r'.repeat(500))
+  })
+
+  test('reprint synchronously blocks two submits before pending state renders', async ({ page }) => {
+    let writes = 0
+    let release!: () => void
+    const responseGate = new Promise<void>((resolve) => { release = resolve })
+    await page.route('**/api/v1/printing/invoices/*/reprint', async (route) => {
+      writes++
+      await responseGate
+      await route.fulfill({ json: envelope({ ...mockJobs[0], status: 'PENDING' }) })
+    })
+    await page.goto('/staff/printing')
+    await page.getByRole('button', { name: 'In lại Hóa đơn', exact: true }).click()
+    await page.getByLabel(/Mã Hóa đơn/i).fill('inv-1001')
+    await page.getByLabel(/Lý do in lại/i).fill('Customer requested another copy')
+    try {
+      await page.locator('form').evaluate((form) => {
+        form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+        form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+      })
+      await expect.poll(() => writes).toBe(1)
+      await expect(page.getByRole('button', { name: 'Gửi lệnh in lại hóa đơn', exact: true })).toBeDisabled()
+      await expect(page.getByLabel(/Mã Hóa đơn/i)).toBeDisabled()
+    } finally {
+      release()
+    }
+    await expect(page.getByRole('status')).toBeVisible()
+    expect(writes).toBe(1)
+  })
+
+  for (const outcome of ['network', 408, 429, 503, 'invalid-response'] as const) {
+    test(`reprint retains exact command and key after ${outcome} and a rejected retry`, async ({ page }, info) => {
+      const writes: Array<{ reason: string; copies: number; deviceId: string; idempotencyKey: string }> = []
+      await page.route('**/api/v1/printing/invoices/*/reprint', (route) => {
+        writes.push(route.request().postDataJSON())
+        if (writes.length === 1) {
+          if (outcome === 'network') return route.abort('failed')
+          if (outcome === 'invalid-response') return route.fulfill({ json: envelope({ id: 'incomplete' }) })
+          return route.fulfill({ status: outcome, json: { message: 'Unknown print outcome' } })
+        }
+        if (writes.length === 2) return route.fulfill({ status: 400, json: { message: 'Retry rejected' } })
+        return route.fulfill({ json: envelope({ ...mockJobs[0], status: 'PENDING', copies: 2 }) })
+      })
+      await page.goto('/staff/printing')
+      await page.getByRole('button', { name: 'In lại Hóa đơn', exact: true }).click()
+      await page.getByLabel(/Mã Hóa đơn/i).fill(' inv-1001 ')
+      await page.getByLabel(/Lý do in lại/i).fill(' Customer requested another copy ')
+      await page.getByLabel('Số lượng bản in').selectOption('2')
+      await expect(page.getByLabel('Máy in xuất hóa đơn').locator('option', { hasText: mockDevices[0]!.name })).toHaveCount(1)
+      await page.getByLabel('Máy in xuất hóa đơn').selectOption('dev-001')
+      await page.getByRole('button', { name: 'Gửi lệnh in lại hóa đơn', exact: true }).click()
+      const retry = page.getByRole('button', { name: 'Gửi lại lệnh chưa xác nhận', exact: true })
+      const pendingKeys = () => page.evaluate(() => Object.entries(sessionStorage)
+        .filter(([key]) => key.startsWith('coffee-shop:pending:private:/printing/invoices/'))
+        .map(([, key]) => key))
+      await expect(page.getByRole('alert')).toBeVisible()
+      await expect(retry).toBeEnabled()
+      for (const label of [/Mã Hóa đơn/i, /Lý do in lại/i, 'Số lượng bản in', 'Máy in xuất hóa đơn']) {
+        await expect(page.getByLabel(label)).toBeDisabled()
+      }
+      expect(writes).toHaveLength(1)
+      expect(writes[0]).toMatchObject({ reason: 'Customer requested another copy', copies: 2, deviceId: 'dev-001' })
+      expect(writes[0]?.idempotencyKey).toBeTruthy()
+      expect(await pendingKeys()).toEqual([writes[0]?.idempotencyKey])
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+      await page.screenshot({ path: info.outputPath('reprint-unknown.png'), fullPage: true })
+      await retry.click()
+      await expect(page.getByRole('alert')).toHaveText('Retry rejected')
+      await expect(retry).toBeEnabled()
+      await expect(page.getByLabel(/Lý do in lại/i)).toBeDisabled()
+      expect(writes).toHaveLength(2)
+      expect(writes[1]).toEqual(writes[0])
+      expect(await pendingKeys()).toEqual([writes[0]?.idempotencyKey])
+      await retry.click()
+      await expect(page.getByRole('status')).toBeVisible()
+      await expect(page.getByRole('alert')).toHaveCount(0)
+      await expect(page.getByLabel(/Mã Hóa đơn/i)).toBeEnabled()
+      await expect(page.getByLabel(/Mã Hóa đơn/i)).toHaveValue('')
+      expect(writes).toHaveLength(3)
+      expect(writes[2]).toEqual(writes[0])
+      expect(await pendingKeys()).toEqual([])
+    })
+  }
+
+  test('reprint allows editing and a fresh command after a definitive first rejection', async ({ page }) => {
+    const writes: Array<{ reason: string; idempotencyKey: string }> = []
+    await page.route('**/api/v1/printing/invoices/*/reprint', (route) => {
+      writes.push(route.request().postDataJSON())
+      return writes.length === 1
+        ? route.fulfill({ status: 400, json: { message: 'Reason rejected' } })
+        : route.fulfill({ json: envelope({ ...mockJobs[0], status: 'PENDING' }) })
+    })
+    await page.goto('/staff/printing')
+    await page.getByRole('button', { name: 'In lại Hóa đơn', exact: true }).click()
+    await page.getByLabel(/Mã Hóa đơn/i).fill('inv-1001')
+    const reason = page.getByLabel(/Lý do in lại/i)
+    await reason.fill('First reason')
+    await reason.press('Enter')
+    await expect(page.getByRole('alert')).toHaveText('Reason rejected')
+    await expect(reason).toBeEnabled()
+    await expect(page.getByLabel(/Mã Hóa đơn/i)).toHaveValue('inv-1001')
+    await expect(reason).toHaveValue('First reason')
+    await reason.fill('Corrected reason')
+    await reason.press('Enter')
+    await expect(page.getByRole('status')).toBeVisible()
+    expect(writes).toHaveLength(2)
+    expect(writes[1]?.reason).toBe('Corrected reason')
+    expect(writes[1]?.idempotencyKey).not.toBe(writes[0]?.idempotencyKey)
   })
 })

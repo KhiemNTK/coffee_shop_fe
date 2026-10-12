@@ -68,13 +68,13 @@ test.describe('Staff Dining Tables Management', () => {
   test.beforeEach(async ({ page }) => {
     await page.route('**/api/v1/auth/me', (route) => route.fulfill({ json: envelope(employee) }))
     await page.route('**/api/v1/auth/me/permissions', (route) =>
-      route.fulfill({ json: envelope(authorization) }),
+      route.fulfill({ json: envelope(authorization) })
     )
   })
 
   test('loads dining tables layout with KPI metrics and cards', async ({ page }) => {
     await page.route('**/api/v1/dining-tables', (route) =>
-      route.fulfill({ json: envelope(mockTables) }),
+      route.fulfill({ json: envelope(mockTables) })
     )
 
     await page.goto('/staff/tables')
@@ -96,7 +96,7 @@ test.describe('Staff Dining Tables Management', () => {
 
   test('filters tables by status and search text', async ({ page }) => {
     await page.route('**/api/v1/dining-tables', (route) =>
-      route.fulfill({ json: envelope(mockTables) }),
+      route.fulfill({ json: envelope(mockTables) })
     )
 
     await page.goto('/staff/tables')
@@ -207,6 +207,9 @@ test.describe('Staff Dining Tables Management', () => {
     let currentTables = [...mockTables]
 
     await page.route('**/api/v1/orders/tables/**/clear', (route) => {
+      expect(route.request().postDataJSON()).toEqual({
+        expectedOrderSessionId: mockTables[1]!.orderSessions[0]!.id,
+      })
       const t0 = currentTables[0]
       const t1 = currentTables[1]
       const t2 = currentTables[2]
@@ -223,6 +226,9 @@ test.describe('Staff Dining Tables Management', () => {
     })
 
     await page.route('**/api/v1/orders/sessions/transfer-table', (route) => {
+      expect(route.request().postDataJSON()).toMatchObject({
+        sourceOrderSessionId: mockTables[1]!.orderSessions[0]!.id,
+      })
       return route.fulfill({
         json: envelope({ success: true, message: 'Table transferred successfully.' }),
       })
@@ -250,7 +256,7 @@ test.describe('Staff Dining Tables Management', () => {
 
   test('switches to table list view and back to grid', async ({ page }) => {
     await page.route('**/api/v1/dining-tables', (route) =>
-      route.fulfill({ json: envelope(mockTables) }),
+      route.fulfill({ json: envelope(mockTables) })
     )
 
     await page.goto('/staff/tables')

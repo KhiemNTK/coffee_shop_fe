@@ -8,6 +8,16 @@ export const envelope = (data: unknown) => ({
   message: 'OK',
 })
 
+export const onlineAvailability = {
+  acceptingOrders: true,
+  acceptingAsap: true,
+  asapOpenLocal: '07:00',
+  asapCloseLocal: '22:00',
+  timeZone: 'Asia/Ho_Chi_Minh',
+  pausedUntil: null,
+  reason: null,
+}
+
 export const defaultMockAdminEmployee = {
   id: '10000000-0000-4000-8000-000000000001',
   email: 'admin@coffee.test',

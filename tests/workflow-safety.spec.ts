@@ -101,23 +101,33 @@ test('inventory history pages and filters server-side and exposes failed reads',
   await expect(history.getByText('History page 1')).toBeVisible()
 })
 
-test('daily close displays immutable money, cost coverage and separate post-close refunds', async ({ page }, info) => {
+for (const count of [0, 1, -1]) {
+test(`daily close displays immutable money and validates post-close refund count ${count}`, async ({ page }, info) => {
   await staff(page, ['/reports_read'])
   const snapshot = { asOf: '2026-10-07T16:00:00Z', paidInvoiceCount: 3, grossSales: '35000.25', discountAmount: '0.00', taxAmount: '0.00',
     refundCount: 1, refundAmount: '0.25', netReceipts: '35000.00', estimatedNetSalesExTax: '35000.00', ingredientCost: '35000.50',
     wasteCost: '0.00', estimatedGrossProfit: '-0.50', soldItemCount: 4, itemsWithCostSnapshot: 3, zeroCostSnapshotCount: 1 }
   await page.route('**/api/v1/reports/daily-closes/*', route => route.fulfill({ json: envelope({ id: 'close', businessDate: '2026-10-07',
-    closedAt: snapshot.asOf, closedById: defaultMockAdminEmployee.id, snapshot, refundDeltaSinceClose: { count: 1, amount: '1.25' } }) }))
+    closedAt: snapshot.asOf, closedById: defaultMockAdminEmployee.id, snapshot, refundDeltaSinceClose: { count, amount: count === 0 ? '0.00' : '1.25' } }) }))
   await page.goto('/staff/reports')
   await page.getByRole('tab', { name: 'Chốt sổ doanh thu ngày' }).click()
+  await page.getByLabel('Ngày chốt sổ').fill('2026-10-07')
+  if (count < 0) {
+    await expect(page.getByRole('alert')).toContainText('Phản hồi không hợp lệ')
+    await expect(page.getByRole('heading', { name: 'Ngày 2026-10-07 đã được chốt sổ thành công' })).toHaveCount(0)
+    await expect(page.getByText('Hoàn tiền sau chốt:', { exact: false })).toHaveCount(0)
+    return
+  }
   await expect(page.getByRole('heading', { name: 'Ngày 2026-10-07 đã được chốt sổ thành công' })).toBeVisible()
   await expect(page.getByText('Doanh thu gộp', { exact: true }).locator('..')).toContainText('35.000,25')
   await expect(page.getByText('Lợi nhuận gộp ước tính', { exact: true }).locator('..')).toContainText('-0,50')
   await expect(page.getByText('Dòng món có snapshot giá vốn:', { exact: false })).toContainText('3/4')
-  await expect(page.getByText('Hoàn tiền sau chốt:', { exact: false })).toContainText('1,25')
+  await expect(page.getByText('Hoàn tiền sau chốt:', { exact: false })).toContainText(`${count} giao dịch`)
+  await expect(page.getByText('Hoàn tiền sau chốt:', { exact: false })).toContainText(count === 0 ? '0' : '1,25')
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
-  await page.screenshot({ path: info.outputPath('daily-close.png'), fullPage: true })
+  await page.screenshot({ path: info.outputPath(`daily-close-${count}.png`), fullPage: true })
 })
+}
 
 test('Excel download refreshes once and session reset aborts a pending download', async ({ page }) => {
   await staff(page, [])

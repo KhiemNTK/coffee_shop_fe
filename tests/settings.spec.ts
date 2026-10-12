@@ -156,6 +156,7 @@ const mockExceptionsSummary = {
     FEEDBACK: 2,
     KITCHEN_OVERDUE: 0,
     ONLINE_PICKUP_LATE: 0,
+    OUTBOX_DEAD_LETTER: 0,
   },
   total: 4,
 }

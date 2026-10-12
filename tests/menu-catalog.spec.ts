@@ -273,3 +273,21 @@ test('picker navigation stays inside the form without submitting even for cached
   await expect(picker.getByText('2 / 3')).toBeVisible()
   await expect(dialog).toBeVisible(); expect(writes).toBe(0)
 })
+test('menu editor sends HTTPS image and description through the actual update contract', async ({ page }) => {
+  await open(page, ['/menu_read', '/menu_update'])
+  let payload: unknown
+  await page.route('**/api/v1/menu/items/' + item.id, route => {
+    if (route.request().method() === 'PATCH') {
+      payload = route.request().postDataJSON()
+      return route.fulfill({ json: envelope({ ...item, description: 'Freshly brewed coffee', imageUrl: 'https://images.example.com/coffee.jpg' }) })
+    }
+    return route.fulfill({ json: envelope(item) })
+  })
+  await page.getByTitle('Sửa thông tin món').click()
+  const dialog = page.getByRole('dialog')
+  await dialog.getByLabel('Mô tả món', { exact: true }).fill('Freshly brewed coffee')
+  await dialog.getByLabel('Ảnh món (HTTPS)', { exact: true }).fill('https://images.example.com/coffee.jpg')
+  await dialog.getByRole('button', { name: 'Lưu thay đổi', exact: true }).click()
+  await expect(dialog).toHaveCount(0)
+  expect(payload).toEqual({ description: 'Freshly brewed coffee', imageUrl: 'https://images.example.com/coffee.jpg' })
+})

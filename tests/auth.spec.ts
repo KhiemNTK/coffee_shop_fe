@@ -252,7 +252,7 @@ test('sign in, view protected menu, logout with CSRF, no tokens in storage', asy
       local: { ...localStorage },
       session: { ...sessionStorage },
     })),
-  ).toEqual({ local: {}, session: {} })
+  ).toEqual({ local: { coffee_shop_language: 'vi' }, session: {} })
   await page.getByRole('button', { name: 'Đăng xuất', exact: true }).click()
   await expect(page).toHaveURL(/\/sign-in$/)
   await expect(page.getByText(employee.fullName)).toHaveCount(0)

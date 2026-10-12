@@ -18,6 +18,7 @@ const summary = {
     FEEDBACK: 0,
     KITCHEN_OVERDUE: 1,
     ONLINE_PICKUP_LATE: 1,
+    OUTBOX_DEAD_LETTER: 0,
   },
   total: 5,
 }
@@ -37,6 +38,94 @@ const workload = {
     },
   ],
 }
+
+const failedEvent = {
+  id, topic: 'order', eventName: 'order.invoice.paid', aggregateType: 'Invoice',
+  aggregateId: stationId, status: 'DEAD_LETTER', attempts: 5, occurredAt: asOf,
+  availableAt: asOf,
+}
+
+async function outboxQueue(page: Page, retryPermission = true) {
+  await staff(page, ['/management-exceptions_read', ...(retryPermission ? ['/outbox-events_retry'] : [])])
+  await operations(page)
+  let queued = false
+  await page.route('**/api/v1/management/exceptions/summary', (route) => route.fulfill({
+    json: envelope({ ...summary, counts: { ...summary.counts, OUTBOX_DEAD_LETTER: queued ? 0 : 1 }, total: queued ? 5 : 6 }),
+  }))
+  await page.route('**/api/v1/management/exceptions?*', (route) => route.fulfill({
+    json: envelope({ kind: 'OUTBOX_DEAD_LETTER', list: queued ? [] : [failedEvent], currentPage: 1, totalPages: queued ? 0 : 1, totalItems: queued ? 0 : 1 }),
+  }))
+  await page.goto('/staff/operations?kind=OUTBOX_DEAD_LETTER')
+  await page.getByRole('button', { name: 'Chi tiết', exact: true }).click()
+  return () => { queued = true }
+}
+
+test('read-only managers see dead letters without recovery commands', async ({ page }, info) => {
+  await outboxQueue(page, false)
+  const dialog = page.getByRole('dialog')
+  await expect(dialog.getByText('order.invoice.paid', { exact: true })).toBeVisible()
+  await expect(dialog.getByText('Số lần lỗi', { exact: true })).toBeVisible()
+  await expect(dialog.getByLabel('Lý do phục hồi')).toHaveCount(0)
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+  await page.screenshot({ path: info.outputPath('outbox-read-only.png'), fullPage: true })
+})
+
+test('recovery confirms once, prevents double submit and reports queued rather than published', async ({ page }, info) => {
+  const markQueued = await outboxQueue(page)
+  const calls: Record<string, unknown>[] = []
+  await page.route('**/api/v1/management/exceptions/outbox/*/retry', async (route) => {
+    calls.push(route.request().postDataJSON() as Record<string, unknown>)
+    await new Promise(resolve => setTimeout(resolve, 200))
+    markQueued()
+    await route.fulfill({ json: envelope({ id, status: 'PENDING' }) })
+  })
+  await page.getByLabel('Lý do phục hồi').fill('Đã sửa consumer máy in')
+  await page.getByRole('button', { name: 'Đưa lại vào hàng đợi', exact: true }).click()
+  expect(calls).toHaveLength(0)
+  await page.screenshot({ path: info.outputPath('outbox-confirmation.png'), fullPage: true })
+  await page.getByRole('button', { name: 'Xác nhận phục hồi', exact: true }).dblclick()
+  await expect(page.getByRole('status').filter({ hasText: 'Đã đưa event lại vào hàng đợi' })).toBeVisible()
+  expect(calls).toHaveLength(1)
+  expect(calls[0]).toMatchObject({ reason: 'Đã sửa consumer máy in', expectedAvailableAt: asOf })
+  expect(calls[0]?.idempotencyKey).toEqual(expect.any(String))
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+})
+
+test('uncertain recovery resends the exact same body and idempotency key', async ({ page }) => {
+  const markQueued = await outboxQueue(page)
+  const calls: Record<string, unknown>[] = []
+  await page.route('**/api/v1/management/exceptions/outbox/*/retry', async (route) => {
+    calls.push(route.request().postDataJSON() as Record<string, unknown>)
+    if (calls.length === 1) return route.abort('failed')
+    markQueued()
+    return route.fulfill({ json: envelope({ id, status: 'PENDING' }) })
+  })
+  await page.getByLabel('Lý do phục hồi').fill('Đã kiểm tra kết nối máy in')
+  await page.getByRole('button', { name: 'Đưa lại vào hàng đợi', exact: true }).click()
+  await page.getByRole('button', { name: 'Xác nhận phục hồi', exact: true }).click()
+  await expect(page.getByLabel('Lý do phục hồi')).toBeDisabled()
+  await page.getByRole('button', { name: 'Gửi lại lệnh chưa xác nhận', exact: true }).click()
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+  expect(calls).toHaveLength(2)
+  expect(calls[0]).toEqual(calls[1])
+})
+
+test('stale recovery requires reloading the exception before another submission', async ({ page }) => {
+  await outboxQueue(page)
+  let calls = 0
+  await page.route('**/api/v1/management/exceptions/outbox/*/retry', (route) => {
+    calls++
+    return route.fulfill({ status: 409, json: { data: null, message: 'Event đã thay đổi. Tải lại trước khi thử.', code: 'CONFLICT' } })
+  })
+  await page.getByLabel('Lý do phục hồi').fill('Đã sửa lỗi kết nối')
+  await page.getByRole('button', { name: 'Đưa lại vào hàng đợi', exact: true }).click()
+  await page.getByRole('button', { name: 'Xác nhận phục hồi', exact: true }).click()
+  await expect(page.getByRole('alert')).toContainText('Event đã thay đổi')
+  await expect(page.getByRole('button', { name: 'Xác nhận phục hồi', exact: true })).toBeDisabled()
+  await page.getByRole('button', { name: 'Kiểm tra lại ngoại lệ', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Xác nhận phục hồi', exact: true })).toBeEnabled()
+  expect(calls).toBe(1)
+})
 
 async function staff(page: Page, permissions: string[]) {
   await page.route('**/api/v1/**', (route) =>
