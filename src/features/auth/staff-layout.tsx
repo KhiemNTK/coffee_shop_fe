@@ -1,12 +1,6 @@
+import { useTranslation } from 'react-i18next'
 import { useRef, useState } from 'react'
-import {
-  Link,
-  Navigate,
-  NavLink,
-  Outlet,
-  useNavigate,
-  useOutletContext,
-} from 'react-router-dom'
+import { Link, Navigate, NavLink, Outlet, useNavigate, useOutletContext } from 'react-router-dom'
 import { Coffee, ExternalLink, LayoutDashboard, LogOut, UserRound } from 'lucide-react'
 import { useSession, type Session } from './session'
 import { visibleStaffDestinations } from './staff-navigation'
@@ -24,6 +18,7 @@ export function PermissionGate({
   permission?: string
   anyOf?: readonly string[]
 }) {
+  const { t: translate } = useTranslation()
   const session = useOutletContext<Session>()
   const hasPermission = permission
     ? session.authorization.permissionKeys.includes(permission)
@@ -38,15 +33,16 @@ export function PermissionGate({
       className="mx-auto my-12 max-w-md rounded-xl border border-destructive/20 bg-destructive/5 p-6 text-center"
       role="alert"
     >
-      <h2 className="text-lg font-bold text-destructive">Không có quyền truy cập</h2>
+      <h2 className="text-lg font-bold text-destructive">{translate('auth.forbidden')}</h2>
       <Link to="/staff" className={cn(buttonVariants({ variant: 'outline' }), 'mt-4')}>
-        Về bàn làm việc
+        {translate('auth.backToWorkdesk')}
       </Link>
     </div>
   )
 }
 
 export function StaffLayout() {
+  const { t: translate } = useTranslation()
   const navigate = useNavigate()
   const [leaving, setLeaving] = useState(false)
   const [logoutError, setLogoutError] = useState<unknown>()
@@ -74,17 +70,17 @@ export function StaffLayout() {
   if (leaving) {
     return (
       <main className="flex min-h-screen flex-col items-center justify-center p-6 text-center">
-        <h1 className="text-xl font-bold text-foreground">Đăng xuất</h1>
+        <h1 className="text-xl font-bold text-foreground">{translate('auth.signOut')}</h1>
         {logoutError ? (
           <div className="mt-4 space-y-3">
             <p role="alert" className="text-sm text-destructive">
-              Chưa xác nhận được đăng xuất. {errorMessage(logoutError)}
+              {translate('auth.logoutUncertain')} {errorMessage(logoutError)}
             </p>
-            <Button onClick={() => void logout()}>Thử lại đăng xuất</Button>
+            <Button onClick={() => void logout()}>{translate('auth.retryLogout')}</Button>
           </div>
         ) : (
           <p className="mt-2 text-sm text-muted-foreground animate-pulse" role="status">
-            Đang kết thúc phiên…
+            {translate('auth.endingSession')}
           </p>
         )}
       </main>
@@ -93,8 +89,11 @@ export function StaffLayout() {
 
   if (session.isPending) {
     return (
-      <main className="flex min-h-screen items-center justify-center p-6 text-muted-foreground" role="status">
-        <p className="animate-pulse">Đang kiểm tra phiên…</p>
+      <main
+        className="flex min-h-screen items-center justify-center p-6 text-muted-foreground"
+        role="status"
+      >
+        <p className="animate-pulse">{translate('auth.checkingSession')}</p>
       </main>
     )
   }
@@ -104,17 +103,18 @@ export function StaffLayout() {
       return <Navigate to="/sign-in" replace />
     return (
       <main className="mx-auto my-12 max-w-md rounded-xl border border-destructive/20 bg-destructive/5 p-6 text-center">
-        <h1 className="text-lg font-bold text-destructive">Chưa mở được phiên làm việc</h1>
-        <p className="mt-2 text-sm text-destructive" role="alert">{errorMessage(session.error)}</p>
+        <h1 className="text-lg font-bold text-destructive">
+          {translate('auth.sessionUnavailable')}
+        </h1>
+        <p className="mt-2 text-sm text-destructive" role="alert">
+          {errorMessage(session.error)}
+        </p>
         <div className="mt-4 flex justify-center gap-3">
-          <Button
-            onClick={() => void session.refetch()}
-            disabled={session.isFetching}
-          >
-            Thử lại
+          <Button onClick={() => void session.refetch()} disabled={session.isFetching}>
+            {translate('common.retry')}
           </Button>
           <Link to="/sign-in" className={buttonVariants({ variant: 'outline' })}>
-            Về đăng nhập
+            {translate('auth.backToSignIn')}
           </Link>
         </div>
       </main>
@@ -124,11 +124,14 @@ export function StaffLayout() {
   const permissions = session.data.authorization.permissionKeys
 
   const navItems = [
-    { to: '/staff', end: true, label: 'Bàn làm việc', icon: LayoutDashboard },
-    ...visibleStaffDestinations(permissions).map(item => ({
-      to: '/staff/' + item.path, end: false, label: item.label, icon: item.icon,
+    { to: '/staff', end: true, label: translate('nav.workdesk'), icon: LayoutDashboard },
+    ...visibleStaffDestinations(permissions).map((item) => ({
+      to: '/staff/' + item.path,
+      end: false,
+      label: translate(`nav.${item.path}`),
+      icon: item.icon,
     })),
-    { to: '/staff/account', end: true, label: 'Tài khoản', icon: UserRound },
+    { to: '/staff/account', end: true, label: translate('nav.account'), icon: UserRound },
   ]
 
   return (
@@ -145,10 +148,10 @@ export function StaffLayout() {
             target="_blank"
             rel="noopener noreferrer"
             className="hidden sm:inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
-            title="Mở thực đơn khách trên tab mới"
+            title={translate('auth.openCustomerMenu')}
           >
             <ExternalLink className="h-3 w-3" />
-            Xem thực đơn khách
+            {translate('auth.customerMenu')}
           </Link>
         </div>
         <div className="flex items-center gap-3">
@@ -157,7 +160,7 @@ export function StaffLayout() {
               {session.data.employee.fullName}
             </span>
             <span className="text-[11px] text-muted-foreground leading-tight">
-              {session.data.employee.position?.name || 'Nhân viên'}
+              {session.data.employee.position?.name || translate('common.staff')}
             </span>
           </div>
           <Button
@@ -167,13 +170,16 @@ export function StaffLayout() {
             className="flex items-center gap-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
           >
             <LogOut className="h-4 w-4" />
-            Đăng xuất
+            {translate('auth.signOut')}
           </Button>
         </div>
       </header>
 
       {/* Thanh điều hướng ngang cho mobile */}
-      <nav className="flex md:hidden overflow-x-auto border-b border-border bg-card px-3 py-2 gap-1.5" aria-label="Nhân viên di động">
+      <nav
+        className="flex md:hidden overflow-x-auto border-b border-border bg-card px-3 py-2 gap-1.5"
+        aria-label={translate('auth.mobileNavigation')}
+      >
         {navItems.map((item) => (
           <NavLink
             key={item.to}
@@ -196,7 +202,7 @@ export function StaffLayout() {
 
       <div className="mx-auto flex max-w-7xl">
         <aside className="w-60 shrink-0 border-r border-border bg-card p-4 hidden md:block min-h-[calc(100vh-3.5rem)]">
-          <nav className="space-y-1" aria-label="Nhân viên">
+          <nav className="space-y-1" aria-label={translate('common.staff')}>
             {navItems.map((item) => (
               <NavLink
                 key={item.to}

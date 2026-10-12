@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { startTransition, useEffect, useOptimistic, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useOutletContext, useSearchParams } from 'react-router-dom'
@@ -29,6 +30,7 @@ type ReviewAction =
 type ReviewTarget = { kind: 'reject' | 'cancel' | 'no-show'; id: string; name: string }
 
 export default function StaffOnlineOrdersPage() {
+  const { t: translate } = useTranslation()
   const { employee, authorization } = useOutletContext<Session>()
   const client = useQueryClient()
   const permissions = authorization.permissionKeys
@@ -40,9 +42,15 @@ export default function StaffOnlineOrdersPage() {
   const activeTab = params.get('tab') === 'fulfillment' ? 'fulfillment' : 'pending'
   const overdueOnly = params.get('overdueOnly') === 'true'
   const [displayOverdueOnly, setDisplayOverdueOnly] = useOptimistic(overdueOnly)
-  const page = z.coerce.number().int().min(1).max(100_000).safeParse(params.get('page') ?? 1).data ?? 1
+  const page =
+    z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(100_000)
+      .safeParse(params.get('page') ?? 1).data ?? 1
   function setFilters(changes: Record<string, string | null>) {
-    setParams(previous => {
+    setParams((previous) => {
       const next = new URLSearchParams(previous)
       for (const [key, value] of Object.entries(changes)) {
         if (value === null) next.delete(key)
@@ -116,10 +124,10 @@ export default function StaffOnlineOrdersPage() {
       setActionError(null)
       setNotice(
         {
-          accept: 'Đã tiếp nhận đơn và chuyển sang bếp.',
-          reject: 'Đã từ chối đơn.',
-          cancel: 'Đã hủy đơn mang đi.',
-          'no-show': 'Đã ghi nhận khách vắng mặt.',
+          accept: translate('takeaway.acceptedNotice'),
+          reject: translate('takeaway.rejectedNotice'),
+          cancel: translate('takeaway.cancelledNotice'),
+          'no-show': translate('takeaway.noShowNotice'),
         }[action.kind],
       )
     },
@@ -153,7 +161,7 @@ export default function StaffOnlineOrdersPage() {
     <div className="space-y-5">
       {permissions.includes('/orders_items_handoff') && <PickupCollectionPanel />}
       <header className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-semibold">Đơn mang đi (Online)</h1>
+        <h1 className="text-2xl font-semibold">{translate('takeaway.staffHeading')}</h1>
         <Button
           variant="outline"
           size="sm"
@@ -161,7 +169,7 @@ export default function StaffOnlineOrdersPage() {
           onClick={() => void refresh()}
         >
           <RefreshCw size={16} aria-hidden="true" />
-          Làm mới
+          {translate('common.refresh')}
         </Button>
       </header>
       {notice && (
@@ -182,7 +190,7 @@ export default function StaffOnlineOrdersPage() {
               onClick={() => void refresh()}
             >
               <RefreshCw size={16} aria-hidden="true" />
-              Đối chiếu danh sách
+              {translate('takeaway.reviewList')}
             </Button>
           )}
         </div>
@@ -190,19 +198,21 @@ export default function StaffOnlineOrdersPage() {
       <Tabs
         value={activeTab}
         onValueChange={(value) => {
-          if (!flight.current) setFilters({ tab: value === 'fulfillment' ? value : null, page: null })
+          if (!flight.current)
+            setFilters({ tab: value === 'fulfillment' ? value : null, page: null })
         }}
       >
         <TabsList className="w-full sm:w-auto">
-          <TabsTrigger value="pending">Chờ duyệt</TabsTrigger>
-          <TabsTrigger value="fulfillment">Đang chế biến & Chờ nhận</TabsTrigger>
+          <TabsTrigger value="pending">{translate('takeaway.pending')}</TabsTrigger>
+          <TabsTrigger value="fulfillment">{translate('takeaway.fulfillmentTab')}</TabsTrigger>
         </TabsList>
       </Tabs>
       {activeTab === 'pending' ? (
         <>
           {pending.isSuccess && (
             <p className="text-sm text-muted-foreground">
-              Tổng: {pending.data.totalItems} đơn chờ duyệt
+              {translate('common.totalShort')} {pending.data.totalItems}{' '}
+              {translate('takeaway.pendingOrders')}
             </p>
           )}
           <StaffPendingOrdersTab
@@ -261,7 +271,7 @@ export default function StaffOnlineOrdersPage() {
           )}
           {page > Math.max(1, current.data.totalPages) && (
             <Button variant="outline" onClick={() => setPage(1)}>
-              Về trang đầu
+              {translate('common.firstPage')}
             </Button>
           )}
         </>
@@ -295,7 +305,7 @@ export default function StaffOnlineOrdersPage() {
           onSettled={invalidate}
           onSuccess={() => {
             setCollecting(null)
-            setNotice('Thu tiền và giao món thành công.')
+            setNotice(translate('takeaway.cashSuccess'))
             invalidate()
           }}
         />

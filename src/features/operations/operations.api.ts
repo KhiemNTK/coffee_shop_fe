@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { apiGet } from '@/shared/api/client'
+import { apiIdempotentMutate } from '@/shared/api/idempotency'
 
 export const ManagementExceptionKindSchema = z.enum([
   'PAYMENT',
@@ -8,6 +9,7 @@ export const ManagementExceptionKindSchema = z.enum([
   'FEEDBACK',
   'KITCHEN_OVERDUE',
   'ONLINE_PICKUP_LATE',
+  'OUTBOX_DEAD_LETTER',
 ])
 export type ManagementExceptionKind = z.infer<
   typeof ManagementExceptionKindSchema
@@ -22,6 +24,7 @@ export const ManagementExceptionsSummarySchema = z.object({
     FEEDBACK: z.number().int().nonnegative(),
     KITCHEN_OVERDUE: z.number().int().nonnegative(),
     ONLINE_PICKUP_LATE: z.number().int().nonnegative(),
+    OUTBOX_DEAD_LETTER: z.number().int().nonnegative(),
   }),
   total: z.number().int().nonnegative(),
 })
@@ -55,6 +58,13 @@ export const ManagementExceptionItemSchema = z.object({
   dueAt: z.string().datetime().optional(),
   pickupAt: z.string().datetime().nullable().optional(),
   orderSessionId: z.string().nullable().optional(),
+  topic: z.string().optional(),
+  eventName: z.string().optional(),
+  aggregateType: z.string().optional(),
+  aggregateId: z.string().optional(),
+  attempts: z.number().int().nonnegative().optional(),
+  occurredAt: z.string().datetime().optional(),
+  availableAt: z.string().datetime().optional(),
 })
 export type ManagementExceptionItem = z.infer<
   typeof ManagementExceptionItemSchema
@@ -72,6 +82,16 @@ export type ManagementExceptionsListResponse = z.infer<
 >
 
 export const operationsApi = {
+  retryOutboxEvent: (
+    id: string,
+    payload: { reason: string; expectedAvailableAt: string },
+  ) =>
+    apiIdempotentMutate(
+      `/management/exceptions/outbox/${encodeURIComponent(id)}/retry`,
+      z.object({ id: z.string(), status: z.literal('PENDING') }),
+      payload,
+    ),
+
   // Management Exceptions
   getManagementExceptionsSummary: (
     signal?: AbortSignal,

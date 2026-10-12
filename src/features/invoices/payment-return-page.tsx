@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link, useLocation, useParams } from 'react-router-dom'
 import { z } from 'zod'
@@ -8,21 +8,38 @@ import { Button, buttonVariants, Card, CardContent, Badge, cn } from '../../shar
 
 const resultSchema = z.object({
   signatureValid: z.boolean(),
-  attempt: z.object({
-    id: z.string(),
-    invoiceId: z.string(),
-    status: z.enum(['PENDING', 'SUCCEEDED', 'FAILED', 'EXPIRED', 'REQUIRES_REVIEW']),
-  }).nullable(),
+  attempt: z
+    .object({
+      id: z.string(),
+      invoiceId: z.string(),
+      status: z.enum(['PENDING', 'SUCCEEDED', 'FAILED', 'EXPIRED', 'REQUIRES_REVIEW']),
+    })
+    .nullable(),
 })
 
 export default function PaymentReturnPage() {
   const { provider } = useParams<{ provider: string }>()
-  const { search } = useLocation()
+  const { search, pathname } = useLocation()
+  const incomingState = new URLSearchParams(search).get('state')
+  const rawState = incomingState ?? (search ? null : window.history.state?.payosReturnState)
+  const payosState =
+    typeof rawState === 'string' && /^[a-f0-9-]{36}\.[a-f0-9]{64}$/.test(rawState) ? rawState : null
+  useEffect(() => {
+    if (provider !== 'payos') return
+    window.history.replaceState(
+      { ...window.history.state, payosReturnState: payosState },
+      '',
+      pathname
+    )
+  }, [provider, payosState, pathname])
+  const returnQuery =
+    provider === 'payos' ? (payosState ? `?state=${encodeURIComponent(payosState)}` : '') : search
   const [startedAt] = useState(Date.now)
-  const supported = provider === 'vnpay' || provider === 'momo'
+  const supported = provider === 'vnpay' || provider === 'momo' || provider === 'payos'
   const result = useQuery({
-    queryKey: ['payment-return', provider, search],
-    queryFn: ({ signal }) => apiGet(`/payments/${provider}/return${search}`, resultSchema, signal),
+    queryKey: ['payment-return', provider, returnQuery],
+    queryFn: ({ signal }) =>
+      apiGet(`/payments/${provider}/return${returnQuery}`, resultSchema, signal),
     enabled: supported,
     staleTime: 0,
     gcTime: 0,
@@ -99,7 +116,7 @@ export default function PaymentReturnPage() {
                 role={result.isError ? 'alert' : 'status'}
                 className={cn(
                   'text-sm font-semibold',
-                  isSuccess ? 'text-emerald-700' : isError ? 'text-rose-600' : 'text-amber-700',
+                  isSuccess ? 'text-emerald-700' : isError ? 'text-rose-600' : 'text-amber-700'
                 )}
               >
                 {message}
@@ -138,7 +155,10 @@ export default function PaymentReturnPage() {
               )}
               <Link
                 to="/"
-                className={cn(buttonVariants({ variant: 'default' }), 'w-full font-bold shadow-xs cursor-pointer')}
+                className={cn(
+                  buttonVariants({ variant: 'default' }),
+                  'w-full font-bold shadow-xs cursor-pointer'
+                )}
               >
                 Về thực đơn
               </Link>

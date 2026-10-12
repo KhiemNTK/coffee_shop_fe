@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { useState } from 'react'
 import { Check, Minus, Plus, X } from 'lucide-react'
 import { formatPrice, type MenuItem } from '../../menu/menu.api'
@@ -14,6 +15,7 @@ export function ItemCustomizerModal({
   onClose: () => void
   onConfirm: (cartItem: CartItem) => void
 }) {
+  const { t: translate } = useTranslation()
   const [quantity, setQuantity] = useState(1)
   const [note, setNote] = useState('')
   const [selectedOptions, setSelectedOptions] = useState<Map<string, string[]>>(() => {
@@ -47,10 +49,14 @@ export function ItemCustomizerModal({
   item.optionGroups.forEach((group) => {
     const selected = selectedOptions.get(group.id) ?? []
     if (group.minSelected > 0 && selected.length < group.minSelected) {
-      errors.push(`Vui lòng chọn ít nhất ${group.minSelected} tùy chọn cho "${group.name}".`)
+      errors.push(
+        translate('takeaway.minimumOptions', { count: group.minSelected, name: group.name }),
+      )
     }
     if (group.maxSelected > 0 && selected.length > group.maxSelected) {
-      errors.push(`Chỉ được chọn tối đa ${group.maxSelected} tùy chọn cho "${group.name}".`)
+      errors.push(
+        translate('takeaway.maximumOptions', { count: group.maxSelected, name: group.name }),
+      )
     }
   })
 
@@ -90,18 +96,34 @@ export function ItemCustomizerModal({
   }
 
   return (
-    <Dialog open onClose={onClose} maxWidth="md" label={'Tùy chọn ' + item.name} showCloseButton={false}>
+    <Dialog
+      open
+      onClose={onClose}
+      maxWidth="md"
+      label={`${translate('common.options')} ${item.name}`}
+      showCloseButton={false}
+    >
       <div className="flex flex-col max-h-[85vh]">
         {/* Header */}
         <div className="p-5 border-b border-border flex items-center justify-between gap-3">
           <div className="min-w-0 flex-1">
-            <h3 className="text-lg font-bold text-brand-900 break-words line-clamp-2 leading-snug">{item.name}</h3>
+            <h3 className="text-lg font-bold text-brand-900 break-words line-clamp-2 leading-snug">
+              {item.name}
+            </h3>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Giá cơ bản:{' '}
-              <span className="font-semibold text-brand-700 tabular-nums">{formatPrice(item.price)}</span>
+              {translate('takeaway.basePrice')}{' '}
+              <span className="font-semibold text-brand-700 tabular-nums">
+                {formatPrice(item.price)}
+              </span>
             </p>
           </div>
-          <Button variant="ghost" size="sm" onClick={onClose} aria-label="Đóng tùy chọn món" className="h-8 w-8 p-0 rounded-full shrink-0">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onClose}
+            aria-label={translate('takeaway.closeOptions')}
+            className="h-8 w-8 p-0 rounded-full shrink-0"
+          >
             <X className="h-4 w-4" />
           </Button>
         </div>
@@ -120,10 +142,10 @@ export function ItemCustomizerModal({
                   </label>
                   <span className="text-xs text-muted-foreground shrink-0">
                     {isSingle
-                      ? 'Chọn 1'
+                      ? translate('common.selectOne')
                       : group.maxSelected > 0
-                        ? `Chọn tối đa ${group.maxSelected}`
-                        : 'Tùy chọn'}
+                        ? translate('takeaway.chooseMax', { count: group.maxSelected })
+                        : translate('common.options')}
                   </span>
                 </div>
 
@@ -172,13 +194,16 @@ export function ItemCustomizerModal({
 
           {/* Special note */}
           <div>
-            <label htmlFor="item-note" className="block text-sm font-semibold text-foreground mb-1.5">
-              Ghi chú cho quán (nếu có)
+            <label
+              htmlFor="item-note"
+              className="block text-sm font-semibold text-foreground mb-1.5"
+            >
+              {translate('takeaway.note')}
             </label>
             <Input
               type="text"
               id="item-note"
-              placeholder="VD: Ít đá, nhiều đường, mang đi xa..."
+              placeholder={translate('takeaway.noteExample')}
               value={note}
               onChange={(e) => setNote(e.target.value)}
               maxLength={255}
@@ -187,14 +212,16 @@ export function ItemCustomizerModal({
 
           {/* Quantity */}
           <div className="flex items-center justify-between pt-3 border-t border-border">
-            <span className="text-sm font-semibold text-foreground">Số lượng</span>
+            <span className="text-sm font-semibold text-foreground">
+              {translate('common.quantity')}
+            </span>
             <div className="flex items-center gap-3">
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
                 onClick={() => setQuantity((q) => Math.max(1, q - 1))}
-                aria-label="Giảm số lượng món"
+                aria-label={translate('takeaway.decreaseItem')}
                 disabled={quantity <= 1}
                 className="h-8 w-8 rounded-full p-0"
               >
@@ -206,7 +233,7 @@ export function ItemCustomizerModal({
                 variant="outline"
                 size="sm"
                 onClick={() => setQuantity((q) => Math.min(20, q + 1))}
-                aria-label="Tăng số lượng món"
+                aria-label={translate('takeaway.increaseItem')}
                 disabled={quantity >= 20}
                 className="h-8 w-8 rounded-full p-0"
               >
@@ -227,7 +254,9 @@ export function ItemCustomizerModal({
         {/* Footer */}
         <div className="p-4 border-t border-border bg-stone-50 flex items-center justify-between gap-4">
           <div>
-            <span className="text-xs text-muted-foreground block">Tổng tiền món:</span>
+            <span className="text-xs text-muted-foreground block">
+              {translate('takeaway.lineTotal')}
+            </span>
             <span className="text-lg font-bold text-brand-800">
               {formatLineAmount(unitPrice, quantity)}
             </span>
@@ -239,7 +268,7 @@ export function ItemCustomizerModal({
             disabled={errors.length > 0}
             className="font-semibold"
           >
-            Thêm vào giỏ
+            {translate('takeaway.addToCart')}
           </Button>
         </div>
       </div>

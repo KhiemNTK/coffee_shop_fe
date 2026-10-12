@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { CheckCircle2, Receipt, RefreshCw, Send, XCircle } from 'lucide-react'
 import { ApiError, errorMessage } from '@/shared/api/client'
@@ -6,7 +6,6 @@ import { printingApi, type PrintDevice } from '../printing.api'
 import {
   Button,
   Card,
-  CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
@@ -29,6 +28,9 @@ export function ReprintReceiptTab({ devices }: ReprintReceiptTabProps) {
   )
   const [reprintErrorMsg, setReprintErrorMsg] = useState<string | null>(null)
   const [uncertain, setUncertain] = useState(false)
+  const flight = useRef(false)
+  const valid = Boolean(reprintInvoiceId.trim()) &&
+    reprintReason.trim().length >= 3 && reprintReason.trim().length <= 500
 
   const reprintMutation = useMutation({
     mutationFn: ({
@@ -52,16 +54,18 @@ export function ReprintReceiptTab({ devices }: ReprintReceiptTabProps) {
     },
     onError: (err) => {
       setUncertain(
-        !(
+        (wasUncertain) => wasUncertain || !(
           err instanceof ApiError &&
           err.status >= 400 &&
           err.status < 500 &&
-          err.status !== 408
+          err.status !== 408 &&
+          err.status !== 429
         ),
       )
       setReprintErrorMsg(errorMessage(err))
       setReprintSuccessMsg(null)
     },
+    onSettled: () => { flight.current = false },
   })
   const locked = reprintMutation.isPending || uncertain
 
@@ -70,7 +74,7 @@ export function ReprintReceiptTab({ devices }: ReprintReceiptTabProps) {
       <CardHeader>
         <div className="flex items-center gap-2">
           <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600">
-            <Receipt className="h-5 w-5" />
+            <Receipt aria-hidden="true" className="h-5 w-5" />
           </div>
           <div>
             <CardTitle className="text-base font-bold text-foreground">
@@ -84,18 +88,37 @@ export function ReprintReceiptTab({ devices }: ReprintReceiptTabProps) {
         </div>
       </CardHeader>
 
-      <CardContent className="space-y-4 text-xs">
+      <form
+        className="p-5 sm:p-6 pt-0 space-y-4 text-xs"
+        onSubmit={(event) => {
+          event.preventDefault()
+          if (flight.current || reprintMutation.isPending) return
+          const variables = uncertain ? reprintMutation.variables : valid ? {
+            invoiceId: reprintInvoiceId.trim(),
+            dto: {
+              reason: reprintReason.trim(),
+              copies: reprintCopies,
+              deviceId: reprintDeviceId || undefined,
+            },
+          } : undefined
+          if (!variables) return
+          flight.current = true
+          setReprintErrorMsg(null)
+          setReprintSuccessMsg(null)
+          reprintMutation.mutate(variables)
+        }}
+      >
         {reprintSuccessMsg && (
-          <div className="rounded-lg border border-emerald-200 bg-emerald-50 dark:border-emerald-900/50 dark:bg-emerald-950/30 p-3 text-emerald-700 dark:text-emerald-300 flex items-start gap-2">
-            <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5" />
-            <span>{reprintSuccessMsg}</span>
+          <div role="status" className="rounded-lg border border-emerald-200 bg-emerald-50 dark:border-emerald-900/50 dark:bg-emerald-950/30 p-3 text-emerald-700 dark:text-emerald-300 flex items-start gap-2">
+            <CheckCircle2 aria-hidden="true" className="h-4 w-4 shrink-0 mt-0.5" />
+            <span className="min-w-0 break-words">{reprintSuccessMsg}</span>
           </div>
         )}
 
         {reprintErrorMsg && (
-          <div className="rounded-lg border border-rose-200 bg-rose-50 dark:border-rose-900/50 dark:bg-rose-950/30 p-3 text-rose-700 dark:text-rose-300 flex items-start gap-2">
-            <XCircle className="h-4 w-4 shrink-0 mt-0.5" />
-            <span>{reprintErrorMsg}</span>
+          <div role="alert" className="rounded-lg border border-rose-200 bg-rose-50 dark:border-rose-900/50 dark:bg-rose-950/30 p-3 text-rose-700 dark:text-rose-300 flex items-start gap-2">
+            <XCircle aria-hidden="true" className="h-4 w-4 shrink-0 mt-0.5" />
+            <span className="min-w-0 break-words">{reprintErrorMsg}</span>
           </div>
         )}
 
@@ -109,6 +132,7 @@ export function ReprintReceiptTab({ devices }: ReprintReceiptTabProps) {
           </label>
           <Input
             id="reprint-invoice-id"
+            required
             disabled={locked}
             placeholder="Nhập mã UUID hóa đơn (VD: 10000000-0000-4000-8000-...)"
             value={reprintInvoiceId}
@@ -127,6 +151,9 @@ export function ReprintReceiptTab({ devices }: ReprintReceiptTabProps) {
           </label>
           <Input
             id="reprint-reason"
+            required
+            minLength={3}
+            maxLength={500}
             disabled={locked}
             placeholder="VD: Khách xin thêm hóa đơn, máy in kẹt giấy, phiếu bị rách..."
             value={reprintReason}
@@ -186,32 +213,14 @@ export function ReprintReceiptTab({ devices }: ReprintReceiptTabProps) {
 
         <div className="pt-2">
           <Button
-            disabled={
-              !reprintInvoiceId.trim() ||
-              reprintReason.trim().length < 3 ||
-              reprintMutation.isPending
-            }
-            onClick={() => {
-              if (reprintMutation.isPending) return
-              if (uncertain && reprintMutation.variables) {
-                reprintMutation.mutate(reprintMutation.variables)
-                return
-              }
-              reprintMutation.mutate({
-                invoiceId: reprintInvoiceId.trim(),
-                dto: {
-                  reason: reprintReason.trim(),
-                  copies: reprintCopies,
-                  deviceId: reprintDeviceId || undefined,
-                },
-              })
-            }}
+            type="submit"
+            disabled={reprintMutation.isPending || (!uncertain && !valid)}
             className="w-full gap-2 h-9 bg-primary text-primary-foreground"
           >
             {reprintMutation.isPending ? (
-              <RefreshCw className="h-4 w-4 animate-spin" />
+              <RefreshCw aria-hidden="true" className="h-4 w-4 animate-spin" />
             ) : (
-              <Send className="h-4 w-4" />
+              <Send aria-hidden="true" className="h-4 w-4" />
             )}
             <span>
               {uncertain
@@ -220,7 +229,7 @@ export function ReprintReceiptTab({ devices }: ReprintReceiptTabProps) {
             </span>
           </Button>
         </div>
-      </CardContent>
+      </form>
     </Card>
   )
 }

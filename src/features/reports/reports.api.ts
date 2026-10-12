@@ -185,7 +185,7 @@ export const dailySalesCloseSchema = z.object({
   snapshot: profitabilityMetricsSchema,
   refundDeltaSinceClose: z
     .object({
-      count: z.number().int(),
+      count: z.number().int().nonnegative(),
       amount: moneySchema,
     })
     .optional(),

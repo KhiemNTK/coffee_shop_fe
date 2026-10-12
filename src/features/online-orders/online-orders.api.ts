@@ -8,6 +8,19 @@ export const onlineOrderKeys = {
   all: (employeeId: string) => ['private', employeeId, 'online-orders'] as const,
 }
 
+export const onlineAvailabilitySchema = z.object({
+  acceptingOrders: z.boolean(),
+  acceptingAsap: z.boolean(),
+  asapOpenLocal: z.string(),
+  asapCloseLocal: z.string(),
+  timeZone: z.string(),
+  pausedUntil: z.string().nullable(),
+  reason: z.string().nullable(),
+})
+export function getOnlineAvailability(signal?: AbortSignal) {
+  return apiGet('/online-orders/availability', onlineAvailabilitySchema, signal)
+}
+
 // --- SCHEMAS ---
 
 export const PickupSlotSchema = z.object({
@@ -40,6 +53,7 @@ export const CreateOrderResponseSchema = z.object({
   pickupAt: z.string().nullable().optional(),
   items: z.array(OnlineOrderPublicItemSchema),
   accessToken: z.string(),
+  accessExpiresAt: z.iso.datetime().optional(),
   reorderToken: z.string().nullable().optional(),
   reorderExpiresAt: z.string().nullable().optional(),
 })
@@ -56,6 +70,7 @@ export const TrackOrderItemSchema = z.object({
 
 export const TrackOrderResponseSchema = z.object({
   requestId: z.string(),
+  accessExpiresAt: z.iso.datetime().optional(),
   status: z.enum(['PENDING', 'ACCEPTED', 'REJECTED', 'CANCELLED', 'EXPIRED']),
   expiresAt: z.string(),
   rejectionReason: z.string().nullable().optional(),
@@ -187,88 +202,106 @@ export function getPickupSlots(date: string, signal?: AbortSignal) {
     `/online-orders/pickup-slots?date=${encodeURIComponent(date)}`,
     PickupSlotsResponseSchema,
     signal ?? new AbortController().signal,
-    false, // public endpoint
+    false // public endpoint
   )
 }
 
-export function createOnlineOrder(
-  payload: CreateOnlineOrderPayload,
-  signal?: AbortSignal,
-) {
-  return apiIdempotentMutate('/online-orders/requests', CreateOrderResponseSchema,
-    { ...payload }, { keyField: 'clientRequestId', authenticated: false, signal })
+export function createOnlineOrder(payload: CreateOnlineOrderPayload, signal?: AbortSignal) {
+  return apiIdempotentMutate(
+    '/online-orders/requests',
+    CreateOrderResponseSchema,
+    { ...payload },
+    { keyField: 'clientRequestId', authenticated: false, signal }
+  )
 }
 
 export const reorderTemplateSchema = z.object({
-  items: z.array(z.object({
-    menuItemId: z.string(), quantity: z.number().int().positive(),
-    note: z.string().optional(), optionIds: z.array(z.string()),
-  })),
+  items: z.array(
+    z.object({
+      menuItemId: z.string(),
+      quantity: z.number().int().positive(),
+      note: z.string().optional(),
+      optionIds: z.array(z.string()),
+    })
+  ),
   quote: z.object({
-    previousSubtotal: moneySchema, currentSubtotal: moneySchema.nullable(), canSubmit: z.boolean(),
-    lines: z.array(z.object({
-      lineNumber: z.number().int(), previousName: z.string(), previousUnitPrice: moneySchema,
-      currentName: z.string().nullable(), currentUnitPrice: moneySchema.nullable(),
-      available: z.boolean(), reason: z.string().nullable(),
-    })),
+    previousSubtotal: moneySchema,
+    currentSubtotal: moneySchema.nullable(),
+    canSubmit: z.boolean(),
+    lines: z.array(
+      z.object({
+        lineNumber: z.number().int(),
+        previousName: z.string(),
+        previousUnitPrice: moneySchema,
+        currentName: z.string().nullable(),
+        currentUnitPrice: moneySchema.nullable(),
+        available: z.boolean(),
+        reason: z.string().nullable(),
+      })
+    ),
   }),
 })
 export function getReorderTemplate(requestId: string, reorderToken: string) {
-  return apiMutate('/online-orders/requests/reorder-template', 'POST', reorderTemplateSchema,
-    { requestId, reorderToken }, undefined, false)
+  return apiMutate(
+    '/online-orders/requests/reorder-template',
+    'POST',
+    reorderTemplateSchema,
+    { requestId, reorderToken },
+    undefined,
+    false
+  )
 }
 export function issueReorderKey(requestId: string, accessToken: string) {
-  return apiMutate('/online-orders/requests/reorder-key', 'POST',
+  return apiMutate(
+    '/online-orders/requests/reorder-key',
+    'POST',
     z.object({ requestId: z.string(), reorderToken: z.string(), expiresAt: z.string() }),
-    { requestId, accessToken }, undefined, false)
+    { requestId, accessToken },
+    undefined,
+    false
+  )
 }
 export function revokeReorderKey(requestId: string, reorderToken: string) {
-  return apiMutate('/online-orders/requests/reorder-key/revoke', 'POST',
-    z.object({ revoked: z.literal(true) }), { requestId, reorderToken }, undefined, false)
+  return apiMutate(
+    '/online-orders/requests/reorder-key/revoke',
+    'POST',
+    z.object({ revoked: z.literal(true) }),
+    { requestId, reorderToken },
+    undefined,
+    false
+  )
 }
 
-export function trackOnlineOrder(
-  requestId: string,
-  accessToken: string,
-  signal?: AbortSignal,
-) {
+export function trackOnlineOrder(requestId: string, accessToken: string, signal?: AbortSignal) {
   return apiMutate(
     '/online-orders/requests/status',
     'POST',
     TrackOrderResponseSchema,
     { requestId, accessToken },
     signal,
-    false, // public endpoint
+    false // public endpoint
   )
 }
 
-export function cancelOnlineOrder(
-  requestId: string,
-  accessToken: string,
-  signal?: AbortSignal,
-) {
+export function cancelOnlineOrder(requestId: string, accessToken: string, signal?: AbortSignal) {
   return apiMutate(
     '/online-orders/requests/cancel',
     'POST',
     CancelOrderResponseSchema,
     { requestId, accessToken },
     signal,
-    false, // public endpoint
+    false // public endpoint
   )
 }
 
-export function getTelegramLink(
-  requestId: string,
-  accessToken: string,
-  signal?: AbortSignal,
-) {
+export function getTelegramLink(requestId: string, accessToken: string, signal?: AbortSignal) {
   return apiMutate(
     '/online-orders/requests/telegram-link',
     'POST',
     TelegramLinkResponseSchema,
     { requestId, accessToken },
     signal,
-    false, // public endpoint
+    false // public endpoint
   )
 }
 
@@ -276,7 +309,7 @@ export function getTelegramLink(
 
 export function getPendingOnlineOrders(
   query: { page?: number; itemPerPage?: number } = {},
-  signal?: AbortSignal,
+  signal?: AbortSignal
 ) {
   const params = new URLSearchParams()
   if (query.page) params.set('page', String(query.page))
@@ -286,13 +319,13 @@ export function getPendingOnlineOrders(
     `/online-orders/requests${qs}`,
     PendingOrdersPageSchema,
     signal ?? new AbortController().signal,
-    true,
+    true
   )
 }
 
 export function getFulfillmentOnlineOrders(
   query: { page?: number; itemPerPage?: number; overdueOnly?: boolean } = {},
-  signal?: AbortSignal,
+  signal?: AbortSignal
 ) {
   const params = new URLSearchParams()
   if (query.page) params.set('page', String(query.page))
@@ -303,7 +336,7 @@ export function getFulfillmentOnlineOrders(
     `/online-orders/requests/fulfillment${qs}`,
     FulfillmentOrdersPageSchema,
     signal ?? new AbortController().signal,
-    true,
+    true
   )
 }
 
@@ -316,7 +349,7 @@ export function acceptOnlineOrder(id: string) {
       status: z.string(),
       orderSessionId: z.string(),
     }),
-    {},
+    {}
   )
 }
 
@@ -328,7 +361,7 @@ export function rejectOnlineOrder(id: string, reason: string) {
       requestId: z.string(),
       status: z.string(),
     }),
-    { reason },
+    { reason }
   )
 }
 
@@ -338,12 +371,12 @@ export function collectOnlineOrder(
     accessToken: string
     amountTendered: string
     idempotencyKey?: string
-  },
+  }
 ) {
   return apiIdempotentMutate(
     `/online-orders/requests/${encodeURIComponent(id)}/collect`,
     CollectOrderResponseSchema,
-    { ...payload },
+    { ...payload }
   )
 }
 
@@ -356,7 +389,7 @@ export function cancelAcceptedOnlineOrder(id: string, reason: string) {
       status: z.string(),
       noShowAt: z.string().nullable().optional(),
     }),
-    { reason },
+    { reason }
   )
 }
 
@@ -369,6 +402,6 @@ export function markOnlineOrderNoShow(id: string) {
       status: z.string(),
       noShowAt: z.string(),
     }),
-    {},
+    {}
   )
 }

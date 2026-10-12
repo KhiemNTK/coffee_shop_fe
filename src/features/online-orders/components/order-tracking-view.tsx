@@ -1,7 +1,17 @@
+import { useTranslation } from 'react-i18next'
 import { useRef, useState } from 'react'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import { ReorderLink } from './reorder-link'
-import { AlertCircle, ArrowLeft, Check, CheckCircle2, Clock, Copy, RefreshCw } from 'lucide-react'
+import {
+  AlertCircle,
+  ArrowLeft,
+  Check,
+  CheckCircle2,
+  Clock,
+  Copy,
+  Download,
+  RefreshCw,
+} from 'lucide-react'
 import { trackOnlineOrder, cancelOnlineOrder } from '../online-orders.api'
 import { formatPrice } from '../../menu/menu.api'
 import { errorMessage } from '../../../shared/api/client'
@@ -27,31 +37,32 @@ export function OrderStatusBadge({
   status: string
   fulfillmentStatus?: string | null
 }) {
+  const { t: translate } = useTranslation()
   if (status === 'CANCELLED') {
-    return <Badge variant="destructive">Đã hủy</Badge>
+    return <Badge variant="destructive">{translate('common.cancelled')}</Badge>
   }
   if (status === 'REJECTED') {
-    return <Badge variant="destructive">Từ chối nhận</Badge>
+    return <Badge variant="destructive">{translate('takeaway.rejected')}</Badge>
   }
   if (status === 'EXPIRED') {
-    return <Badge variant="secondary">Hết hạn duyệt</Badge>
+    return <Badge variant="secondary">{translate('takeaway.expired')}</Badge>
   }
   if (status === 'PENDING') {
-    return <Badge variant="warning">Chờ duyệt</Badge>
+    return <Badge variant="warning">{translate('takeaway.pending')}</Badge>
   }
   if (fulfillmentStatus === 'READY') {
-    return <Badge variant="success">Đã xong - Chờ bạn đến lấy</Badge>
+    return <Badge variant="success">{translate('takeaway.ready')}</Badge>
   }
   if (fulfillmentStatus === 'COLLECTED') {
-    return <Badge variant="success">Hoàn tất nhận hàng</Badge>
+    return <Badge variant="success">{translate('takeaway.collected')}</Badge>
   }
   if (fulfillmentStatus === 'NEEDS_REVIEW')
-    return <Badge variant="warning">Quán đang đối chiếu đơn</Badge>
+    return <Badge variant="warning">{translate('takeaway.needsReview')}</Badge>
   if (fulfillmentStatus === 'PARTIALLY_READY')
-    return <Badge variant="default">Một phần món đã xong</Badge>
+    return <Badge variant="default">{translate('takeaway.partiallyReady')}</Badge>
   return (
     <Badge variant="default" className="bg-sky-600 hover:bg-sky-700 text-white">
-      Đã tiếp nhận - Đang pha chế
+      {translate('takeaway.cooking')}
     </Badge>
   )
 }
@@ -63,25 +74,26 @@ export function OrderStepTimeline({
   status: string
   fulfillmentStatus?: string | null
 }) {
+  const { t: translate } = useTranslation()
   const steps = [
-    { label: 'Gửi đơn', done: true },
+    { label: translate('takeaway.sent'), done: true },
     {
-      label: 'Đã duyệt',
+      label: translate('takeaway.accepted'),
       done: status === 'ACCEPTED' || Boolean(fulfillmentStatus),
     },
     {
-      label: 'Pha chế',
+      label: translate('takeaway.preparing'),
       done:
         fulfillmentStatus === 'PARTIALLY_READY' ||
         fulfillmentStatus === 'READY' ||
         fulfillmentStatus === 'COLLECTED',
     },
     {
-      label: 'Sẵn sàng',
+      label: translate('common.ready'),
       done: fulfillmentStatus === 'READY' || fulfillmentStatus === 'COLLECTED',
     },
     {
-      label: 'Hoàn tất',
+      label: translate('common.complete'),
       done: fulfillmentStatus === 'COLLECTED',
     },
   ]
@@ -137,6 +149,7 @@ export function OrderTrackingView({
   orderAuth: { requestId: string; accessToken: string }
   onNewOrder: () => void
 }) {
+  const { t: translate } = useTranslation()
   const [copied, setCopied] = useState(false)
   const [cancelModalOpen, setCancelModalOpen] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
@@ -203,6 +216,26 @@ export function OrderTrackingView({
   }
 
   const order = trackQuery.isSuccess ? trackQuery.data : undefined
+
+  function downloadReceipt() {
+    if (!order) return
+    const text = [
+      'PHIEU NHAN DON - GIU RIENG TU',
+      `ID: ${orderAuth.requestId}`,
+      `Ma xac thuc: ${orderAuth.accessToken}`,
+      `Gio nhan: ${order.pickupAt ? formatStoreDateTime(order.pickupAt) : 'Nhan ngay sau khi quan xac nhan'}`,
+      ...(order.accessExpiresAt
+        ? [`Het han truy cap: ${formatStoreDateTime(order.accessExpiresAt)}`]
+        : []),
+    ].join('\n')
+    const url = URL.createObjectURL(new Blob([text], { type: 'text/plain;charset=utf-8' }))
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `phieu-nhan-${orderAuth.requestId}.txt`
+    link.click()
+    setTimeout(() => URL.revokeObjectURL(url), 1000)
+  }
+
   const canCancel = Boolean(
     order &&
     (order.status === 'PENDING' ||
@@ -224,7 +257,7 @@ export function OrderTrackingView({
           className="text-stone-600 gap-1.5"
         >
           <ArrowLeft className="h-4 w-4" />
-          Đặt món khác
+          {translate('takeaway.orderAnother')}
         </Button>
 
         <Button
@@ -236,14 +269,14 @@ export function OrderTrackingView({
           className="gap-1.5 text-xs"
         >
           <RefreshCw className={cn('h-3.5 w-3.5', trackQuery.isFetching && 'animate-spin')} />
-          Cập nhật
+          {translate('common.update')}
         </Button>
       </div>
 
       {trackQuery.isLoading && (
         <div className="flex flex-col items-center justify-center py-20 text-muted-foreground gap-3">
           <RefreshCw className="h-6 w-6 animate-spin text-brand-700" />
-          <p className="text-sm">Đang tải thông tin đơn hàng…</p>
+          <p className="text-sm">{translate('takeaway.loadingOrder')}</p>
         </div>
       )}
 
@@ -257,12 +290,50 @@ export function OrderTrackingView({
             <span>{errorMessage(trackQuery.error)}</span>
           </div>
           <Button variant="outline" size="sm" onClick={() => void refresh()}>
-            Thử lại
+            {translate('common.retry')}
           </Button>
         </div>
       )}
 
       {order && <ReorderLink requestId={orderAuth.requestId} accessToken={orderAuth.accessToken} />}
+      {order && (
+        <section
+          aria-label={translate('takeaway.receipt')}
+          className="space-y-3 border-y border-border py-4"
+        >
+          <h2 className="text-base font-semibold">{translate('takeaway.receipt')}</h2>
+          <p className="text-sm">
+            {translate('takeaway.idPrefix')}{' '}
+            <code className="break-all text-xs">{orderAuth.requestId}</code>
+          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button variant="outline" size="sm" onClick={() => void copyCode(orderAuth.requestId)}>
+              <Copy size={16} /> {translate('takeaway.copyId')}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void copyCode(orderAuth.accessToken)}
+            >
+              <Copy size={16} /> {translate('takeaway.copyAccess')}
+            </Button>
+            <Button variant="outline" size="sm" onClick={downloadReceipt}>
+              <Download size={16} /> {translate('takeaway.downloadReceipt')}
+            </Button>
+          </div>
+          <p className="text-xs text-muted-foreground">{translate('takeaway.receiptPrivacy')}</p>
+          {copied && (
+            <p role="status" className="text-sm text-emerald-700">
+              {translate('takeaway.copied')}
+            </p>
+          )}
+          {copyError && (
+            <p role="alert" className="text-sm text-destructive">
+              {translate('takeaway.copyFailed')}
+            </p>
+          )}
+        </section>
+      )}
       {order && (
         <>
           {/* Status Hero Card */}
@@ -271,7 +342,7 @@ export function OrderTrackingView({
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
-                    Trạng thái đơn hàng
+                    {translate('takeaway.orderStatus')}
                   </span>
                   <div className="mt-1.5">
                     <OrderStatusBadge
@@ -284,35 +355,15 @@ export function OrderTrackingView({
                 {/* Pickup Code Display */}
                 <div className="text-right">
                   <span className="text-[11px] font-medium text-muted-foreground block">
-                    Mã nhận món
+                    {translate('takeaway.reference')}
                   </span>
                   <div className="flex items-center gap-1.5 mt-1">
                     <code className="text-sm font-mono font-bold bg-brand-50 text-brand-900 border border-brand-200 px-2 py-0.5 rounded">
                       #{order.requestId.slice(0, 8).toUpperCase()}
                     </code>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => void copyCode(orderAuth.accessToken)}
-                      aria-label="Sao chép mã xác thực"
-                      className="h-7 w-7 p-0"
-                      title="Sao chép Token xác thực"
-                    >
-                      {copied ? (
-                        <Check className="h-3.5 w-3.5 text-emerald-600" />
-                      ) : (
-                        <Copy className="h-3.5 w-3.5" />
-                      )}
-                    </Button>
                   </div>
                 </div>
               </div>
-              {copyError && (
-                <p role="alert" className="text-sm text-destructive">
-                  Không thể sao chép mã xác thực.
-                </p>
-              )}
 
               {/* Step Timeline */}
               <OrderStepTimeline
@@ -325,10 +376,9 @@ export function OrderTrackingView({
                 <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 flex items-start gap-2.5">
                   <Clock className="h-4 w-4 shrink-0 text-amber-600 mt-0.5" />
                   <div>
-                    <strong>Quán đang duyệt đơn của bạn.</strong>
+                    <strong>{translate('takeaway.awaitingShop')}</strong>
                     <p className="mt-1 text-amber-800">
-                      Nhân viên sẽ sớm tiếp nhận và chuyển quầy pha chế. Đơn hàng sẽ tự động hủy nếu
-                      không kịp xác nhận trước {formatStoreDateTime(order.expiresAt)}.
+                      {translate('takeaway.expiresPrefix')} {formatStoreDateTime(order.expiresAt)}.
                     </p>
                   </div>
                 </div>
@@ -339,12 +389,10 @@ export function OrderTrackingView({
                   <CheckCircle2 className="h-6 w-6 text-emerald-600 shrink-0" />
                   <div>
                     <strong className="text-sm uppercase tracking-wide">
-                      MÓN CỦA BẠN ĐÃ SẴN SÀNG!
+                      {translate('takeaway.readyHeading')}
                     </strong>
                     <p className="text-xs text-emerald-800 mt-0.5">
-                      Mời bạn ghé quầy thu ngân, đọc mã{' '}
-                      <strong>#{order.requestId.slice(0, 8).toUpperCase()}</strong> để nhận món và
-                      thanh toán tiền mặt.
+                      {translate('takeaway.readyInstructions')}
                     </p>
                   </div>
                 </div>
@@ -352,30 +400,44 @@ export function OrderTrackingView({
 
               {order.status === 'CANCELLED' && (
                 <div className="p-3.5 bg-destructive/10 border border-destructive/20 rounded-xl text-xs text-destructive space-y-1">
-                  <strong>Đơn hàng đã bị hủy.</strong>
-                  {order.cancellationReason && <p>Lý do: {order.cancellationReason}</p>}
+                  <strong>{translate('takeaway.cancelledSentence')}</strong>
+                  {order.cancellationReason && (
+                    <p>
+                      {translate('common.reasonPrefix')} {order.cancellationReason}
+                    </p>
+                  )}
                 </div>
               )}
 
               {order.status === 'REJECTED' && (
                 <div className="p-3.5 bg-destructive/10 border border-destructive/20 rounded-xl text-xs text-destructive space-y-1">
-                  <strong>Quán không thể tiếp nhận đơn hàng này.</strong>
-                  {order.rejectionReason && <p>Lý do: {order.rejectionReason}</p>}
+                  <strong>{translate('takeaway.rejectedSentence')}</strong>
+                  {order.rejectionReason && (
+                    <p>
+                      {translate('common.reasonPrefix')} {order.rejectionReason}
+                    </p>
+                  )}
                 </div>
               )}
 
               {/* Timing & Pickup details */}
               <div className="grid grid-cols-2 gap-4 pt-3 border-t border-border text-xs">
                 <div>
-                  <span className="text-muted-foreground">Thời gian nhận:</span>
+                  <span className="text-muted-foreground">
+                    {translate('takeaway.pickupTimePrefix')}
+                  </span>
                   <p className="font-semibold text-foreground mt-0.5">
-                    {order.pickupAt ? formatStoreDateTime(order.pickupAt) : 'Lấy sớm nhất có thể'}
+                    {order.pickupAt
+                      ? formatStoreDateTime(order.pickupAt)
+                      : translate('takeaway.asapFull')}
                   </p>
                 </div>
                 <div>
-                  <span className="text-muted-foreground">Hình thức thanh toán:</span>
+                  <span className="text-muted-foreground">
+                    {translate('takeaway.paymentMethod')}
+                  </span>
                   <p className="font-semibold text-foreground mt-0.5">
-                    {order.isPaid ? 'Đã thanh toán' : 'Tiền mặt khi nhận'}
+                    {order.isPaid ? translate('common.paid') : translate('takeaway.cashOnPickup')}
                   </p>
                 </div>
               </div>
@@ -386,7 +448,8 @@ export function OrderTrackingView({
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-base text-brand-900">
-                Chi tiết món đã đặt ({order.items.length})
+                {translate('takeaway.itemsPrefix')}
+                {order.items.length})
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
@@ -411,7 +474,7 @@ export function OrderTrackingView({
               ))}
 
               <div className="flex items-baseline justify-between pt-2 font-bold">
-                <span className="text-sm">Tổng tiền:</span>
+                <span className="text-sm">{translate('common.total')}</span>
                 <span className="text-base text-brand-800">
                   {formatPrice(order.quotedSubtotal)}
                 </span>
@@ -433,7 +496,7 @@ export function OrderTrackingView({
                 onClick={() => void refresh()}
               >
                 <RefreshCw size={16} aria-hidden="true" />
-                Đối chiếu trạng thái đơn
+                {translate('takeaway.reviewStatus')}
               </Button>
             )}
 
@@ -455,7 +518,7 @@ export function OrderTrackingView({
                 disabled={cancelMutation.isPending || reviewRequired || trackQuery.isFetching}
                 className="w-full font-semibold"
               >
-                Hủy đơn hàng này
+                {translate('takeaway.cancelOrder')}
               </Button>
             )}
           </div>
@@ -469,10 +532,10 @@ export function OrderTrackingView({
             maxWidth="sm"
           >
             <div className="p-6 space-y-4">
-              <h3 className="text-lg font-bold text-destructive">Xác nhận hủy đơn hàng?</h3>
-              <p className="text-sm text-muted-foreground">
-                Chỉ có thể hủy khi quán chưa bắt đầu chế biến hoặc in vé bếp.
-              </p>
+              <h3 className="text-lg font-bold text-destructive">
+                {translate('takeaway.cancelHeading')}
+              </h3>
+              <p className="text-sm text-muted-foreground">{translate('takeaway.cancelInfo')}</p>
               {actionError && (
                 <p role="alert" className="text-sm text-destructive">
                   {actionError}
@@ -485,7 +548,7 @@ export function OrderTrackingView({
                   onClick={() => void refresh()}
                 >
                   <RefreshCw size={16} aria-hidden="true" />
-                  Đối chiếu trạng thái đơn
+                  {translate('takeaway.reviewStatus')}
                 </Button>
               )}
               <div className="flex items-center justify-end gap-2.5 pt-2">
@@ -496,7 +559,7 @@ export function OrderTrackingView({
                   onClick={() => setCancelModalOpen(false)}
                   disabled={cancelMutation.isPending}
                 >
-                  Quay lại
+                  {translate('common.back')}
                 </Button>
                 <Button
                   type="button"
@@ -512,7 +575,7 @@ export function OrderTrackingView({
                   }}
                   isLoading={cancelMutation.isPending}
                 >
-                  Xác nhận hủy
+                  {translate('takeaway.confirmCancel')}
                 </Button>
               </div>
             </div>

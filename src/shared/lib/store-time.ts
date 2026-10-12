@@ -1,3 +1,5 @@
+import { displayLocale } from '../i18n/index.js'
+
 // This single-store calendar uses Vietnam time, not the operator's device timezone.
 export const storeTimeZone = 'Asia/Ho_Chi_Minh'
 const offsetMs = 7 * 60 * 60 * 1000
@@ -18,4 +20,4 @@ export function fromStoreLocal(value: string) {
 }
 
 export const formatStoreDateTime = (iso: string) =>
-  new Date(iso).toLocaleString('vi-VN', { timeZone: storeTimeZone, hour12: false })
+  new Date(iso).toLocaleString(displayLocale(), { timeZone: storeTimeZone, hour12: false })

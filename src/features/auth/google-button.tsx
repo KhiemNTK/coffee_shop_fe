@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { useEffect, useRef, useState } from 'react'
 import { RefreshCw } from 'lucide-react'
 import { Button } from '../../shared/ui/button'
@@ -27,8 +28,7 @@ declare global {
 let scriptFlight: Promise<GoogleIdentity> | undefined
 
 function loadGoogle() {
-  if (window.google?.accounts?.id)
-    return Promise.resolve(window.google.accounts.id)
+  if (window.google?.accounts?.id) return Promise.resolve(window.google.accounts.id)
   scriptFlight ??= new Promise<GoogleIdentity>((resolve, reject) => {
     const script = document.createElement('script')
     script.src = 'https://accounts.google.com/gsi/client'
@@ -62,6 +62,7 @@ export function GoogleButton({
   clientId: string
   onCredential: (credential: string) => void
 }) {
+  const { t: translate, i18n } = useTranslation()
   const container = useRef<HTMLDivElement>(null)
   const callback = useRef(onCredential)
   const [failed, setFailed] = useState(false)
@@ -79,15 +80,14 @@ export function GoogleButton({
           client_id: clientId,
           auto_select: false,
           callback: (result) => {
-            if (!cancelled && result.credential)
-              callback.current(result.credential)
+            if (!cancelled && result.credential) callback.current(result.credential)
           },
         })
         api.renderButton(element, {
           theme: 'outline',
           size: 'large',
           text: 'signin_with',
-          locale: 'vi',
+          locale: i18n.resolvedLanguage ?? 'vi',
           width: Math.min(240, element.clientWidth),
         })
       })
@@ -98,14 +98,14 @@ export function GoogleButton({
       cancelled = true
       element?.replaceChildren()
     }
-  }, [clientId, attempt])
+  }, [clientId, attempt, i18n.resolvedLanguage])
   return (
     <div className="min-h-11 space-y-2">
       <div ref={container} className="flex min-h-11 justify-center" />
       {failed && (
         <div className="space-y-2">
           <p role="alert" className="text-sm text-destructive">
-            Chưa kết nối được Google.
+            {translate('auth.googleUnavailable')}
           </p>
           <Button
             type="button"
@@ -117,7 +117,7 @@ export function GoogleButton({
             }}
           >
             <RefreshCw className="h-4 w-4" aria-hidden="true" />
-            Thử lại Google
+            {translate('auth.retryGoogle')}
           </Button>
         </div>
       )}

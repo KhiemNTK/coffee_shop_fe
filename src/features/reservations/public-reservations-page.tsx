@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQuery } from '@tanstack/react-query'
@@ -37,6 +38,7 @@ function savedToken() {
 }
 
 export function PublicReservationsPage() {
+  const { t: translate } = useTranslation()
   const errorRef = useRef<HTMLParagraphElement>(null)
   const uncertainRef = useRef(false)
   const submittingRef = useRef(false)
@@ -157,19 +159,19 @@ export function PublicReservationsPage() {
     data?.status === 'APPROVED' && data.reservationStatus && data.reservationStatus !== 'PENDING'
   const label = reservationFinished
     ? {
-        ARRIVED: 'Đã đón khách vào bàn',
-        CANCELLED: 'Lịch đặt bàn đã hủy',
-        NO_SHOW: 'Lịch đặt bàn đã quá hạn đón khách',
+        ARRIVED: translate('reservation.checkedIn'),
+        CANCELLED: translate('reservation.cancelled'),
+        NO_SHOW: translate('reservation.noShow'),
       }[data.reservationStatus as 'ARRIVED' | 'CANCELLED' | 'NO_SHOW']
     : data?.status === 'PENDING'
-      ? 'Yêu cầu đang chờ quán xác nhận'
+      ? translate('reservation.pending')
       : data?.status === 'APPROVED'
-        ? 'Đã xác nhận lịch đặt bàn'
+        ? translate('reservation.confirmed')
         : data?.status === 'REJECTED'
-          ? 'Yêu cầu chưa được chấp thuận'
+          ? translate('reservation.rejected')
           : data?.status === 'CANCELLED'
-            ? 'Yêu cầu đặt bàn đã hủy'
-            : 'Yêu cầu đã hết hạn'
+            ? translate('reservation.requestCancelled')
+            : translate('reservation.expired')
 
   return (
     <div className="min-h-screen bg-background">
@@ -179,29 +181,31 @@ export function PublicReservationsPage() {
             Coffee Shop
           </Link>
           <nav className="flex flex-wrap gap-4 text-sm">
-            <Link to="/order">Đặt mang đi</Link>
-            <Link to="/">Xem thực đơn</Link>
+            <Link to="/order">{translate('menu.takeaway')}</Link>
+            <Link to="/">{translate('reservation.viewMenu')}</Link>
           </nav>
         </div>
       </header>
       <main className="mx-auto max-w-3xl space-y-6 px-4 py-6 sm:px-6">
         <h1 className="flex items-center gap-2 text-2xl font-semibold">
           <CalendarDays size={24} />
-          Đặt Chỗ Trước Tại Quán
+          {translate('reservation.heading')}
         </h1>
         {activeToken ? (
           <section className="space-y-4 border-t border-border pt-4">
-            <h2 className="text-lg font-semibold">Trạng thái yêu cầu đặt bàn của bạn</h2>
+            <h2 className="text-lg font-semibold">{translate('reservation.requestStatus')}</h2>
             <div className="flex items-start gap-2 rounded-md border border-border p-3">
               <div className="min-w-0 flex-1">
-                <span className="text-sm text-muted-foreground">Mã truy cập cá nhân</span>
+                <span className="text-sm text-muted-foreground">
+                  {translate('reservation.accessCode')}
+                </span>
                 <p className="break-all font-mono text-xs">{activeToken}</p>
               </div>
               <Button
                 variant="ghost"
                 size="sm"
-                aria-label="Sao chép mã truy cập"
-                title="Sao chép mã truy cập"
+                aria-label={translate('reservation.copyAccess')}
+                title={translate('reservation.copyAccess')}
                 onClick={() => {
                   void navigator.clipboard
                     ?.writeText(activeToken)
@@ -214,34 +218,29 @@ export function PublicReservationsPage() {
             </div>
             {copied && (
               <p role="status" className="text-sm">
-                Đã sao chép mã.
+                {translate('reservation.copied')}
               </p>
             )}
             {tracking.isError ? (
               <div role="alert" className="space-y-3 text-sm text-destructive">
                 <p>{errorMessage(tracking.error)}</p>
-                {unconfirmed && (
-                  <p>
-                    Chưa xác nhận được kết quả gửi. Giữ mã truy cập và đối chiếu trước khi tạo yêu
-                    cầu khác.
-                  </p>
-                )}
+                {unconfirmed && <p>{translate('reservation.uncertain')}</p>}
                 <Button
                   variant="outline"
                   disabled={tracking.isFetching}
                   onClick={() => void tracking.refetch()}
                 >
                   <RefreshCw size={16} />
-                  Tải lại trạng thái
+                  {translate('reservation.reloadStatus')}
                 </Button>
                 {pendingPayload && (
                   <Button variant="outline" onClick={() => setActiveToken(null)}>
-                    Quay lại yêu cầu đã gửi
+                    {translate('reservation.backToRequest')}
                   </Button>
                 )}
               </div>
             ) : tracking.isPending ? (
-              <p role="status">Đang tải trạng thái…</p>
+              <p role="status">{translate('reservation.loadingStatus')}</p>
             ) : (
               data && (
                 <>
@@ -250,16 +249,18 @@ export function PublicReservationsPage() {
                   </p>
                   <dl className="grid gap-3 text-sm sm:grid-cols-3">
                     <div>
-                      <dt className="text-muted-foreground">Bắt đầu (Việt Nam)</dt>
+                      <dt className="text-muted-foreground">{translate('reservation.startsAt')}</dt>
                       <dd>{formatReservationDateTime(data.startsAt)}</dd>
                     </div>
                     <div>
-                      <dt className="text-muted-foreground">Kết thúc (Việt Nam)</dt>
+                      <dt className="text-muted-foreground">{translate('reservation.endsAt')}</dt>
                       <dd>{formatReservationDateTime(data.endsAt)}</dd>
                     </div>
                     <div>
-                      <dt className="text-muted-foreground">Số khách</dt>
-                      <dd>{data.guestCount} người</dd>
+                      <dt className="text-muted-foreground">{translate('reservation.guests')}</dt>
+                      <dd>
+                        {data.guestCount} {translate('reservation.people')}
+                      </dd>
                     </div>
                   </dl>
                   {data.status === 'PENDING' && (
@@ -271,7 +272,7 @@ export function PublicReservationsPage() {
                         setCancelOpen(true)
                       }}
                     >
-                      Hủy yêu cầu đặt bàn này
+                      {translate('reservation.cancelRequest')}
                     </Button>
                   )}
                 </>
@@ -282,12 +283,12 @@ export function PublicReservationsPage() {
               disabled={cancel.isPending || (unconfirmed && !tracking.isSuccess)}
               onClick={forget}
             >
-              Đặt thêm yêu cầu khác
+              {translate('reservation.anotherRequest')}
             </Button>
           </section>
         ) : (
           <section className="space-y-6 border-t border-border pt-4">
-            <h2 className="text-lg font-semibold">Điền thông tin đặt bàn</h2>
+            <h2 className="text-lg font-semibold">{translate('reservation.details')}</h2>
             <form
               className="space-y-4"
               onSubmit={(event) => {
@@ -316,9 +317,7 @@ export function PublicReservationsPage() {
                     start.getTime() <= Date.now() ||
                     start.getTime() > Date.now() + 30 * 86_400_000
                   ) {
-                    setFormError(
-                      'Kiểm tra tên, số điện thoại, số khách (1–50) và ngày đến trong 30 ngày tới.',
-                    )
+                    setFormError(translate('reservation.validation'))
                     requestAnimationFrame(() => errorRef.current?.focus())
                     return
                   }
@@ -345,9 +344,7 @@ export function PublicReservationsPage() {
                   create.mutate({ ...payload, turnstileToken: captcha || undefined })
                 } catch {
                   submittingRef.current = false
-                  setFormError(
-                    'Kiểm tra ngày giờ và cho phép lưu phiên trên trình duyệt trước khi gửi yêu cầu.',
-                  )
+                  setFormError(translate('reservation.storageValidation'))
                   requestAnimationFrame(() => errorRef.current?.focus())
                 }
               }}
@@ -360,13 +357,13 @@ export function PublicReservationsPage() {
               <fieldset disabled={locked} className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-1">
                   <label htmlFor="reservation-name" className="text-sm font-medium">
-                    Họ và tên của bạn
+                    {translate('reservation.customerName')}
                   </label>
                   <Input
                     id="reservation-name"
                     required
                     maxLength={120}
-                    placeholder="Nguyễn Văn A"
+                    placeholder={translate('reservation.nameExample')}
                     value={customerName}
                     onChange={(event) => setCustomerName(event.target.value)}
                     autoComplete="name"
@@ -374,7 +371,7 @@ export function PublicReservationsPage() {
                 </div>
                 <div className="space-y-1">
                   <label htmlFor="reservation-phone" className="text-sm font-medium">
-                    Số điện thoại liên hệ
+                    {translate('reservation.contactPhone')}
                   </label>
                   <Input
                     id="reservation-phone"
@@ -390,7 +387,7 @@ export function PublicReservationsPage() {
                 </div>
                 <div className="space-y-1">
                   <label htmlFor="reservation-start" className="text-sm font-medium">
-                    Ngày và giờ đến (Việt Nam)
+                    {translate('reservation.arrival')}
                   </label>
                   <Input
                     id="reservation-start"
@@ -402,7 +399,7 @@ export function PublicReservationsPage() {
                 </div>
                 <div className="space-y-1">
                   <label htmlFor="reservation-duration" className="text-sm font-medium">
-                    Thời lượng dự kiến
+                    {translate('reservation.duration')}
                   </label>
                   <select
                     id="reservation-duration"
@@ -410,16 +407,16 @@ export function PublicReservationsPage() {
                     onChange={(event) => setDurationHours(Number(event.target.value))}
                     className="h-10 w-full rounded-md border border-input bg-card px-3 text-sm"
                   >
-                    <option value={1}>1 giờ</option>
-                    <option value={1.5}>1 giờ 30 phút</option>
-                    <option value={2}>2 giờ</option>
-                    <option value={3}>3 giờ</option>
-                    <option value={4}>4 giờ</option>
+                    <option value={1}>{translate('reservation.oneHour')}</option>
+                    <option value={1.5}>{translate('reservation.ninetyMinutes')}</option>
+                    <option value={2}>{translate('reservation.twoHours')}</option>
+                    <option value={3}>{translate('reservation.threeHours')}</option>
+                    <option value={4}>{translate('reservation.fourHours')}</option>
                   </select>
                 </div>
                 <div className="space-y-1">
                   <label htmlFor="reservation-guests" className="text-sm font-medium">
-                    Số lượng khách
+                    {translate('pos.guestCount')}
                   </label>
                   <Input
                     id="reservation-guests"
@@ -434,12 +431,12 @@ export function PublicReservationsPage() {
                 </div>
                 <div className="space-y-1">
                   <label htmlFor="reservation-notes" className="text-sm font-medium">
-                    Yêu cầu đặc biệt
+                    {translate('reservation.specialRequests')}
                   </label>
                   <Input
                     id="reservation-notes"
                     maxLength={500}
-                    placeholder="Ví dụ: Ghế em bé, bàn gần cửa sổ..."
+                    placeholder={translate('reservation.noteExample')}
                     value={notes}
                     onChange={(event) => setNotes(event.target.value)}
                   />
@@ -447,7 +444,7 @@ export function PublicReservationsPage() {
               </fieldset>
               {unavailable && (
                 <p role="alert" className="text-sm text-destructive">
-                  Đặt bàn trực tuyến chưa sẵn sàng.
+                  {translate('reservation.unavailable')}
                 </p>
               )}
               {authConfig.turnstileSiteKey && (
@@ -460,14 +457,14 @@ export function PublicReservationsPage() {
               )}
               {pendingPayload && create.isError && (
                 <div className="space-y-2 text-sm">
-                  <p>Chưa rõ kết quả gửi. Lần gửi lại giữ nguyên thông tin và mã yêu cầu.</p>
+                  <p>{translate('reservation.retryUncertain')}</p>
                   <Button
                     type="button"
                     variant="outline"
                     onClick={() => setActiveToken(pendingPayload.clientRequestToken!)}
                   >
                     <Search size={16} />
-                    Đối chiếu yêu cầu
+                    {translate('reservation.reviewRequest')}
                   </Button>
                 </div>
               )}
@@ -480,10 +477,10 @@ export function PublicReservationsPage() {
                 }
               >
                 {create.isPending
-                  ? 'Đang gửi yêu cầu…'
+                  ? translate('reservation.submitting')
                   : pendingPayload
-                    ? 'Gửi lại yêu cầu đã gửi'
-                    : 'Gửi yêu cầu đặt bàn ngay'}
+                    ? translate('reservation.resend')
+                    : translate('reservation.submit')}
               </Button>
             </form>
             <form
@@ -493,7 +490,7 @@ export function PublicReservationsPage() {
                 if (locked) return
                 const token = tokenInput.trim()
                 if (!validToken(token)) {
-                  setFormError('Mã truy cập phải gồm đúng 43 ký tự hợp lệ.')
+                  setFormError(translate('reservation.invalidAccess'))
                   return
                 }
                 try {
@@ -505,7 +502,7 @@ export function PublicReservationsPage() {
               }}
             >
               <label htmlFor="reservation-token" className="text-sm font-medium">
-                Tra cứu bằng mã truy cập
+                {translate('reservation.lookupByAccess')}
               </label>
               <div className="flex gap-2">
                 <Input
@@ -518,7 +515,7 @@ export function PublicReservationsPage() {
                 />
                 <Button type="submit" variant="outline" disabled={locked}>
                   <Search size={16} />
-                  Tra cứu
+                  {translate('reservation.lookup')}
                 </Button>
               </div>
             </form>
@@ -532,7 +529,7 @@ export function PublicReservationsPage() {
             if (!cancel.isPending) setCancelOpen(false)
           }}
         >
-          <DialogTitle>Hủy yêu cầu đặt bàn?</DialogTitle>
+          <DialogTitle>{translate('reservation.cancelHeading')}</DialogTitle>
           {cancel.isError && (
             <p role="alert" className="text-sm text-destructive">
               {errorMessage(cancel.error)}
@@ -544,7 +541,7 @@ export function PublicReservationsPage() {
               disabled={cancel.isPending}
               onClick={() => setCancelOpen(false)}
             >
-              Giữ yêu cầu
+              {translate('reservation.keepRequest')}
             </Button>
             {cancel.isError ? (
               <Button
@@ -560,7 +557,7 @@ export function PublicReservationsPage() {
                 }}
               >
                 <RefreshCw size={16} />
-                Đối chiếu trạng thái
+                {translate('reservation.checkStatus')}
               </Button>
             ) : (
               <Button
@@ -568,7 +565,9 @@ export function PublicReservationsPage() {
                 disabled={cancel.isPending}
                 onClick={() => cancel.mutate()}
               >
-                {cancel.isPending ? 'Đang hủy…' : 'Xác nhận hủy yêu cầu'}
+                {cancel.isPending
+                  ? translate('reservation.cancelling')
+                  : translate('reservation.confirmCancel')}
               </Button>
             )}
           </DialogFooter>

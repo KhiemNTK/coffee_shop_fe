@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { useId, useRef, useState, type FormEvent } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import { Check, RefreshCw } from 'lucide-react'
@@ -35,16 +36,19 @@ export function OrderReviewDialog({
   error: string | null
   onReview: () => void
 }) {
+  const { t: translate } = useTranslation()
   const [reason, setReason] = useState('')
   const id = useId()
-  const title = { reject: 'Từ chối đơn', cancel: 'Hủy đơn', 'no-show': 'Ghi nhận khách vắng mặt' }[
-    kind
-  ]
+  const title = {
+    reject: translate('takeaway.reject'),
+    cancel: translate('takeaway.cancel'),
+    'no-show': translate('takeaway.noShow'),
+  }[kind]
   return (
     <Dialog open onClose={onClose}>
       <DialogHeader>
         <DialogTitle className="break-words">
-          {title} của {name}?
+          {title} {translate('takeaway.of')} {name}?
         </DialogTitle>
       </DialogHeader>
       <form
@@ -57,7 +61,7 @@ export function OrderReviewDialog({
       >
         {kind !== 'no-show' ? (
           <label htmlFor={id} className="block space-y-2">
-            Lý do
+            {translate('common.reason')}
             <Textarea
               id={id}
               required
@@ -69,7 +73,7 @@ export function OrderReviewDialog({
             />
           </label>
         ) : (
-          <p className="text-sm">Đơn sẽ bị hủy; món đã chế biến được ghi nhận hao hụt.</p>
+          <p className="text-sm">{translate('takeaway.wasteWarning')}</p>
         )}
         {error && (
           <p role="alert" className="text-sm text-destructive">
@@ -79,12 +83,12 @@ export function OrderReviewDialog({
         {blocked && error && (
           <Button type="button" variant="outline" onClick={onReview}>
             <RefreshCw size={16} aria-hidden="true" />
-            Đối chiếu danh sách
+            {translate('takeaway.reviewList')}
           </Button>
         )}
         <DialogFooter>
           <Button type="button" variant="outline" disabled={isPending} onClick={onClose}>
-            Quay lại
+            {translate('common.back')}
           </Button>
           <Button
             type="submit"
@@ -92,7 +96,7 @@ export function OrderReviewDialog({
             className="h-auto min-h-10 whitespace-normal"
             disabled={isPending || blocked || (kind !== 'no-show' && reason.trim().length < 2)}
           >
-            {isPending ? 'Đang xử lý…' : `Xác nhận ${title.toLowerCase()}`}
+            {isPending ? translate('common.processing') : `Xác nhận ${title.toLowerCase()}`}
           </Button>
         </DialogFooter>
       </form>
@@ -111,6 +115,7 @@ export function CollectOrderModal({
   onSuccess: () => void
   onSettled: () => void
 }) {
+  const { t: translate } = useTranslation()
   const id = useId()
   const flight = useRef(false)
   const errorRef = useRef<HTMLParagraphElement>(null)
@@ -169,11 +174,11 @@ export function CollectOrderModal({
     if (!payload) {
       const token = accessToken.trim().toLowerCase()
       if (!/^[0-9a-f]{64}$/.test(token)) {
-        showError('Mã xác thực phải gồm 64 ký tự hex.')
+        showError(translate('takeaway.invalidAccess'))
         return
       }
       if (!validAmount || change < 0n) {
-        showError('Tiền khách đưa phải hợp lệ và không nhỏ hơn tổng đơn.')
+        showError(translate('takeaway.invalidCash'))
         return
       }
       payload = {
@@ -191,46 +196,49 @@ export function CollectOrderModal({
   return (
     <Dialog open onClose={mutation.isSuccess ? onSuccess : close} maxWidth="sm">
       <DialogHeader>
-        <DialogTitle>Bàn giao món & Thu tiền mặt</DialogTitle>
+        <DialogTitle>{translate('takeaway.cashHeading')}</DialogTitle>
         <DialogDescription className="break-words">
           {order.pickupName} ({order.phoneNumber})
         </DialogDescription>
       </DialogHeader>
       {mutation.isSuccess ? (
         <div className="space-y-3">
-          <p role="status">Đã thu tiền và bàn giao. Hóa đơn {mutation.data.invoiceNumber}</p>
+          <p role="status">
+            {translate('takeaway.collectedInvoice')} {mutation.data.invoiceNumber}
+          </p>
           <dl className="space-y-2 text-sm">
             <div className="flex flex-wrap justify-between gap-2">
-              <dt>Tổng thanh toán</dt>
+              <dt>{translate('takeaway.totalDue')}</dt>
               <dd>{formatPrice(mutation.data.totalAmount)}</dd>
             </div>
             <div className="flex flex-wrap justify-between gap-2">
-              <dt>Tiền khách đưa</dt>
+              <dt>{translate('takeaway.cashReceived')}</dt>
               <dd>
                 {mutation.data.amountTendered == null
-                  ? 'Chưa xác nhận'
+                  ? translate('takeaway.unconfirmed')
                   : formatPrice(mutation.data.amountTendered)}
               </dd>
             </div>
             <div className="flex flex-wrap justify-between gap-2">
-              <dt>Tiền thối lại</dt>
+              <dt>{translate('takeaway.change')}</dt>
               <dd>
                 {mutation.data.changeAmount == null
-                  ? 'Chưa xác nhận'
+                  ? translate('takeaway.unconfirmed')
                   : formatPrice(mutation.data.changeAmount)}
               </dd>
             </div>
           </dl>
-          <Button onClick={onSuccess}>Hoàn tất</Button>
+          <Button onClick={onSuccess}>{translate('common.complete')}</Button>
         </div>
       ) : (
         <form className="space-y-4" onSubmit={submit}>
           <p className="text-sm">
-            Cần thanh toán: <strong>{formatPrice(order.quotedSubtotal)}</strong>
+            {translate('takeaway.amountDuePrefix')}{' '}
+            <strong>{formatPrice(order.quotedSubtotal)}</strong>
           </p>
           <fieldset disabled={mutation.isPending || Boolean(submitted)} className="space-y-3">
             <label htmlFor={`${id}-token`} className="block space-y-1">
-              Mã xác thực khách hàng
+              {translate('takeaway.customerAccess')}
               <Input
                 id={`${id}-token`}
                 type="password"
@@ -242,7 +250,7 @@ export function CollectOrderModal({
               />
             </label>
             <label htmlFor={`${id}-amount`} className="block space-y-1">
-              Tiền khách đưa (VNĐ)
+              {translate('takeaway.cashInput')}
               <Input
                 id={`${id}-amount`}
                 type="number"
@@ -255,7 +263,8 @@ export function CollectOrderModal({
             </label>
           </fieldset>
           <p className="text-sm">
-            Dự kiến tiền thối: {formatPrice(decimalAmount(change > 0n ? change : 0n))}
+            {translate('takeaway.estimatedChange')}{' '}
+            {formatPrice(decimalAmount(change > 0n ? change : 0n))}
           </p>
           {error && (
             <p ref={errorRef} tabIndex={-1} role="alert" className="text-sm text-destructive">
@@ -266,8 +275,8 @@ export function CollectOrderModal({
             <>
               <p className="text-sm">
                 {resolved
-                  ? 'Đơn đã kết thúc trên hệ thống. Đối chiếu hóa đơn trước khi giao hoặc thu tiền thêm.'
-                  : 'Chưa xác nhận kết quả. Giữ nguyên nội dung để kiểm tra lại lần thu tiền này.'}
+                  ? translate('takeaway.endedWarning')
+                  : translate('takeaway.cashUncertain')}
               </p>
               <Button
                 type="button"
@@ -282,7 +291,7 @@ export function CollectOrderModal({
                 }}
               >
                 <RefreshCw size={16} aria-hidden="true" />
-                Đối chiếu trạng thái đơn
+                {translate('takeaway.reviewStatus')}
               </Button>
             </>
           )}
@@ -295,7 +304,7 @@ export function CollectOrderModal({
               }
               onClick={close}
             >
-              Quay lại
+              {translate('common.back')}
             </Button>
             <Button
               type="submit"
@@ -304,10 +313,10 @@ export function CollectOrderModal({
             >
               <Check size={16} aria-hidden="true" className="shrink-0" />
               {mutation.isPending
-                ? 'Đang xử lý…'
+                ? translate('common.processing')
                 : submitted
-                  ? 'Kiểm tra lại cùng lần thu tiền'
-                  : 'Xác nhận thu tiền & Giao'}
+                  ? translate('takeaway.retryCash')
+                  : translate('takeaway.confirmCollect')}
             </Button>
           </DialogFooter>
         </form>

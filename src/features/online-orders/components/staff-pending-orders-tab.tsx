@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { Check, Clock, Package, Phone, User } from 'lucide-react'
 import { type PendingOrder } from '../online-orders.api'
 import { formatPrice } from '../../menu/menu.api'
@@ -42,10 +43,11 @@ export function StaffPendingOrdersTab({
   onAccept,
   onReject,
 }: StaffPendingOrdersTabProps) {
+  const { t: translate } = useTranslation()
   if (isLoading) {
     return (
       <div className="py-12 text-center text-sm text-[#68776f]">
-        Đang tải danh sách đơn chờ duyệt…
+        {translate('takeaway.loadingPending')}
       </div>
     )
   }
@@ -55,7 +57,7 @@ export function StaffPendingOrdersTab({
       <div role="alert" className="flex flex-wrap items-center gap-3 text-sm text-destructive p-4">
         <span>{errorMessage(error)}</span>
         <Button variant="link" onClick={onRefetch} className="text-red-700 font-semibold">
-          Thử lại
+          {translate('common.retry')}
         </Button>
       </div>
     )
@@ -65,9 +67,7 @@ export function StaffPendingOrdersTab({
     return (
       <div className="py-8 text-center text-muted-foreground">
         <Package size={36} className="mx-auto mb-3 text-[#9ba8a0]" />
-        <p className="text-base font-semibold text-[#1a2723]">
-          Không có đơn hàng nào đang chờ duyệt
-        </p>
+        <p className="text-base font-semibold text-[#1a2723]">{translate('takeaway.noPending')}</p>
       </div>
     )
   }
@@ -97,14 +97,16 @@ export function StaffPendingOrdersTab({
 
                 <Badge variant={isUrgent ? 'destructive' : 'warning'}>
                   <Clock size={11} />
-                  Hạn: {formatStoreDateTime(order.expiresAt)}
+                  {translate('takeaway.deadlinePrefix')} {formatStoreDateTime(order.expiresAt)}
                 </Badge>
               </div>
 
               {/* Pickup Time info */}
               <div className="mt-3 rounded-md bg-[#f2f6f3] px-3 py-1.5 text-xs text-[#202d29]">
-                <span className="font-semibold">Thời gian nhận: </span>
-                {order.pickupAt ? formatStoreDateTime(order.pickupAt) : 'Sớm nhất'}
+                <span className="font-semibold">{translate('takeaway.pickupTimePrefix')} </span>
+                {order.pickupAt
+                  ? formatStoreDateTime(order.pickupAt)
+                  : translate('takeaway.asapShort')}
               </div>
             </CardHeader>
 
@@ -127,7 +129,7 @@ export function StaffPendingOrdersTab({
               </div>
 
               <div className="flex justify-between items-baseline border-t border-dashed border-[#dce5df] pt-2">
-                <span className="text-xs text-[#68776f]">Tổng tiền:</span>
+                <span className="text-xs text-[#68776f]">{translate('common.total')}</span>
                 <strong className="text-base text-[#174f3f]">
                   {formatPrice(order.quotedSubtotal)}
                 </strong>
@@ -142,7 +144,7 @@ export function StaffPendingOrdersTab({
                 disabled={!canReview || isBlocked}
                 className="text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700"
               >
-                Từ chối
+                {translate('takeaway.rejectShort')}
               </Button>
 
               <Button
@@ -153,7 +155,7 @@ export function StaffPendingOrdersTab({
                 isLoading={isAcceptPending}
               >
                 <Check size={14} />
-                Duyệt đơn
+                {translate('takeaway.approve')}
               </Button>
             </CardFooter>
           </Card>

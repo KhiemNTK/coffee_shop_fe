@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { AlertCircle, Ban, DollarSign, Package, Phone, UserX } from 'lucide-react'
 import { type FulfillmentOrder } from '../online-orders.api'
 import { formatPrice } from '../../menu/menu.api'
@@ -47,6 +48,7 @@ export function StaffFulfillmentOrdersTab({
   isNoShowPending,
   onCancel,
 }: StaffFulfillmentOrdersTabProps) {
+  const { t: translate } = useTranslation()
   return (
     <div className="space-y-4">
       {/* Filter Bar */}
@@ -58,17 +60,19 @@ export function StaffFulfillmentOrdersTab({
             onChange={(e) => setOverdueOnly(e.target.checked)}
             className="rounded border-[#bccdc3] text-[#174f3f] focus:ring-[#174f3f]"
           />
-          <span>Chỉ hiển thị đơn trễ hẹn</span>
+          <span>{translate('takeaway.overdueOnly')}</span>
         </label>
 
         {!isError && !isLoading && totalItems !== undefined && (
-          <span className="text-muted-foreground">Tổng: {totalItems} đơn đang xử lý</span>
+          <span className="text-muted-foreground">
+            {translate('common.totalShort')} {totalItems} {translate('takeaway.processingOrders')}
+          </span>
         )}
       </div>
 
       {isLoading && (
         <div className="py-12 text-center text-sm text-[#68776f]">
-          Đang tải danh sách đơn chế biến & bàn giao…
+          {translate('takeaway.loadingFulfillment')}
         </div>
       )}
 
@@ -80,7 +84,7 @@ export function StaffFulfillmentOrdersTab({
           <AlertCircle size={16} />
           <span>{errorMessage(error)}</span>
           <Button variant="link" onClick={onRefetch} className="text-red-700 font-semibold">
-            Thử lại
+            {translate('common.retry')}
           </Button>
         </div>
       )}
@@ -89,7 +93,7 @@ export function StaffFulfillmentOrdersTab({
         <div className="py-8 text-center text-muted-foreground">
           <Package size={36} className="mx-auto mb-3 text-[#9ba8a0]" />
           <p className="text-base font-semibold text-[#1a2723]">
-            Không có đơn hàng nào đang chờ bàn giao
+            {translate('takeaway.noPendingPickup')}
           </p>
         </div>
       )}
@@ -122,25 +126,29 @@ export function StaffFulfillmentOrdersTab({
 
                     <div className="flex flex-col items-end gap-1">
                       {isReady ? (
-                        <Badge variant="success">Sẵn sàng lấy</Badge>
+                        <Badge variant="success">{translate('takeaway.readyShort')}</Badge>
                       ) : (
                         <Badge variant="secondary">
                           {order.fulfillmentStatus === 'NEEDS_REVIEW'
-                            ? 'Cần đối chiếu'
+                            ? translate('takeaway.reviewRequired')
                             : order.fulfillmentStatus === 'PARTIALLY_READY'
-                              ? 'Một phần đã xong'
-                              : 'Đang chế biến'}
+                              ? translate('takeaway.partiallyReadyShort')
+                              : translate('takeaway.cookingShort')}
                         </Badge>
                       )}
 
-                      {order.isOverdue && <Badge variant="destructive">Trễ hẹn</Badge>}
+                      {order.isOverdue && (
+                        <Badge variant="destructive">{translate('takeaway.overdue')}</Badge>
+                      )}
                     </div>
                   </div>
 
                   {/* Pickup Timing */}
                   <div className="mt-3 rounded-md bg-[#f8faf9] px-3 py-1.5 text-xs text-[#202d29]">
-                    <span className="font-semibold">Giờ hẹn: </span>
-                    {order.pickupAt ? formatStoreDateTime(order.pickupAt) : 'Sớm nhất'}
+                    <span className="font-semibold">{translate('takeaway.scheduledPrefix')} </span>
+                    {order.pickupAt
+                      ? formatStoreDateTime(order.pickupAt)
+                      : translate('takeaway.asapShort')}
                   </div>
                 </CardHeader>
 
@@ -166,11 +174,11 @@ export function StaffFulfillmentOrdersTab({
                         >
                           {
                             {
-                              PENDING: 'Chờ làm',
-                              COOKING: 'Đang làm',
-                              READY: 'Đã xong',
-                              SERVED: 'Đã giao',
-                              CANCELLED: 'Đã hủy',
+                              PENDING: translate('pos.pending'),
+                              COOKING: translate('pos.cooking'),
+                              READY: translate('pos.ready'),
+                              SERVED: translate('takeaway.served'),
+                              CANCELLED: translate('common.cancelled'),
                             }[item.serveStatus]
                           }
                         </Badge>
@@ -179,7 +187,9 @@ export function StaffFulfillmentOrdersTab({
                   </div>
 
                   <div className="flex justify-between items-baseline border-t border-dashed border-[#dce5df] pt-2">
-                    <span className="text-xs text-[#68776f]">Thu tiền mặt:</span>
+                    <span className="text-xs text-[#68776f]">
+                      {translate('takeaway.cashCollectPrefix')}
+                    </span>
                     <strong className="text-base text-[#174f3f]">
                       {formatPrice(order.quotedSubtotal)}
                     </strong>
@@ -195,7 +205,7 @@ export function StaffFulfillmentOrdersTab({
                     className="w-full"
                   >
                     <DollarSign size={16} />
-                    Khách nhận & Thu tiền
+                    {translate('takeaway.collectCash')}
                   </Button>
 
                   <div className="flex w-full flex-wrap justify-end gap-3 text-xs">
@@ -208,7 +218,7 @@ export function StaffFulfillmentOrdersTab({
                         className="h-auto p-0 text-amber-700 hover:text-amber-800"
                       >
                         <UserX size={13} />
-                        Báo vắng mặt (No-show)
+                        {translate('takeaway.reportNoShow')}
                       </Button>
                     )}
 
@@ -221,7 +231,7 @@ export function StaffFulfillmentOrdersTab({
                         className="h-auto p-0 text-red-600 hover:text-red-700"
                       >
                         <Ban size={13} />
-                        Hủy đơn
+                        {translate('takeaway.cancel')}
                       </Button>
                     )}
                   </div>

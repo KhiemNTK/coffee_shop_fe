@@ -34,13 +34,7 @@ export const invoiceSchema = z.object({
   amountTendered: moneySchema.nullable().optional(),
   changeAmount: moneySchema.nullable().optional(),
   paymentMethod: z.enum(['CASH', 'CARD', 'TRANSFER']),
-  paymentStatus: z.enum([
-    'UNPAID',
-    'PAID',
-    'VOIDED',
-    'PARTIALLY_REFUNDED',
-    'REFUNDED',
-  ]),
+  paymentStatus: z.enum(['UNPAID', 'PAID', 'VOIDED', 'PARTIALLY_REFUNDED', 'REFUNDED']),
   createdAt: z.string(),
   updatedAt: z.string(),
   orderSessionId: z.string(),
@@ -91,16 +85,10 @@ export const invoicesResponseSchema = z.object({
 export const paymentAttemptSchema = z.object({
   id: z.string(),
   invoiceId: z.string(),
-  provider: z.enum(['VNPAY', 'MOMO']),
+  provider: z.enum(['VNPAY', 'MOMO', 'PAYOS']),
   amount: moneySchema,
   merchantReference: z.string(),
-  status: z.enum([
-    'PENDING',
-    'SUCCEEDED',
-    'FAILED',
-    'EXPIRED',
-    'REQUIRES_REVIEW',
-  ]),
+  status: z.enum(['PENDING', 'SUCCEEDED', 'FAILED', 'EXPIRED', 'REQUIRES_REVIEW']),
   providerCreatedAt: z.string(),
   expiresAt: z.string(),
   paymentUrl: z
@@ -124,9 +112,7 @@ export const paymentAttemptsResponseSchema = z.object({
 export type PaymentStatus = z.infer<typeof invoiceSchema>['paymentStatus']
 export type PaymentMethod = z.infer<typeof invoiceSchema>['paymentMethod']
 export type PaymentProvider = z.infer<typeof paymentAttemptSchema>['provider']
-export type PaymentAttemptStatus = z.infer<
-  typeof paymentAttemptSchema
->['status']
+export type PaymentAttemptStatus = z.infer<typeof paymentAttemptSchema>['status']
 export type InvoiceItem = z.infer<typeof invoiceItemSchema>
 export type Invoice = z.infer<typeof invoiceSchema>
 export type InvoicesResponse = z.infer<typeof invoicesResponseSchema>
@@ -137,12 +123,12 @@ export function getPaymentProviders(signal: AbortSignal) {
     '/payments/providers',
     z.array(
       z.object({
-        provider: z.enum(['VNPAY', 'MOMO']),
+        provider: z.enum(['VNPAY', 'MOMO', 'PAYOS']),
         configured: z.boolean(),
-      }),
+      })
     ),
     signal,
-    true,
+    true
   )
 }
 
@@ -175,41 +161,26 @@ export interface UpdateInvoicePaymentPayload {
 
 export async function getInvoices(
   filters: InvoicesFilters = {},
-  signal?: AbortSignal,
+  signal?: AbortSignal
 ): Promise<InvoicesResponse> {
   const params = new URLSearchParams()
   if (filters.page) params.set('page', String(filters.page))
-  if (filters.itemPerPage)
-    params.set('itemPerPage', String(filters.itemPerPage))
+  if (filters.itemPerPage) params.set('itemPerPage', String(filters.itemPerPage))
   if (filters.paymentStatus) params.set('paymentStatus', filters.paymentStatus)
   if (filters.paymentMethod) params.set('paymentMethod', filters.paymentMethod)
   if (filters.createdFrom) params.set('createdFrom', filters.createdFrom)
   if (filters.createdTo) params.set('createdTo', filters.createdTo)
-  if (filters.orderSessionId)
-    params.set('orderSessionId', filters.orderSessionId)
+  if (filters.orderSessionId) params.set('orderSessionId', filters.orderSessionId)
   if (filters.employeeId) params.set('employeeId', filters.employeeId)
   if (filters.shiftId) params.set('shiftId', filters.shiftId)
 
   const query = params.toString()
   const path = query ? `/invoices?${query}` : '/invoices'
-  return apiGet(
-    path,
-    invoicesResponseSchema,
-    signal ?? new AbortController().signal,
-    true,
-  )
+  return apiGet(path, invoicesResponseSchema, signal ?? new AbortController().signal, true)
 }
 
-export async function getInvoiceById(
-  id: string,
-  signal?: AbortSignal,
-): Promise<Invoice> {
-  return apiGet(
-    `/invoices/${id}`,
-    invoiceSchema,
-    signal ?? new AbortController().signal,
-    true,
-  )
+export async function getInvoiceById(id: string, signal?: AbortSignal): Promise<Invoice> {
+  return apiGet(`/invoices/${id}`, invoiceSchema, signal ?? new AbortController().signal, true)
 }
 
 export async function voidInvoice(id: string): Promise<Invoice> {
@@ -218,38 +189,39 @@ export async function voidInvoice(id: string): Promise<Invoice> {
 
 export async function updateInvoicePayment(
   id: string,
-  payload: UpdateInvoicePaymentPayload,
+  payload: UpdateInvoicePaymentPayload
 ): Promise<Invoice> {
   return apiMutate(`/invoices/${id}/payment`, 'PATCH', invoiceSchema, payload)
 }
 
 export async function createPaymentAttempt(
   invoiceId: string,
-  payload: CreatePaymentAttemptPayload,
+  payload: CreatePaymentAttemptPayload
 ): Promise<PaymentAttempt> {
   return apiIdempotentMutate(
     `/invoices/${invoiceId}/payment-attempts`,
     paymentAttemptSchema,
     { ...payload },
-    { timeoutMs: payload.provider === 'MOMO' ? 35_000 : 10_000 },
+    {
+      timeoutMs:
+        payload.provider === 'MOMO' ? 35_000 : payload.provider === 'PAYOS' ? 25_000 : 10_000,
+    }
   )
 }
 
 export async function getInvoicePaymentAttempts(
   invoiceId: string,
-  signal?: AbortSignal,
+  signal?: AbortSignal
 ): Promise<{ list: PaymentAttempt[]; totalItems: number; totalPages: number }> {
   return apiGet(
     `/invoices/${invoiceId}/payment-attempts`,
     paymentAttemptsResponseSchema,
     signal ?? new AbortController().signal,
-    true,
+    true
   )
 }
 
-export async function reconcilePaymentAttempt(
-  attemptId: string,
-): Promise<PaymentAttempt> {
+export async function reconcilePaymentAttempt(attemptId: string): Promise<PaymentAttempt> {
   return apiMutate(
     `/payment-attempts/${attemptId}/reconcile`,
     'POST',
@@ -257,7 +229,7 @@ export async function reconcilePaymentAttempt(
     {},
     undefined,
     true,
-    35_000,
+    35_000
   )
 }
 
@@ -265,9 +237,13 @@ export function getPaymentAttempt(id: string, signal?: AbortSignal) {
   return apiGet(`/payment-attempts/${id}`, paymentAttemptSchema, signal, true)
 }
 
+export function recoverPaymentLink(attemptId: string) {
+  return apiMutate(`/payment-attempts/${attemptId}/payment-link`, 'POST', paymentAttemptSchema, {})
+}
+
 export async function createUnpaidInvoice(
   orderSessionId: string,
-  options: { orderItemIds?: string[]; promotionId?: string | null } = {},
+  options: { orderItemIds?: string[]; promotionId?: string | null } = {}
 ): Promise<Invoice> {
   return apiMutate('/invoices', 'POST', invoiceSchema, {
     orderSessionId,

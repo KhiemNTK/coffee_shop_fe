@@ -1,11 +1,14 @@
-import { decimalAmount, minorAmount } from './money'
+import { decimalAmount, minorAmount } from './money.js'
+import { i18n, currentLanguage, displayLocale } from '../i18n/index.js'
+import { storeTimeZone } from './store-time.js'
 
-const integerFormatter = new Intl.NumberFormat('vi-VN')
+const integerFormatters = { vi: new Intl.NumberFormat('vi-VN'), en: new Intl.NumberFormat('en-GB') }
 
 /**
  * Format currency in VND with exact decimal support (comma separator) and BigInt safety
  */
 export function formatVnd(value: string | number | bigint | null | undefined): string {
+  const integerFormatter = integerFormatters[currentLanguage()]
   if (value === null || value === undefined || value === '') return '0 ₫'
   const str = typeof value === 'string' ? value.trim() : String(value)
   if (!str) return '0 ₫'
@@ -14,7 +17,9 @@ export function formatVnd(value: string | number | bigint | null | undefined): s
   const [integer = '0', fraction = ''] = (negative ? str.slice(1) : str).split('.')
   try {
     const formattedInt = integerFormatter.format(BigInt(integer || '0'))
-    const decimals = /[1-9]/.test(fraction) ? `,${fraction.padEnd(2, '0')}` : ''
+    const decimals = /[1-9]/.test(fraction)
+      ? `${currentLanguage() === 'en' ? '.' : ','}${fraction.padEnd(2, '0')}`
+      : ''
     return `${negative ? '-' : ''}${formattedInt}${decimals} ₫`
   } catch {
     const num = Number(str)
@@ -39,7 +44,8 @@ export function formatDate(date: string | Date | null | undefined): string {
   if (!date) return '—'
   const d = typeof date === 'string' ? new Date(date) : date
   if (Number.isNaN(d.getTime())) return typeof date === 'string' ? date : '—'
-  return d.toLocaleDateString('vi-VN', {
+  return d.toLocaleDateString(displayLocale(), {
+    timeZone: storeTimeZone,
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',
@@ -53,7 +59,8 @@ export function formatDateTime(date: string | Date | null | undefined): string {
   if (!date) return '—'
   const d = typeof date === 'string' ? new Date(date) : date
   if (Number.isNaN(d.getTime())) return typeof date === 'string' ? date : '—'
-  return d.toLocaleString('vi-VN', {
+  return d.toLocaleString(displayLocale(), {
+    timeZone: storeTimeZone,
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',
@@ -70,8 +77,8 @@ export function formatSessionDuration(createdAt?: string): string {
   const createdMs = Date.parse(createdAt)
   if (Number.isNaN(createdMs)) return ''
   const diffMinutes = Math.max(0, Math.floor((Date.now() - createdMs) / 60000))
-  if (diffMinutes < 60) return `${diffMinutes} phút`
+  if (diffMinutes < 60) return i18n.t('common.durationMinutes', { count: diffMinutes })
   const hours = Math.floor(diffMinutes / 60)
   const mins = diffMinutes % 60
-  return `${hours}h ${mins}p`
+  return i18n.t('common.durationHours', { hours, minutes: mins })
 }

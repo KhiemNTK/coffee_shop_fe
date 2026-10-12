@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Coffee, Eye, EyeOff, LogIn } from 'lucide-react'
@@ -12,13 +13,14 @@ import { cn } from '../../shared/ui/utils'
 import { authConfig } from './auth.config'
 import { GoogleButton } from './google-button'
 
-const siteKey =
-  (import.meta.env.VITE_TURNSTILE_SITE_KEY as string | undefined)?.trim() ?? ''
+const siteKey = (import.meta.env.VITE_TURNSTILE_SITE_KEY as string | undefined)?.trim() ?? ''
 
 export default function SignInPage() {
+  const { t: translate } = useTranslation()
   const navigate = useNavigate()
   const location = useLocation()
-  const unlinkUncertain = (location.state as { googleUnlinkUncertain?: unknown } | null)?.googleUnlinkUncertain === true
+  const unlinkUncertain =
+    (location.state as { googleUnlinkUncertain?: unknown } | null)?.googleUnlinkUncertain === true
   const [pending, setPending] = useState(false)
   const [visible, setVisible] = useState(false)
   const [error, setError] = useState<unknown>()
@@ -39,7 +41,7 @@ export default function SignInPage() {
   async function signInWithGoogle(idToken: string) {
     if (submitting.current || configMissing) return
     if (siteKey && !token) {
-      setError(new Error('Vui lòng đợi xác minh bảo mật hoàn tất trước khi đăng nhập bằng Google.'))
+      setError(new Error(translate('auth.waitGoogleVerification')))
       requestAnimationFrame(() => errorRef.current?.focus())
       return
     }
@@ -58,7 +60,11 @@ export default function SignInPage() {
       }
     } finally {
       submitting.current = false
-      if (mounted.current) { setPending(false); setToken(''); setAttempt((value) => value + 1) }
+      if (mounted.current) {
+        setPending(false)
+        setToken('')
+        setAttempt((value) => value + 1)
+      }
     }
   }
 
@@ -78,7 +84,7 @@ export default function SignInPage() {
             )}
           >
             <ArrowLeft className="h-4 w-4" />
-            Thực đơn
+            {translate('nav.menu')}
           </Link>
         </div>
       </header>
@@ -86,27 +92,28 @@ export default function SignInPage() {
       <main className="flex min-h-[calc(100vh-140px)] items-center justify-center p-4">
         <Card className="w-full max-w-md shadow-xl border-border bg-card rounded-2xl">
           <CardHeader className="space-y-1">
-            <p className="text-xs font-bold uppercase tracking-wider text-primary">NHÂN VIÊN</p>
+            <p className="text-xs font-bold uppercase tracking-wider text-primary">
+              {translate('auth.staffHeading')}
+            </p>
             <CardTitle className="text-2xl font-bold tracking-tight text-foreground">
-              Đăng nhập
+              {translate('auth.signIn')}
             </CardTitle>
-            <CardDescription>
-              Đăng nhập hệ thống nội bộ Coffee Homes
-            </CardDescription>
+            <CardDescription>{translate('auth.description')}</CardDescription>
           </CardHeader>
 
           <CardContent>
-            {unlinkUncertain && <p role="alert" className="mb-4 text-sm text-destructive">
-              Chưa xác nhận được hủy liên kết Google. Đăng nhập lại để kiểm tra tài khoản.
-            </p>}
+            {unlinkUncertain && (
+              <p role="alert" className="mb-4 text-sm text-destructive">
+                {translate('auth.unlinkUncertain')}
+              </p>
+            )}
             <form
               className="space-y-4"
               onSubmit={async (event) => {
                 event.preventDefault()
-                if (submitting.current || configMissing)
-                  return
+                if (submitting.current || configMissing) return
                 if (siteKey && !token) {
-                  setError(new Error('Vui lòng đợi xác minh bảo mật hoàn tất trước khi đăng nhập.'))
+                  setError(new Error(translate('auth.waitVerification')))
                   requestAnimationFrame(() => errorRef.current?.focus())
                   return
                 }
@@ -128,9 +135,7 @@ export default function SignInPage() {
                 } catch (failure) {
                   if (!mounted.current) return
                   setError(failure)
-                  const password = form.elements.namedItem(
-                    'password',
-                  ) as HTMLInputElement
+                  const password = form.elements.namedItem('password') as HTMLInputElement
                   if (password) password.value = ''
                   requestAnimationFrame(() => errorRef.current?.focus())
                 } finally {
@@ -161,7 +166,7 @@ export default function SignInPage() {
 
               <div className="space-y-1.5">
                 <label htmlFor="password" className="block text-sm font-semibold text-foreground">
-                  Mật khẩu
+                  {translate('auth.password')}
                 </label>
                 <div className="relative">
                   <Input
@@ -177,8 +182,12 @@ export default function SignInPage() {
                   />
                   <button
                     type="button"
-                    aria-label={visible ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
-                    title={visible ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
+                    aria-label={
+                      visible ? translate('auth.hidePassword') : translate('auth.showPassword')
+                    }
+                    title={
+                      visible ? translate('auth.hidePassword') : translate('auth.showPassword')
+                    }
                     onClick={() => setVisible((value) => !value)}
                     className="absolute right-3 top-2.5 text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
                   >
@@ -187,13 +196,14 @@ export default function SignInPage() {
                 </div>
               </div>
 
-              {siteKey && (
-                <Turnstile key={attempt} siteKey={siteKey} onToken={setToken} />
-              )}
+              {siteKey && <Turnstile key={attempt} siteKey={siteKey} onToken={setToken} />}
 
               {configMissing && (
-                <p role="alert" className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
-                  Đăng nhập chưa sẵn sàng. Vui lòng liên hệ quản lý.
+                <p
+                  role="alert"
+                  className="rounded-md bg-destructive/10 p-3 text-sm text-destructive"
+                >
+                  {translate('auth.unavailable')}
                 </p>
               )}
 
@@ -206,7 +216,9 @@ export default function SignInPage() {
                 >
                   <p>{errorMessage(error)}</p>
                   {error instanceof ApiError && error.requestId && (
-                    <small className="block mt-1 text-xs opacity-80">Mã hỗ trợ: {error.requestId}</small>
+                    <small className="block mt-1 text-xs opacity-80">
+                      {translate('common.supportId')} {error.requestId}
+                    </small>
                   )}
                 </div>
               )}
@@ -218,19 +230,29 @@ export default function SignInPage() {
                 disabled={pending || configMissing || Boolean(siteKey && !token)}
               >
                 <LogIn className="h-4 w-4" />
-                {pending ? 'Đang đăng nhập…' : 'Đăng nhập'}
+                {pending ? translate('auth.signingIn') : translate('auth.signIn')}
               </Button>
 
-              <Link to="/forgot-password" className="block text-center text-sm font-semibold text-primary">Quên mật khẩu?</Link>
+              <Link
+                to="/forgot-password"
+                className="block text-center text-sm font-semibold text-primary"
+              >
+                {translate('auth.forgotPasswordLink')}
+              </Link>
               {authConfig.googleClientId && !pending && !configMissing && (!siteKey || token) && (
-                <GoogleButton clientId={authConfig.googleClientId} onCredential={(credential) => void signInWithGoogle(credential)} />
+                <GoogleButton
+                  clientId={authConfig.googleClientId}
+                  onCredential={(credential) => void signInWithGoogle(credential)}
+                />
               )}
-              {authConfig.signupEnabled && <div className="pt-2 text-center text-xs text-muted-foreground">
-                Chưa có tài khoản nhân sự?{' '}
-                <Link to="/sign-up" className="font-semibold text-primary hover:underline">
-                  Đăng ký tài khoản mới
-                </Link>
-              </div>}
+              {authConfig.signupEnabled && (
+                <div className="pt-2 text-center text-xs text-muted-foreground">
+                  {translate('auth.noAccount')}{' '}
+                  <Link to="/sign-up" className="font-semibold text-primary hover:underline">
+                    {translate('auth.registerNew')}
+                  </Link>
+                </div>
+              )}
             </form>
           </CardContent>
         </Card>

@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { useEffect, useRef, useState } from 'react'
 import { ShieldCheck, RefreshCw, AlertCircle } from 'lucide-react'
 
@@ -9,6 +10,7 @@ type TurnstileApi = {
       action: string
       size?: 'compact' | 'normal' | 'flexible'
       theme?: 'light' | 'dark' | 'auto'
+      language?: string
       callback: (token: string) => void
       'expired-callback': () => void
       'error-callback': () => void
@@ -31,8 +33,7 @@ function loadTurnstile() {
   if (!scriptFlight) {
     scriptFlight = new Promise<TurnstileApi>((resolve, reject) => {
       const script = document.createElement('script')
-      script.src =
-        'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit'
+      script.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit'
       script.async = true
       const fail = () => {
         script.remove()
@@ -68,6 +69,7 @@ export function Turnstile({
   action?: string
   size?: 'compact' | 'normal' | 'flexible'
 }) {
+  const { t: translate, i18n } = useTranslation()
   const container = useRef<HTMLDivElement>(null)
   const [failed, setFailed] = useState(false)
   const [attempt, setAttempt] = useState(0)
@@ -92,6 +94,7 @@ export function Turnstile({
           action,
           size,
           theme: 'light',
+          language: i18n.resolvedLanguage,
           callback: (token) => {
             if (!cancelled) {
               onToken(token)
@@ -110,14 +113,14 @@ export function Turnstile({
       cancelled = true
       if (widget !== undefined) api?.remove(widget)
     }
-  }, [siteKey, onToken, attempt, action, size])
+  }, [siteKey, onToken, attempt, action, size, i18n.resolvedLanguage])
 
   return (
     <div className="verification space-y-2">
       <div className="flex items-center text-xs text-muted-foreground">
         <span className="flex items-center gap-1.5 font-semibold text-foreground">
           <ShieldCheck className="h-4 w-4 text-primary" aria-hidden="true" />
-          Xác minh bảo mật
+          {translate('auth.verification')}
         </span>
       </div>
 
@@ -133,7 +136,7 @@ export function Turnstile({
         >
           <div className="flex items-center gap-1.5">
             <AlertCircle className="h-4 w-4 shrink-0" aria-hidden="true" />
-            <span>Chưa xác minh được bảo mật.</span>
+            <span>{translate('auth.verificationFailed')}</span>
           </div>
           <button
             type="button"
@@ -144,7 +147,7 @@ export function Turnstile({
             }}
           >
             <RefreshCw className="h-3 w-3" aria-hidden="true" />
-            Thử lại xác minh
+            {translate('auth.retryVerification')}
           </button>
         </div>
       )}

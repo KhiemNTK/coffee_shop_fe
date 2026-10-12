@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { AlertCircle, ArrowRight, Plus, RefreshCw } from 'lucide-react'
@@ -8,13 +9,14 @@ import { ItemCustomizerModal } from './item-customizer-modal'
 import { CartCheckoutDrawer } from './cart-checkout-drawer'
 import { cartSubtotal, type CartItem } from '../cart'
 import { Pagination } from '../../../shared/ui/pagination'
-
+import type { OrderAccess } from '../order-access-storage'
 
 export function TakeawayMenuView({
   onOrderCreated,
 }: {
-  onOrderCreated: (order: { requestId: string; accessToken: string }) => void
+  onOrderCreated: (order: OrderAccess) => void
 }) {
+  const { t: translate } = useTranslation()
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>('')
   const [page, setPage] = useState(1)
   const [customizingItem, setCustomizingItem] = useState<MenuItem | null>(null)
@@ -29,8 +31,7 @@ export function TakeawayMenuView({
 
   const menuQuery = useQuery({
     queryKey: ['public-menu', 'items', { categoryId: selectedCategoryId, page, keyword: '' }],
-    queryFn: ({ signal }) =>
-      getMenu({ categoryId: selectedCategoryId, page, keyword: '' }, signal),
+    queryFn: ({ signal }) => getMenu({ categoryId: selectedCategoryId, page, keyword: '' }, signal),
   })
 
   const cartTotalAmount = cartSubtotal(cart)
@@ -86,10 +87,13 @@ export function TakeawayMenuView({
           type="button"
           size="sm"
           variant={selectedCategoryId === '' ? 'default' : 'outline'}
-          onClick={() => { setSelectedCategoryId(''); setPage(1) }}
+          onClick={() => {
+            setSelectedCategoryId('')
+            setPage(1)
+          }}
           className="rounded-full shrink-0 font-medium"
         >
-          Tất cả món
+          {translate('menu.allItems')}
         </Button>
         {categoriesQuery.data?.map((cat) => {
           const isActive = selectedCategoryId === cat.id
@@ -99,7 +103,10 @@ export function TakeawayMenuView({
               type="button"
               size="sm"
               variant={isActive ? 'default' : 'outline'}
-              onClick={() => { setSelectedCategoryId(cat.id); setPage(1) }}
+              onClick={() => {
+                setSelectedCategoryId(cat.id)
+                setPage(1)
+              }}
               className="rounded-full shrink-0 font-medium"
             >
               {cat.name}
@@ -112,7 +119,7 @@ export function TakeawayMenuView({
       {menuQuery.isLoading && (
         <div className="flex flex-col items-center justify-center py-20 text-muted-foreground gap-3">
           <RefreshCw className="h-6 w-6 animate-spin text-brand-700" />
-          <p className="text-sm">Đang tải thực đơn quán…</p>
+          <p className="text-sm">{translate('menu.loadingMenu')}</p>
         </div>
       )}
 
@@ -123,7 +130,7 @@ export function TakeawayMenuView({
             <span>{errorMessage(menuQuery.error)}</span>
           </div>
           <Button variant="outline" size="sm" onClick={() => void menuQuery.refetch()}>
-            Tải lại
+            {translate('common.reload')}
           </Button>
         </div>
       )}
@@ -137,6 +144,19 @@ export function TakeawayMenuView({
             >
               <CardContent className="p-5 flex-1 flex flex-col justify-between gap-4">
                 <div>
+                  {item.imageUrl && (
+                    <img
+                      src={item.imageUrl}
+                      alt={item.name}
+                      loading="lazy"
+                      decoding="async"
+                      referrerPolicy="no-referrer"
+                      className="mb-3 aspect-[4/3] w-full rounded-md object-cover"
+                      onError={(event) => {
+                        event.currentTarget.hidden = true
+                      }}
+                    />
+                  )}
                   <div className="flex items-center justify-between gap-2 mb-1.5 min-w-0">
                     <span
                       className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground truncate min-w-0 flex-1"
@@ -146,7 +166,7 @@ export function TakeawayMenuView({
                     </span>
                     {item.optionGroups.length > 0 && (
                       <Badge variant="outline" className="text-[10px] px-1.5 py-0 shrink-0">
-                        {item.optionGroups.length} tùy chọn
+                        {item.optionGroups.length} {translate('common.optionsLower')}
                       </Badge>
                     )}
                   </div>
@@ -156,6 +176,11 @@ export function TakeawayMenuView({
                   >
                     {item.name}
                   </h3>
+                  {item.description && (
+                    <p className="mt-2 text-sm text-muted-foreground break-words">
+                      {item.description}
+                    </p>
+                  )}
                   <p className="text-lg font-bold text-brand-700 mt-1 tabular-nums">
                     {formatPrice(item.price)}
                   </p>
@@ -174,7 +199,7 @@ export function TakeawayMenuView({
                   className="w-full text-brand-800 bg-brand-50 hover:bg-brand-100 hover:text-brand-900 border border-brand-200 font-semibold gap-1.5"
                 >
                   <Plus className="h-4 w-4" />
-                  Chọn món
+                  {translate('menu.chooseItem')}
                 </Button>
               </CardContent>
             </Card>
@@ -182,19 +207,36 @@ export function TakeawayMenuView({
         </div>
       )}
 
-      {menuQuery.data && <div className="pb-28">
-        {menuQuery.data.list.length === 0 && <div className="space-y-3 py-8">
-          <p className="text-muted-foreground" role="status">Chưa có món khả dụng.</p>
-          {page > 1 && <Button variant="outline" onClick={() => setPage(1)}>Về trang đầu</Button>}
-        </div>}
-        {menuQuery.data.totalPages > 1 && page <= menuQuery.data.totalPages && <Pagination page={page} totalPages={menuQuery.data.totalPages} onPage={setPage} disabled={menuQuery.isFetching} />}
-      </div>}
+      {menuQuery.data && (
+        <div className="pb-28">
+          {menuQuery.data.list.length === 0 && (
+            <div className="space-y-3 py-8">
+              <p className="text-muted-foreground" role="status">
+                {translate('menu.noAvailableItems')}
+              </p>
+              {page > 1 && (
+                <Button variant="outline" onClick={() => setPage(1)}>
+                  {translate('common.firstPage')}
+                </Button>
+              )}
+            </div>
+          )}
+          {menuQuery.data.totalPages > 1 && page <= menuQuery.data.totalPages && (
+            <Pagination
+              page={page}
+              totalPages={menuQuery.data.totalPages}
+              onPage={setPage}
+              disabled={menuQuery.isFetching}
+            />
+          )}
+        </div>
+      )}
 
       {/* Floating Cart Trigger Bar (bottom sticky) */}
       {cart.length > 0 && !isCartOpen && (
         <button
           type="button"
-          aria-label="Thanh xem nhanh giỏ hàng"
+          aria-label={translate('takeaway.cartBar')}
           className="fixed bottom-6 left-1/2 -translate-x-1/2 w-[min(92%,560px)] bg-brand-900 text-white rounded-full px-5 py-3 shadow-2xl flex items-center justify-between z-40 cursor-pointer hover:bg-brand-800 transition-all border border-brand-700/50"
           onClick={() => setIsCartOpen(true)}
         >
@@ -202,7 +244,7 @@ export function TakeawayMenuView({
             <span className="bg-white text-brand-900 h-7 w-7 rounded-full flex items-center justify-center font-bold text-xs shadow-xs">
               {totalItemCount}
             </span>
-            <span className="font-semibold text-sm">Giỏ hàng mang đi</span>
+            <span className="font-semibold text-sm">{translate('takeaway.cart')}</span>
           </div>
           <div className="flex items-center gap-3">
             <span className="text-base font-bold tracking-tight">
@@ -229,7 +271,7 @@ export function TakeawayMenuView({
           onClose={() => setIsCartOpen(false)}
           onUpdateQuantity={updateQuantity}
           onRemoveItem={removeCartItem}
-          onAppendItems={items => setCart(previous => [...previous, ...items])}
+          onAppendItems={(items) => setCart((previous) => [...previous, ...items])}
           onOrderCreated={(order) => {
             setIsCartOpen(false)
             onOrderCreated(order)

@@ -1,3 +1,4 @@
+import { displayLocale } from '../../shared/i18n/index.js'
 import {
   storeTimeZone as timeZone,
   toStoreLocal as toReservationLocal,
@@ -18,9 +19,9 @@ export function reservationDayBounds(offset: number, now = new Date()) {
 }
 
 export const formatReservationDate = (iso: string) =>
-  new Date(iso).toLocaleDateString('vi-VN', { timeZone })
+  new Date(iso).toLocaleDateString(displayLocale(), { timeZone })
 export const formatReservationTime = (iso: string) =>
-  new Date(iso).toLocaleTimeString('vi-VN', {
+  new Date(iso).toLocaleTimeString(displayLocale(), {
     timeZone,
     hour: '2-digit',
     minute: '2-digit',

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useOutletContext, useSearchParams } from 'react-router-dom'
 import { CheckCircle2, RefreshCw, ExternalLink, Eye } from 'lucide-react'
@@ -16,7 +16,7 @@ import {
   resolveFeedback,
 } from '../reconciliation/reconciliation.api'
 import { reconcilePaymentAttempt } from '../invoices/invoices.api'
-import { errorMessage } from '@/shared/api/client'
+import { ApiError, errorMessage } from '@/shared/api/client'
 import { formatVnd } from '@/shared/lib/format'
 import { formatStoreDateTime } from '@/shared/lib/store-time'
 import {
@@ -38,11 +38,13 @@ const exceptionKinds: { id: ManagementExceptionKind; label: string }[] = [
   { id: 'FEEDBACK', label: 'Khiếu nại khách' },
   { id: 'KITCHEN_OVERDUE', label: 'Phiếu bếp trễ' },
   { id: 'ONLINE_PICKUP_LATE', label: 'Đơn quá giờ hẹn' },
+  { id: 'OUTBOX_DEAD_LETTER', label: 'Event lỗi' },
 ]
 
 function itemTitle(item: ManagementExceptionItem) {
   return (
     item.title ||
+    item.eventName ||
     item.description ||
     item.comment ||
     (item.station
@@ -59,6 +61,8 @@ export function ManagementExceptionsTab({
   const { employee, authorization } = useOutletContext<Session>()
   const can = (key: string) => authorization.permissionKeys.includes(key)
   const client = useQueryClient()
+  const flight = useRef(false)
+  const [queuedMessage, setQueuedMessage] = useState('')
   const [params, setParams] = useSearchParams()
   const kind =
     ManagementExceptionKindSchema.safeParse(params.get('kind')).data ??
@@ -78,7 +82,8 @@ export function ManagementExceptionsTab({
         { kind, page, itemPerPage: 20 },
         signal,
       ),
-    refetchInterval: 30_000,
+    refetchInterval: selectedId && kind === 'OUTBOX_DEAD_LETTER' ? false : 30_000,
+    refetchOnWindowFocus: !selectedId || kind !== 'OUTBOX_DEAD_LETTER',
   })
   const selected = query.data?.list.find((item) => item.id === selectedId)
   function update(changes: Record<string, string | null>, replace = false) {
@@ -99,10 +104,20 @@ export function ManagementExceptionsTab({
     mutationFn: async ({
       command,
       note = '',
+      outbox,
     }: {
-      command: 'RESOLVE' | 'IGNORE' | 'RECONCILE'
+      command: 'RESOLVE' | 'IGNORE' | 'RECONCILE' | 'RETRY_EVENT'
       note?: string
+      outbox?: { id: string; expectedAvailableAt: string }
     }) => {
+      if (command === 'RETRY_EVENT') {
+        if (!outbox || !can('/outbox-events_retry'))
+          throw new Error('Bạn không có quyền phục hồi event này.')
+        return operationsApi.retryOutboxEvent(outbox.id, {
+          reason: note.trim(),
+          expectedAvailableAt: outbox.expectedAvailableAt,
+        })
+      }
       if (!selected || query.isError || query.isFetching)
         throw new Error('Cần tải lại ngoại lệ trước khi xử lý.')
       if (command === 'RECONCILE') {
@@ -126,9 +141,13 @@ export function ManagementExceptionsTab({
       throw new Error('Bạn không có quyền xử lý ngoại lệ này.')
     },
     onSuccess: (_data, { command }) => {
+      if (command === 'RETRY_EVENT')
+        setQueuedMessage('Đã đưa event lại vào hàng đợi. Đang chờ worker xử lý.')
       if (command !== 'RECONCILE') update({ exception: null }, true)
     },
-    onSettled: () => {
+    onSettled: (_data, error, variables) => {
+      flight.current = false
+      if (variables.command === 'RETRY_EVENT' && error) return
       void client.invalidateQueries({
         queryKey: ['management-exceptions-list'],
       })
@@ -150,6 +169,7 @@ export function ManagementExceptionsTab({
   }
   return (
     <section className="space-y-4" aria-label="Hàng đợi ngoại lệ">
+      {queuedMessage && <p role="status">{queuedMessage}</p>}
       <Tabs
         value={kind}
         onValueChange={(value) => {
@@ -223,6 +243,7 @@ export function ManagementExceptionsTab({
             <div className="divide-y border-y">
               {query.data.list.map((item) => {
                 const date =
+                  item.occurredAt ||
                   item.dueAt ||
                   item.pickupAt ||
                   item.createdAt ||
@@ -331,6 +352,22 @@ export function ManagementExceptionsTab({
                       <dd className="break-all">{selected.invoiceId}</dd>
                     </>
                   )}
+                  {selected.eventName && (
+                    <>
+                      <dt>Đối tượng</dt>
+                      <dd className="break-all">
+                        {selected.aggregateType} · {selected.aggregateId}
+                      </dd>
+                      <dt>Số lần lỗi</dt>
+                      <dd>{selected.attempts}</dd>
+                      <dt>Phát sinh</dt>
+                      <dd>
+                        {selected.occurredAt
+                          ? formatStoreDateTime(selected.occurredAt)
+                          : '—'}
+                      </dd>
+                    </>
+                  )}
                 </dl>
                 {(action.isError || query.isError) && (
                   <div className="space-y-2">
@@ -350,9 +387,33 @@ export function ManagementExceptionsTab({
                     </Button>
                   </div>
                 )}
-                {action.isSuccess && (
-                  <p role="status">Đã kiểm tra lại trạng thái thanh toán.</p>
-                )}
+                {action.isSuccess &&
+                  action.variables.command === 'RECONCILE' && (
+                    <p role="status">Đã kiểm tra lại trạng thái thanh toán.</p>
+                  )}
+                {kind === 'OUTBOX_DEAD_LETTER' &&
+                  selected.availableAt &&
+                  can('/outbox-events_retry') && (
+                    <OutboxRetryForm
+                      key={selected.id + selected.availableAt}
+                      pending={action.isPending}
+                      blocked={query.isFetching || query.isError}
+                      error={action.error}
+                      onSubmit={(note) => {
+                        if (flight.current) return
+                        flight.current = true
+                        setQueuedMessage('')
+                        action.mutate({
+                          command: 'RETRY_EVENT',
+                          note,
+                          outbox: {
+                            id: selected.id,
+                            expectedAvailableAt: selected.availableAt!,
+                          },
+                        })
+                      }}
+                    />
+                  )}
                 {kind === 'PAYMENT' &&
                   selected.paymentAttemptId &&
                   can('/payment-reconciliation_manage') && (
@@ -510,5 +571,82 @@ function ResolutionForm({
         </div>
       )}
     </div>
+  )
+}
+
+function OutboxRetryForm({
+  pending,
+  blocked,
+  error,
+  onSubmit,
+}: {
+  pending: boolean
+  blocked: boolean
+  error: Error | null
+  onSubmit: (reason: string) => void
+}) {
+  const [reason, setReason] = useState('')
+  const [confirmed, setConfirmed] = useState(false)
+  const rejected =
+    error instanceof ApiError &&
+    error.status >= 400 &&
+    error.status < 500 &&
+    error.status !== 408 &&
+    error.status !== 429
+  const uncertain = error !== null && !rejected
+  return (
+    <form
+      className="space-y-3 border-t pt-3"
+      onSubmit={(event) => {
+        event.preventDefault()
+        if (pending || blocked || rejected || reason.trim().length < 3) return
+        if (!confirmed) {
+          setConfirmed(true)
+          return
+        }
+        onSubmit(reason.trim())
+      }}
+    >
+      <label className="block space-y-1 text-sm">
+        <span>Lý do phục hồi</span>
+        <Input
+          required
+          minLength={3}
+          maxLength={500}
+          value={reason}
+          disabled={pending || uncertain}
+          onChange={(event) => {
+            setReason(event.target.value)
+            setConfirmed(false)
+          }}
+        />
+      </label>
+      {confirmed && (
+        <p className="text-sm">
+          Xác nhận đã xử lý nguyên nhân lỗi và đưa event lại vào hàng đợi?
+        </p>
+      )}
+      {uncertain && (
+        <p role="status" className="text-sm">
+          Chưa xác nhận được kết quả. Gửi lại cùng lệnh hoặc kiểm tra lại ngoại lệ.
+        </p>
+      )}
+      <Button
+        type="submit"
+        disabled={pending || blocked || rejected || reason.trim().length < 3}
+      >
+        <RefreshCw
+          className={pending ? 'h-4 w-4 animate-spin' : 'h-4 w-4'}
+          aria-hidden="true"
+        />
+        {pending
+          ? 'Đang gửi…'
+          : uncertain
+            ? 'Gửi lại lệnh chưa xác nhận'
+            : confirmed
+              ? 'Xác nhận phục hồi'
+              : 'Đưa lại vào hàng đợi'}
+      </Button>
+    </form>
   )
 }

@@ -30,6 +30,7 @@ const groups: Record<string, string> = {
   reports: 'Báo cáo & kiểm toán',
   'audit-logs': 'Báo cáo & kiểm toán',
   'management-exceptions': 'Báo cáo & kiểm toán',
+  'outbox-events': 'Báo cáo & kiểm toán',
   feedback: 'Báo cáo & kiểm toán',
   'system-settings': 'Cài đặt',
 }
@@ -54,6 +55,7 @@ const sensitive = new Set([
   '/cash-handovers_settle',
   '/bank-reconciliation_manage',
   '/reports_close',
+  '/outbox-events_retry',
 ])
 
 export function isSensitivePermission(key: string) {

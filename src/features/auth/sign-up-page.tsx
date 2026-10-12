@@ -1,13 +1,7 @@
+import { useTranslation } from 'react-i18next'
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import {
-  ArrowLeft,
-  CheckCircle2,
-  Coffee,
-  Eye,
-  EyeOff,
-  UserPlus,
-} from 'lucide-react'
+import { ArrowLeft, CheckCircle2, Coffee, Eye, EyeOff, UserPlus } from 'lucide-react'
 import { authCommand, ApiError, errorMessage } from '../../shared/api/client'
 import { announceSessionChange, clearIdentity } from '../../app/query-client'
 import { Turnstile } from './turnstile'
@@ -17,8 +11,7 @@ import { buttonVariants } from '../../shared/ui/button-variants'
 import { Input } from '../../shared/ui/input'
 import { cn } from '../../shared/ui/utils'
 
-const siteKey =
-  (import.meta.env.VITE_TURNSTILE_SITE_KEY as string | undefined)?.trim() ?? ''
+const siteKey = (import.meta.env.VITE_TURNSTILE_SITE_KEY as string | undefined)?.trim() ?? ''
 
 function calculatePasswordStrength(password: string): {
   score: number
@@ -39,6 +32,7 @@ function calculatePasswordStrength(password: string): {
 }
 
 export default function SignUpPage() {
+  const { t: translate } = useTranslation()
   const navigate = useNavigate()
   const [pending, setPending] = useState(false)
   const [visible, setVisible] = useState(false)
@@ -77,7 +71,7 @@ export default function SignUpPage() {
             )}
           >
             <ArrowLeft className="h-4 w-4" />
-            Đăng nhập
+            {translate('auth.signIn')}
           </Link>
         </div>
       </header>
@@ -89,9 +83,7 @@ export default function SignUpPage() {
               <p className="text-xs font-bold uppercase tracking-wider text-primary">
                 TÀI KHOẢN NỘI BỘ
               </p>
-              <span className="text-xs text-muted-foreground">
-                Đăng ký nhân sự mới
-              </span>
+              <span className="text-xs text-muted-foreground">Đăng ký nhân sự mới</span>
             </div>
             <CardTitle className="text-2xl font-bold tracking-tight text-foreground">
               Đăng ký tài khoản
@@ -106,8 +98,7 @@ export default function SignUpPage() {
               className="space-y-4"
               onSubmit={async (event) => {
                 event.preventDefault()
-                if (submitting.current || configMissing || (siteKey && !token))
-                  return
+                if (submitting.current || configMissing || (siteKey && !token)) return
 
                 const form = event.currentTarget
                 const values = new FormData(form)
@@ -158,7 +149,7 @@ export default function SignUpPage() {
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div className="space-y-1.5">
                   <label htmlFor="fullName" className="block text-sm font-semibold text-foreground">
-                    Họ và tên <span className="text-destructive">*</span>
+                    {translate('common.name')} <span className="text-destructive">*</span>
                   </label>
                   <Input
                     id="fullName"
@@ -167,7 +158,7 @@ export default function SignUpPage() {
                     required
                     maxLength={100}
                     disabled={pending}
-                    placeholder="Nguyễn Văn A"
+                    placeholder={translate('reservation.nameExample')}
                   />
                 </div>
 
@@ -191,7 +182,7 @@ export default function SignUpPage() {
               {/* Email */}
               <div className="space-y-1.5">
                 <label htmlFor="email" className="block text-sm font-semibold text-foreground">
-                  Email nhân viên <span className="text-destructive">*</span>
+                  {translate('auth.staffEmail')} <span className="text-destructive">*</span>
                 </label>
                 <Input
                   id="email"
@@ -208,7 +199,7 @@ export default function SignUpPage() {
               {/* Mật khẩu */}
               <div className="space-y-1.5">
                 <label htmlFor="password" className="block text-sm font-semibold text-foreground">
-                  Mật khẩu <span className="text-destructive">*</span>
+                  {translate('auth.password')} <span className="text-destructive">*</span>
                 </label>
                 <div className="relative">
                   <Input
@@ -227,8 +218,12 @@ export default function SignUpPage() {
                   />
                   <button
                     type="button"
-                    aria-label={visible ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
-                    title={visible ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
+                    aria-label={
+                      visible ? translate('auth.hidePassword') : translate('auth.showPassword')
+                    }
+                    title={
+                      visible ? translate('auth.hidePassword') : translate('auth.showPassword')
+                    }
                     onClick={() => setVisible((value) => !value)}
                     className="absolute right-3 top-2.5 text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
                   >
@@ -251,7 +246,9 @@ export default function SignUpPage() {
                       />
                     </div>
                     <div className="flex justify-between text-[11px] text-muted-foreground">
-                      <span>Độ an toàn: <strong className="text-foreground">{strength.label}</strong></span>
+                      <span>
+                        Độ an toàn: <strong className="text-foreground">{strength.label}</strong>
+                      </span>
                       {passwordValue.length >= 12 && (
                         <span className="flex items-center gap-1 text-emerald-600">
                           <CheckCircle2 className="h-3 w-3" /> Đạt yêu cầu 12 ký tự
@@ -265,8 +262,14 @@ export default function SignUpPage() {
               {/* Số điện thoại & Địa chỉ (tùy chọn) */}
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div className="space-y-1.5">
-                  <label htmlFor="phoneNumber" className="block text-sm font-semibold text-foreground">
-                    Số điện thoại <span className="text-xs text-muted-foreground">(tùy chọn)</span>
+                  <label
+                    htmlFor="phoneNumber"
+                    className="block text-sm font-semibold text-foreground"
+                  >
+                    {translate('common.phone')}{' '}
+                    <span className="text-xs text-muted-foreground">
+                      {translate('common.optional')}
+                    </span>
                   </label>
                   <Input
                     id="phoneNumber"
@@ -281,7 +284,10 @@ export default function SignUpPage() {
 
                 <div className="space-y-1.5">
                   <label htmlFor="address" className="block text-sm font-semibold text-foreground">
-                    Địa chỉ <span className="text-xs text-muted-foreground">(tùy chọn)</span>
+                    {translate('common.address')}{' '}
+                    <span className="text-xs text-muted-foreground">
+                      {translate('common.optional')}
+                    </span>
                   </label>
                   <Input
                     id="address"
@@ -294,12 +300,13 @@ export default function SignUpPage() {
                 </div>
               </div>
 
-              {siteKey && (
-                <Turnstile key={attempt} siteKey={siteKey} onToken={setToken} />
-              )}
+              {siteKey && <Turnstile key={attempt} siteKey={siteKey} onToken={setToken} />}
 
               {configMissing && (
-                <p role="alert" className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
+                <p
+                  role="alert"
+                  className="rounded-md bg-destructive/10 p-3 text-sm text-destructive"
+                >
                   Đăng ký chưa sẵn sàng. Vui lòng liên hệ quản lý.
                 </p>
               )}
@@ -313,7 +320,9 @@ export default function SignUpPage() {
                 >
                   <p>{errorMessage(error)}</p>
                   {error instanceof ApiError && error.requestId && (
-                    <small className="block mt-1 text-xs opacity-80">Mã hỗ trợ: {error.requestId}</small>
+                    <small className="block mt-1 text-xs opacity-80">
+                      {translate('common.supportId')} {error.requestId}
+                    </small>
                   )}
                 </div>
               )}

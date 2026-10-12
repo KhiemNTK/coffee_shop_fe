@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { useEffect, useRef, useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import { CheckCircle2, ExternalLink, RefreshCw } from 'lucide-react'
@@ -15,6 +16,7 @@ export function TelegramOrderLink({
   accessToken: string
   subscribed: boolean
 }) {
+  const { t: translate } = useTranslation()
   const submitting = useRef(false)
   const [expiredAt, setExpiredAt] = useState('')
   const mutation = useMutation({
@@ -40,12 +42,9 @@ export function TelegramOrderLink({
 
   if (subscribed)
     return (
-      <p
-        role="status"
-        className="flex items-center gap-2 text-sm text-emerald-700"
-      >
+      <p role="status" className="flex items-center gap-2 text-sm text-emerald-700">
         <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden="true" />
-        Đã kết nối Telegram
+        {translate('takeaway.telegramConnected')}
       </p>
     )
   const validLink = link && link.expiresAt !== expiredAt
@@ -74,13 +73,13 @@ export function TelegramOrderLink({
           })}
         >
           <ExternalLink className="h-4 w-4" aria-hidden="true" />
-          Mở Telegram
+          {translate('takeaway.openTelegram')}
         </a>
       ) : (
         <>
           {link && (
             <p role="status" className="text-sm text-muted-foreground">
-              Liên kết Telegram đã hết hạn.
+              {translate('takeaway.telegramExpired')}
             </p>
           )}
           <Button
@@ -95,7 +94,7 @@ export function TelegramOrderLink({
             }}
           >
             <RefreshCw className="h-4 w-4" aria-hidden="true" />
-            Nhận cập nhật qua Telegram
+            {translate('takeaway.telegramSubscribe')}
           </Button>
         </>
       )}

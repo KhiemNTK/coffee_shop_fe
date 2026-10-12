@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { useRef, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
@@ -10,6 +11,7 @@ import { authConfig } from './auth.config'
 import { GoogleButton } from './google-button'
 
 export function GoogleAccount({ linked }: { linked: boolean }) {
+  const { t: translate } = useTranslation()
   const [credential, setCredential] = useState('')
   const submitting = useRef(false)
   const client = useQueryClient()
@@ -19,9 +21,7 @@ export function GoogleAccount({ linked }: { linked: boolean }) {
       authCommand(
         linked ? '/auth/google/unlink' : '/auth/google/link',
         body,
-        linked
-          ? z.object({ unlinked: z.literal(true) })
-          : z.object({ linked: z.literal(true) }),
+        linked ? z.object({ unlinked: z.literal(true) }) : z.object({ linked: z.literal(true) }),
       ),
     gcTime: 0,
     retry: false,
@@ -50,26 +50,19 @@ export function GoogleAccount({ linked }: { linked: boolean }) {
   if (!authConfig.googleClientId && !linked) return null
   return (
     <section className="space-y-3 border-t border-border pt-4">
-      <h2 className="text-lg font-semibold">Đăng nhập Google</h2>
+      <h2 className="text-lg font-semibold">{translate('auth.googleSignIn')}</h2>
       <p className="text-sm">
-        {linked
-          ? 'Đã liên kết tài khoản Google.'
-          : 'Chưa liên kết tài khoản Google.'}
+        {linked ? translate('auth.googleLinked') : translate('auth.googleUnlinked')}
       </p>
       {!linked && (
-        <GoogleButton
-          clientId={authConfig.googleClientId}
-          onCredential={setCredential}
-        />
+        <GoogleButton clientId={authConfig.googleClientId} onCredential={setCredential} />
       )}
       <form
         className="max-w-md space-y-3"
         onSubmit={(event) => {
           event.preventDefault()
           if (submitting.current || (!linked && !credential)) return
-          const password = String(
-            new FormData(event.currentTarget).get('password'),
-          )
+          const password = String(new FormData(event.currentTarget).get('password'))
           event.currentTarget.reset()
           submitting.current = true
           mutation.mutate({
@@ -79,7 +72,7 @@ export function GoogleAccount({ linked }: { linked: boolean }) {
         }}
       >
         <label className="block text-sm">
-          Mật khẩu hiện tại
+          {translate('auth.currentPassword')}
           <Input
             name="password"
             type="password"
@@ -99,7 +92,7 @@ export function GoogleAccount({ linked }: { linked: boolean }) {
           isLoading={mutation.isPending}
           disabled={!linked && !credential}
         >
-          {linked ? 'Hủy liên kết và đăng xuất' : 'Liên kết Google'}
+          {linked ? translate('auth.unlinkAndSignOut') : translate('auth.linkGoogle')}
         </Button>
       </form>
     </section>

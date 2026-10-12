@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { OrderOptions } from '../../../shared/ui/order-options'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useOutletContext } from 'react-router-dom'
@@ -44,24 +45,20 @@ interface InvoiceDetailDialogProps {
   onUpdated: () => void
 }
 
-export function InvoiceDetailDialog({
-  invoiceId,
-  onClose,
-  onUpdated,
-}: InvoiceDetailDialogProps) {
+export function InvoiceDetailDialog({ invoiceId, onClose, onUpdated }: InvoiceDetailDialogProps) {
   const { employee, authorization } = useOutletContext<Session>()
+  const { t: translate } = useTranslation()
   const client = useQueryClient()
   const can = (key: string) => authorization.permissionKeys.includes(key)
-  const [selectedTab, setActiveTab] = useState<
-    'items' | 'gateway' | 'pay_manual' | 'aftersales'
-  >('items')
+  const [selectedTab, setActiveTab] = useState<'items' | 'gateway' | 'pay_manual' | 'aftersales'>(
+    'items'
+  )
 
   const [manualMethod, setManualMethod] = useState<'CASH' | 'CARD'>('CASH')
   const [amountTendered, setAmountTendered] = useState('')
   const [actionError, setActionError] = useState<string | null>(null)
   const [voidConfirmOpen, setVoidConfirmOpen] = useState(false)
-  const [submittedManual, setSubmittedManual] =
-    useState<UpdateInvoicePaymentPayload | null>(null)
+  const [submittedManual, setSubmittedManual] = useState<UpdateInvoicePaymentPayload | null>(null)
   const manualFlight = useRef(false)
   const voidFlight = useRef(false)
   const [refundLocked, setRefundLocked] = useState(false)
@@ -102,8 +99,7 @@ export function InvoiceDetailDialog({
 
   // Mutations
   const updatePaymentMutation = useMutation({
-    mutationFn: (payload: UpdateInvoicePaymentPayload) =>
-      updateInvoicePayment(invoiceId, payload),
+    mutationFn: (payload: UpdateInvoicePaymentPayload) => updateInvoicePayment(invoiceId, payload),
     onSuccess: () => {
       setActionError(null)
       setSubmittedManual(null)
@@ -140,34 +136,65 @@ export function InvoiceDetailDialog({
       setVoidConfirmOpen(false)
       setRecoveryRequired(true)
     },
-    onSettled: () => { voidFlight.current = false },
+    onSettled: () => {
+      voidFlight.current = false
+    },
   })
 
   const inv = invoiceQuery.data
   const unresolvedOnline =
-    attemptsQuery.data?.list.some(
-      (attempt) => isUnresolvedPayment(attempt.status),
-    ) ?? false
+    attemptsQuery.data?.list.some((attempt) => isUnresolvedPayment(attempt.status)) ?? false
   const paymentLocked =
     ((updatePaymentMutation.isPending || Boolean(submittedManual)) &&
       (!inv || inv.paymentStatus === 'UNPAID' || invoiceQuery.isError)) ||
-    refundLocked || cashRefundLocked || remakeLocked || gatewayLocked || voidMutation.isPending
+    refundLocked ||
+    cashRefundLocked ||
+    remakeLocked ||
+    gatewayLocked ||
+    voidMutation.isPending
   const manualBlocked =
-    invoiceQuery.isPending || invoiceQuery.isError || invoiceQuery.isFetching ||
-    recoveryRequired || voidMutation.isPending || refundLocked || cashRefundLocked || remakeLocked || gatewayLocked ||
+    invoiceQuery.isPending ||
+    invoiceQuery.isError ||
+    invoiceQuery.isFetching ||
+    recoveryRequired ||
+    voidMutation.isPending ||
+    refundLocked ||
+    cashRefundLocked ||
+    remakeLocked ||
+    gatewayLocked ||
     unresolvedOnline ||
     (can('/payment-attempts_read') &&
       (attemptsQuery.isPending || attemptsQuery.isError || attemptsQuery.isFetching))
   const parsedTendered = moneySchema.safeParse(amountTendered.trim())
   const tenderedMinor = parsedTendered.success ? minorAmount(parsedTendered.data) : null
   const totalMinor = inv ? minorAmount(inv.totalAmount) : null
-  const tenderedEnough = tenderedMinor !== null && totalMinor !== null && tenderedMinor >= totalMinor
-  const compensationBlocked = invoiceQuery.isError || invoiceQuery.isFetching ||
-    updatePaymentMutation.isPending || voidMutation.isPending || gatewayLocked || refundLocked
-  const canAftersales = can('/payment-refunds_read') || can('/cash-refunds_create') || can('/orders_items_remake') || can('/payment-refunds_create')
+  const tenderedEnough =
+    tenderedMinor !== null && totalMinor !== null && tenderedMinor >= totalMinor
+  const compensationBlocked =
+    invoiceQuery.isError ||
+    invoiceQuery.isFetching ||
+    updatePaymentMutation.isPending ||
+    voidMutation.isPending ||
+    gatewayLocked ||
+    refundLocked
+  const canAftersales =
+    can('/payment-refunds_read') ||
+    can('/cash-refunds_create') ||
+    can('/orders_items_remake') ||
+    can('/payment-refunds_create')
   function updateAftersales() {
     void invoiceQuery.refetch()
-    for (const scope of ['cashier-shift', 'cashier-shifts', 'orders', 'kitchen', 'inventory-waste', 'dashboard-report', 'online-journey', 'recommendation-experiment', 'daily-sales-close']) {
+    for (const scope of [
+      'cashier-shift',
+      'cashier-shifts',
+      'orders',
+      'kitchen',
+      'inventory-waste',
+      'dashboard-report',
+      'online-journey',
+      'recommendation-experiment',
+      'daily-sales-close',
+    ]) {
       void client.invalidateQueries({ queryKey: ['private', employee.id, scope] })
     }
     void client.invalidateQueries({ queryKey: ['private', 'funds'] })
@@ -216,11 +243,7 @@ export function InvoiceDetailDialog({
     <Dialog
       open
       onClose={() => {
-        if (
-          !manualFlight.current &&
-          !voidFlight.current && !paymentLocked
-        )
-          onClose()
+        if (!manualFlight.current && !voidFlight.current && !paymentLocked) onClose()
       }}
       showCloseButton={false}
       maxWidth="lg"
@@ -242,24 +265,29 @@ export function InvoiceDetailDialog({
                 {inv && <PaymentStatusBadge status={inv.paymentStatus} />}
               </div>
               <p className="text-xs text-muted-foreground">
-                Bàn:{' '}
-                <strong>{inv?.orderSession?.table?.name ?? 'Mang đi'}</strong> ·
-                Thu ngân: {inv?.employee?.fullName ?? 'Hệ thống'}
+                Bàn: <strong>{inv?.orderSession?.table?.name ?? 'Mang đi'}</strong> · Thu ngân:{' '}
+                {inv?.employee?.fullName ?? 'Hệ thống'}
               </p>
-              {inv && <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground"><PaymentMethodBadge method={inv.paymentMethod} /><span>{formatStoreDateTime(inv.createdAt)}</span></div>}
+              {inv && (
+                <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                  <PaymentMethodBadge method={inv.paymentMethod} />
+                  <span>{formatStoreDateTime(inv.createdAt)}</span>
+                </div>
+              )}
             </div>
           </div>
         </div>
 
         {inv?.paymentStatus === 'PAID' &&
-          inv.orderItems.some(item => item.serveStatus !== 'SERVED') &&
+          inv.orderItems.some((item) => item.serveStatus !== 'SERVED') &&
           inv.orderSession &&
-          !inv.orderSession.tableId && (
-            <PickupCodePanel invoiceId={invoiceId} />
-          )}
+          !inv.orderSession.tableId && <PickupCodePanel invoiceId={invoiceId} />}
 
         {/* Modal Navigation Tabs */}
-        <nav aria-label="Thông tin hóa đơn" className="flex shrink-0 flex-wrap border-b border-border bg-card px-3 sm:px-5">
+        <nav
+          aria-label="Thông tin hóa đơn"
+          className="flex shrink-0 flex-wrap border-b border-border bg-card px-3 sm:px-5"
+        >
           <button
             type="button"
             disabled={paymentLocked}
@@ -269,16 +297,32 @@ export function InvoiceDetailDialog({
               'px-4 py-2.5 text-xs font-semibold border-b-2 transition-colors',
               activeTab === 'items'
                 ? 'border-brand-800 text-brand-900'
-                : 'border-transparent text-muted-foreground hover:text-foreground',
+                : 'border-transparent text-muted-foreground hover:text-foreground'
             )}
           >
             Chi tiết món ({inv?.orderItems.length ?? 0})
           </button>
-          {inv && canAftersales && (inv.paymentStatus !== 'UNPAID' && inv.paymentStatus !== 'VOIDED' || cashRefundLocked || remakeLocked) && <button
-            type="button" disabled={paymentLocked} aria-current={activeTab === 'aftersales' ? 'page' : undefined}
-            onClick={() => setActiveTab('aftersales')}
-            className={cn('flex items-center gap-1.5 border-b-2 px-4 py-2.5 text-xs font-semibold transition-colors', activeTab === 'aftersales' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground')}
-          ><RotateCcw size={14} aria-hidden="true" />Hoàn tiền & làm lại</button>}
+          {inv &&
+            canAftersales &&
+            ((inv.paymentStatus !== 'UNPAID' && inv.paymentStatus !== 'VOIDED') ||
+              cashRefundLocked ||
+              remakeLocked) && (
+              <button
+                type="button"
+                disabled={paymentLocked}
+                aria-current={activeTab === 'aftersales' ? 'page' : undefined}
+                onClick={() => setActiveTab('aftersales')}
+                className={cn(
+                  'flex items-center gap-1.5 border-b-2 px-4 py-2.5 text-xs font-semibold transition-colors',
+                  activeTab === 'aftersales'
+                    ? 'border-primary text-primary'
+                    : 'border-transparent text-muted-foreground hover:text-foreground'
+                )}
+              >
+                <RotateCcw size={14} aria-hidden="true" />
+                Hoàn tiền & làm lại
+              </button>
+            )}
           {inv?.paymentStatus === 'UNPAID' &&
             (can('/invoices_update') || can('/payment-attempts_read')) && (
               <>
@@ -291,11 +335,11 @@ export function InvoiceDetailDialog({
                       'px-4 py-2.5 text-xs font-semibold border-b-2 transition-colors flex items-center gap-1.5',
                       activeTab === 'gateway'
                         ? 'border-brand-800 text-brand-900'
-                        : 'border-transparent text-muted-foreground hover:text-foreground',
+                        : 'border-transparent text-muted-foreground hover:text-foreground'
                     )}
                   >
                     <QrCode className="h-3.5 w-3.5" />
-                    Cổng thanh toán (VNPay / MoMo)
+                    {translate('payment.gatewayTab')}
                   </button>
                 )}
                 {can('/invoices_update') && (
@@ -307,7 +351,7 @@ export function InvoiceDetailDialog({
                       'px-4 py-2.5 text-xs font-semibold border-b-2 transition-colors flex items-center gap-1.5',
                       activeTab === 'pay_manual'
                         ? 'border-brand-800 text-brand-900'
-                        : 'border-transparent text-muted-foreground hover:text-foreground',
+                        : 'border-transparent text-muted-foreground hover:text-foreground'
                     )}
                   >
                     <CheckCircle2 className="h-3.5 w-3.5" />
@@ -320,10 +364,22 @@ export function InvoiceDetailDialog({
 
         {/* Modal Body */}
         <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-4 sm:p-5">
-          <Button type="button" variant="outline" size="sm"
-            disabled={invoiceQuery.isFetching || attemptsQuery.isFetching || updatePaymentMutation.isPending || voidMutation.isPending || refundLocked || gatewayLocked}
-            onClick={() => void refreshStatus()}>
-            <RefreshCw size={16} aria-hidden="true" />Kiểm tra trạng thái hóa đơn
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={
+              invoiceQuery.isFetching ||
+              attemptsQuery.isFetching ||
+              updatePaymentMutation.isPending ||
+              voidMutation.isPending ||
+              refundLocked ||
+              gatewayLocked
+            }
+            onClick={() => void refreshStatus()}
+          >
+            <RefreshCw size={16} aria-hidden="true" />
+            Kiểm tra trạng thái hóa đơn
           </Button>
           {invoiceQuery.isError && (
             <p role="alert" className="text-sm text-destructive">
@@ -390,16 +446,18 @@ export function InvoiceDetailDialog({
                         <td className="py-2.5 px-3 font-semibold text-foreground">
                           {it.menuItem?.name ?? 'Món'}
                           <OrderOptions options={it.selectedOptions} />
-                          {it.originalRemake && <p className="mt-1 text-xs font-medium text-sky-800">Đã yêu cầu làm lại · {it.originalRemake.reason}</p>}
+                          {it.originalRemake && (
+                            <p className="mt-1 text-xs font-medium text-sky-800">
+                              Đã yêu cầu làm lại · {it.originalRemake.reason}
+                            </p>
+                          )}
                           {it.note && (
                             <p className="text-[11px] text-muted-foreground font-normal italic">
                               Ghi chú: {it.note}
                             </p>
                           )}
                         </td>
-                        <td className="py-2.5 px-3 text-center font-bold">
-                          {it.quantity}
-                        </td>
+                        <td className="py-2.5 px-3 text-center font-bold">{it.quantity}</td>
                         <td className="py-2.5 px-3 text-right text-muted-foreground">
                           {formatPrice(it.priceAtTime)}
                         </td>
@@ -454,41 +512,49 @@ export function InvoiceDetailDialog({
             <PaymentGatewayPanel invoiceId={invoiceId} onLockChange={setGatewayLocked} />
           )}
 
-          {inv && <div hidden={activeTab !== 'aftersales'} className="space-y-5">
-            {inv.paymentMethod === 'CASH' && (can('/payment-refunds_read') || can('/cash-refunds_create')) && <CashRefundsPanel
-              invoice={inv} active={activeTab === 'aftersales'} blocked={compensationBlocked || remakeLocked}
-              onUpdated={updateAftersales} onLockChange={setCashRefundLocked}
-            />}
-            <RemakesPanel invoice={inv} blocked={compensationBlocked || cashRefundLocked}
-              onUpdated={updateAftersales} onLockChange={setRemakeLocked} />
-            <RefundsPanel
-              attempts={attemptsQuery.data?.list ?? []}
-              invoiceStatus={inv.paymentStatus}
-              onLockChange={setRefundLocked}
-              onUpdated={() => {
-                void invoiceQuery.refetch()
-                onUpdated()
-              }}
-            />
-          </div>}
+          {inv && (
+            <div hidden={activeTab !== 'aftersales'} className="space-y-5">
+              {inv.paymentMethod === 'CASH' &&
+                (can('/payment-refunds_read') || can('/cash-refunds_create')) && (
+                  <CashRefundsPanel
+                    invoice={inv}
+                    active={activeTab === 'aftersales'}
+                    blocked={compensationBlocked || remakeLocked}
+                    onUpdated={updateAftersales}
+                    onLockChange={setCashRefundLocked}
+                  />
+                )}
+              <RemakesPanel
+                invoice={inv}
+                blocked={compensationBlocked || cashRefundLocked}
+                onUpdated={updateAftersales}
+                onLockChange={setRemakeLocked}
+              />
+              <RefundsPanel
+                attempts={attemptsQuery.data?.list ?? []}
+                invoiceStatus={inv.paymentStatus}
+                onLockChange={setRefundLocked}
+                onUpdated={() => {
+                  void invoiceQuery.refetch()
+                  onUpdated()
+                }}
+              />
+            </div>
+          )}
 
           {/* Tab 3: Pay manual (Cash or Card) */}
           {inv?.paymentStatus === 'UNPAID' && activeTab === 'pay_manual' && (
             <div className="space-y-4 max-w-md mx-auto py-2">
               <div className="p-4 bg-stone-50 border border-stone-200 rounded-xl space-y-3">
-                <h4 className="text-sm font-bold text-foreground">
-                  Thu tiền trực tiếp tại quầy
-                </h4>
+                <h4 className="text-sm font-bold text-foreground">Thu tiền trực tiếp tại quầy</h4>
                 {manualBlocked && (
                   <p role="status" className="text-sm">
-                    Cần kiểm tra hoặc đối soát phiên online trước khi thu tiền
-                    trực tiếp.
+                    Cần kiểm tra hoặc đối soát phiên online trước khi thu tiền trực tiếp.
                   </p>
                 )}
                 {submittedManual && !updatePaymentMutation.isPending && (
                   <p role="status" className="text-sm">
-                    Chưa xác nhận được lần thu tiền. Kiểm tra lại cùng số tiền
-                    và phương thức.
+                    Chưa xác nhận được lần thu tiền. Kiểm tra lại cùng số tiền và phương thức.
                   </p>
                 )}
 
@@ -539,11 +605,10 @@ export function InvoiceDetailDialog({
                       onChange={(e) => setAmountTendered(e.target.value)}
                     />
                     {tenderedEnough && (
-                        <p className="text-xs text-emerald-800 font-semibold mt-1">
-                          Tiền thối lại:{' '}
-                          {formatPrice(decimalAmount(tenderedMinor - totalMinor))}
-                        </p>
-                      )}
+                      <p className="text-xs text-emerald-800 font-semibold mt-1">
+                        Tiền thối lại: {formatPrice(decimalAmount(tenderedMinor - totalMinor))}
+                      </p>
+                    )}
                   </div>
                 )}
 
@@ -552,7 +617,11 @@ export function InvoiceDetailDialog({
                   className="w-full font-bold mt-2"
                   onClick={confirmManualPayment}
                   isLoading={updatePaymentMutation.isPending}
-                  disabled={!can('/invoices_update') || manualBlocked || (!submittedManual && manualMethod === 'CASH' && !tenderedEnough)}
+                  disabled={
+                    !can('/invoices_update') ||
+                    manualBlocked ||
+                    (!submittedManual && manualMethod === 'CASH' && !tenderedEnough)
+                  }
                 >
                   {submittedManual
                     ? 'Kiểm tra lại lần thu tiền'
@@ -613,17 +682,17 @@ export function InvoiceDetailDialog({
       {/* Confirmation Dialog to void invoice */}
       <Dialog
         open={voidConfirmOpen}
-        onClose={() => { if (!voidFlight.current) setVoidConfirmOpen(false) }}
+        onClose={() => {
+          if (!voidFlight.current) setVoidConfirmOpen(false)
+        }}
         showCloseButton={!voidMutation.isPending}
         maxWidth="sm"
       >
         <div className="p-6 space-y-4">
-          <h3 className="text-lg font-bold text-destructive">
-            Xác nhận hủy hóa đơn?
-          </h3>
+          <h3 className="text-lg font-bold text-destructive">Xác nhận hủy hóa đơn?</h3>
           <p className="text-sm text-muted-foreground">
-            Hóa đơn #{inv?.invoiceNumber} chưa được thanh toán sẽ chuyển sang
-            trạng thái ĐÃ HỦY. Hành động này không thể hoàn tác.
+            Hóa đơn #{inv?.invoiceNumber} chưa được thanh toán sẽ chuyển sang trạng thái ĐÃ HỦY.
+            Hành động này không thể hoàn tác.
           </p>
           <div className="flex items-center justify-end gap-2.5 pt-2">
             <Button
@@ -641,7 +710,13 @@ export function InvoiceDetailDialog({
               size="sm"
               disabled={manualBlocked || inv?.paymentStatus !== 'UNPAID'}
               onClick={() => {
-                if (voidFlight.current || manualFlight.current || manualBlocked || inv?.paymentStatus !== 'UNPAID') return
+                if (
+                  voidFlight.current ||
+                  manualFlight.current ||
+                  manualBlocked ||
+                  inv?.paymentStatus !== 'UNPAID'
+                )
+                  return
                 voidFlight.current = true
                 voidMutation.mutate()
               }}
@@ -656,7 +731,9 @@ export function InvoiceDetailDialog({
       {/* Confirmation Dialog to reprint receipt */}
       <Dialog
         open={reprintOpen}
-        onClose={() => { if (!reprintMutation.isPending) setReprintOpen(false) }}
+        onClose={() => {
+          if (!reprintMutation.isPending) setReprintOpen(false)
+        }}
         showCloseButton={!reprintMutation.isPending}
         maxWidth="sm"
       >
@@ -674,7 +751,8 @@ export function InvoiceDetailDialog({
             <h3 className="text-lg font-bold text-foreground">In lại hóa đơn</h3>
           </div>
           <p className="text-sm text-muted-foreground">
-            Lệnh in lại phiếu thu cho hóa đơn #{inv?.invoiceNumber} sẽ được gửi vào hàng đợi của thiết bị in mặc định.
+            Lệnh in lại phiếu thu cho hóa đơn #{inv?.invoiceNumber} sẽ được gửi vào hàng đợi của
+            thiết bị in mặc định.
           </p>
           <div className="space-y-1.5">
             <label htmlFor="reprintReason" className="text-xs font-semibold text-foreground">
