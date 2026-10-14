@@ -1,8 +1,8 @@
 import { useTranslation } from 'react-i18next'
 import { useEffect, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { CalendarDays, Copy, RefreshCw, Search } from 'lucide-react'
+import { CalendarDays, CheckCircle2, Copy, RefreshCw, Search, Sparkles } from 'lucide-react'
+import { SiteHeader } from '@/shared/components/site-header'
 import {
   createPublicReservationRequest,
   trackPublicReservationRequest,
@@ -174,36 +174,35 @@ export function PublicReservationsPage() {
             : translate('reservation.expired')
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="border-b border-border">
-        <div className="mx-auto flex max-w-3xl flex-wrap items-center justify-between gap-3 px-4 py-4">
-          <Link to="/" className="text-lg font-semibold">
-            Coffee Shop
-          </Link>
-          <nav className="flex flex-wrap gap-4 text-sm">
-            <Link to="/order">{translate('menu.takeaway')}</Link>
-            <Link to="/">{translate('reservation.viewMenu')}</Link>
-          </nav>
-        </div>
-      </header>
-      <main className="mx-auto max-w-3xl space-y-6 px-4 py-6 sm:px-6">
-        <h1 className="flex items-center gap-2 text-2xl font-semibold">
-          <CalendarDays size={24} />
-          {translate('reservation.heading')}
-        </h1>
+    <div className="min-h-screen bg-background text-foreground flex flex-col font-sans">
+      <SiteHeader />
+
+      <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 sm:py-10 flex-1 w-full">
         {activeToken ? (
-          <section className="space-y-4 border-t border-border pt-4">
-            <h2 className="text-lg font-semibold">{translate('reservation.requestStatus')}</h2>
-            <div className="flex items-start gap-2 rounded-md border border-border p-3">
+          <div className="max-w-2xl mx-auto rounded-[18px] border border-border/80 bg-card p-6 sm:p-8 shadow-xs space-y-6">
+            <div className="flex items-center gap-3 pb-4 border-b border-border/80">
+              <div className="h-10 w-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                <CalendarDays className="h-5 w-5" />
+              </div>
+              <div>
+                <h1 className="text-xl font-extrabold text-foreground">{translate('reservation.requestStatus')}</h1>
+                <p className="text-xs text-muted-foreground">Thông tin chi tiết yêu cầu giữ chỗ tại quán</p>
+              </div>
+            </div>
+
+            <div className="flex items-start justify-between gap-3 rounded-xl border border-border bg-surface-muted/50 p-4">
               <div className="min-w-0 flex-1">
-                <span className="text-sm text-muted-foreground">
+                <span className="text-xs font-semibold text-muted-foreground block mb-1">
                   {translate('reservation.accessCode')}
                 </span>
-                <p className="break-all font-mono text-xs">{activeToken}</p>
+                <p className="break-all font-mono text-xs font-bold text-foreground select-all bg-card/80 p-2 rounded-lg border border-border/70">
+                  {activeToken}
+                </p>
               </div>
               <Button
-                variant="ghost"
+                variant="outline"
                 size="sm"
+                className="shrink-0 mt-5"
                 aria-label={translate('reservation.copyAccess')}
                 title={translate('reservation.copyAccess')}
                 onClick={() => {
@@ -213,59 +212,78 @@ export function PublicReservationsPage() {
                     .catch(() => setCopied(false))
                 }}
               >
-                <Copy size={16} />
+                <Copy size={15} />
+                <span className="ml-1 text-xs">Sao chép</span>
               </Button>
             </div>
+
             {copied && (
-              <p role="status" className="text-sm">
+              <p role="status" className="text-xs font-semibold text-emerald-600 bg-emerald-50 border border-emerald-200 rounded-lg p-2.5">
                 {translate('reservation.copied')}
               </p>
             )}
+
             {tracking.isError ? (
-              <div role="alert" className="space-y-3 text-sm text-destructive">
-                <p>{errorMessage(tracking.error)}</p>
-                {unconfirmed && <p>{translate('reservation.uncertain')}</p>}
-                <Button
-                  variant="outline"
-                  disabled={tracking.isFetching}
-                  onClick={() => void tracking.refetch()}
-                >
-                  <RefreshCw size={16} />
-                  {translate('reservation.reloadStatus')}
-                </Button>
-                {pendingPayload && (
-                  <Button variant="outline" onClick={() => setActiveToken(null)}>
-                    {translate('reservation.backToRequest')}
+              <div role="alert" className="space-y-3 text-sm text-destructive rounded-xl border border-destructive/20 bg-destructive/5 p-4">
+                <p className="font-semibold">{errorMessage(tracking.error)}</p>
+                {unconfirmed && <p className="text-xs">{translate('reservation.uncertain')}</p>}
+                <div className="flex flex-wrap gap-2 pt-1">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={tracking.isFetching}
+                    onClick={() => void tracking.refetch()}
+                  >
+                    <RefreshCw size={14} className="mr-1.5" />
+                    {translate('reservation.reloadStatus')}
                   </Button>
-                )}
+                  {pendingPayload && (
+                    <Button variant="outline" size="sm" onClick={() => setActiveToken(null)}>
+                      {translate('reservation.backToRequest')}
+                    </Button>
+                  )}
+                </div>
               </div>
             ) : tracking.isPending ? (
-              <p role="status">{translate('reservation.loadingStatus')}</p>
+              <div className="p-8 text-center text-muted-foreground animate-pulse text-sm" role="status">
+                {translate('reservation.loadingStatus')}
+              </div>
             ) : (
               data && (
-                <>
-                  <p role="status" className="border-l-4 border-primary pl-3 font-semibold">
-                    {label}
-                  </p>
-                  <dl className="grid gap-3 text-sm sm:grid-cols-3">
+                <div className="space-y-4">
+                  <div className="rounded-xl border border-primary/30 bg-primary/5 p-4 flex items-center justify-between">
                     <div>
-                      <dt className="text-muted-foreground">{translate('reservation.startsAt')}</dt>
-                      <dd>{formatReservationDateTime(data.startsAt)}</dd>
+                      <span className="text-xs text-muted-foreground block">Trạng thái</span>
+                      <p role="status" className="text-base font-extrabold text-primary mt-0.5">
+                        {label}
+                      </p>
+                    </div>
+                    <div className="h-8 w-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
+                      <Sparkles className="h-4 w-4" />
+                    </div>
+                  </div>
+
+                  <dl className="grid gap-3 sm:grid-cols-3 rounded-xl border border-border p-4 text-sm bg-card">
+                    <div>
+                      <dt className="text-xs font-medium text-muted-foreground">{translate('reservation.startsAt')}</dt>
+                      <dd className="font-bold text-foreground mt-0.5">{formatReservationDateTime(data.startsAt)}</dd>
                     </div>
                     <div>
-                      <dt className="text-muted-foreground">{translate('reservation.endsAt')}</dt>
-                      <dd>{formatReservationDateTime(data.endsAt)}</dd>
+                      <dt className="text-xs font-medium text-muted-foreground">{translate('reservation.endsAt')}</dt>
+                      <dd className="font-bold text-foreground mt-0.5">{formatReservationDateTime(data.endsAt)}</dd>
                     </div>
                     <div>
-                      <dt className="text-muted-foreground">{translate('reservation.guests')}</dt>
-                      <dd>
+                      <dt className="text-xs font-medium text-muted-foreground">{translate('reservation.guests')}</dt>
+                      <dd className="font-bold text-foreground mt-0.5">
                         {data.guestCount} {translate('reservation.people')}
                       </dd>
                     </div>
                   </dl>
+
                   {data.status === 'PENDING' && (
                     <Button
                       variant="outline"
+                      className="text-destructive border-destructive/30 hover:bg-destructive/10"
                       disabled={cancel.isPending || tracking.isFetching}
                       onClick={() => {
                         cancel.reset()
@@ -275,20 +293,35 @@ export function PublicReservationsPage() {
                       {translate('reservation.cancelRequest')}
                     </Button>
                   )}
-                </>
+                </div>
               )
             )}
-            <Button
-              variant="outline"
-              disabled={cancel.isPending || (unconfirmed && !tracking.isSuccess)}
-              onClick={forget}
-            >
-              {translate('reservation.anotherRequest')}
-            </Button>
-          </section>
+
+            <div className="pt-2 border-t border-border flex justify-end">
+              <Button
+                variant="outline"
+                disabled={cancel.isPending || (unconfirmed && !tracking.isSuccess)}
+                onClick={forget}
+              >
+                {translate('reservation.anotherRequest')}
+              </Button>
+            </div>
+          </div>
         ) : (
-          <section className="space-y-6 border-t border-border pt-4">
-            <h2 className="text-lg font-semibold">{translate('reservation.details')}</h2>
+          /* 2-Column Booking Layout (Mockup Panel 4) */
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+            {/* Right Column in DOM but on desktop on the right (7 cols) */}
+            <div className="lg:col-span-7 order-1 lg:order-2">
+              <div className="rounded-[18px] border border-border/80 bg-card p-6 sm:p-8 shadow-xs">
+                <div className="mb-6 pb-4 border-b border-border/80">
+                  <h1 className="flex items-center gap-2.5 text-xl sm:text-2xl font-extrabold text-foreground">
+                    <CalendarDays className="h-6 w-6 text-primary shrink-0" />
+                    <span>{translate('reservation.heading')}</span>
+                  </h1>
+                  <p className="mt-1 text-xs sm:text-sm text-muted-foreground">
+                    {translate('reservation.details')}
+                  </p>
+                </div>
             <form
               className="space-y-4"
               onSubmit={(event) => {
@@ -470,6 +503,7 @@ export function PublicReservationsPage() {
               )}
               <Button
                 type="submit"
+                className="w-full h-11 rounded-[10px] bg-primary text-white font-bold text-sm shadow-xs hover:bg-primary-hover transition-all flex items-center justify-center gap-2 cursor-pointer"
                 disabled={
                   create.isPending ||
                   unavailable ||
@@ -483,8 +517,70 @@ export function PublicReservationsPage() {
                     : translate('reservation.submit')}
               </Button>
             </form>
+          </div>
+        </div>
+
+        {/* Left Column in DOM, positioned left on desktop via order-1 (5 cols) */}
+        <div className="lg:col-span-5 order-2 lg:order-1 space-y-6">
+          <div className="rounded-[18px] border border-border/80 bg-card overflow-hidden shadow-xs">
+            <div className="relative h-60 sm:h-72 w-full overflow-hidden bg-primary/20">
+              <img
+                src="/hero-coffee.jpg"
+                alt="Không gian Coffee Homes"
+                className="h-full w-full object-cover"
+                onError={(e) => {
+                  e.currentTarget.src = '/menu-cover.jpg'
+                }}
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/40 to-transparent" />
+              <div className="absolute bottom-4 left-4 right-4 text-white">
+                <div className="inline-flex items-center gap-1.5 rounded-full bg-accent/90 px-3 py-0.5 text-[11px] font-bold text-black uppercase tracking-wider mb-2">
+                  <Sparkles className="h-3 w-3" />
+                  <span>Không gian ấm cúng</span>
+                </div>
+                <h2 className="text-xl sm:text-2xl font-bold leading-tight">Đặt bàn tại Coffee Homes</h2>
+                <p className="text-xs text-emerald-100/90 mt-1">
+                  Giữ chỗ trước để có trải nghiệm trọn vẹn nhất bên tách cà phê thơm ngon và góc ngồi ưng ý.
+                </p>
+              </div>
+            </div>
+
+            <div className="p-5 space-y-4">
+              <div className="flex items-start gap-3">
+                <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-sm font-bold text-foreground">Xác nhận ngay lập tức</p>
+                  <p className="text-xs text-muted-foreground">Đội ngũ phục vụ tiếp nhận và chuẩn bị bàn kịp thời.</p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3">
+                <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-sm font-bold text-foreground">Giữ chỗ hoàn toàn miễn phí</p>
+                  <p className="text-xs text-muted-foreground">Không yêu cầu phí đặt cọc cho các bàn thông thường.</p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3">
+                <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-sm font-bold text-foreground">Dễ dàng thay đổi &amp; tra cứu lịch</p>
+                  <p className="text-xs text-muted-foreground">Tra cứu tình trạng duyệt bàn dễ dàng qua mã truy cập cá nhân.</p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3">
+                <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-sm font-bold text-foreground">Không cần đặt cọc</p>
+                  <p className="text-xs text-muted-foreground">Thoải mái đến quán đúng giờ hẹn mà không lo ngại thủ tục.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Tra cứu mã đặt bàn (Lookup Card) */}
+          <div className="rounded-[18px] border border-border/80 bg-card p-5 sm:p-6 shadow-xs">
             <form
-              className="space-y-2 border-t border-border pt-4"
+              className="space-y-3"
               onSubmit={(event) => {
                 event.preventDefault()
                 if (locked) return
@@ -501,7 +597,7 @@ export function PublicReservationsPage() {
                 setActiveToken(token)
               }}
             >
-              <label htmlFor="reservation-token" className="text-sm font-medium">
+              <label htmlFor="reservation-token" className="block text-sm font-bold text-foreground">
                 {translate('reservation.lookupByAccess')}
               </label>
               <div className="flex gap-2">
@@ -511,16 +607,19 @@ export function PublicReservationsPage() {
                   disabled={locked}
                   maxLength={43}
                   autoComplete="off"
+                  placeholder="Nhập mã truy cập 43 ký tự..."
                   onChange={(event) => setTokenInput(event.target.value)}
                 />
-                <Button type="submit" variant="outline" disabled={locked}>
-                  <Search size={16} />
+                <Button type="submit" variant="outline" disabled={locked} className="shrink-0">
+                  <Search size={15} className="mr-1" />
                   {translate('reservation.lookup')}
                 </Button>
               </div>
             </form>
-          </section>
-        )}
+          </div>
+        </div>
+      </div>
+    )}
       </main>
       {cancelOpen && (
         <Dialog
