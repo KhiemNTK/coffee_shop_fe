@@ -82,3 +82,13 @@ export function formatSessionDuration(createdAt?: string): string {
   const mins = diffMinutes % 60
   return i18n.t('common.durationHours', { hours, minutes: mins })
 }
+
+/**
+ * Returns true if active session has been running for over 24 hours
+ */
+export function isSessionOver24h(createdAt?: string): boolean {
+  if (!createdAt) return false
+  const createdMs = Date.parse(createdAt)
+  if (Number.isNaN(createdMs)) return false
+  return Date.now() - createdMs > 24 * 60 * 60 * 1000
+}
