@@ -376,7 +376,7 @@ test.describe('real Docker backend contract', () => {
     expect(checks.failures).toEqual([])
     expect(checks.passed).toBe(47)
     await page.goto('/staff/invoices')
-    await page.getByRole('code').filter({ hasText: prefix }).click()
+    await page.getByRole('row', { name: `Chi tiết hóa đơn ${prefix}`, exact: true }).click()
     await expect(page.getByRole('dialog').getByText(prefix + '-coffee', { exact: true })).toBeVisible()
     await expect(page.getByRole('dialog').getByText('Mang đi', { exact: true })).toBeVisible()
     await page.screenshot({ path: info.outputPath('live-takeaway-invoice.png') })

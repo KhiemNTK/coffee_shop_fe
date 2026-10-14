@@ -182,7 +182,7 @@ function SessionActionDialog({
                 </span>
                 <Input
                   className="w-24 shrink-0"
-                  aria-label={translate('pos.splitQuantity') + item.menuItem.name}
+                  aria-label={translate('pos.splitQuantity') + ' ' + item.menuItem.name}
                   type="number"
                   min={0}
                   max={item.quantity}

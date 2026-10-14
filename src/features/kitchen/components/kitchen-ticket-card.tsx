@@ -21,7 +21,9 @@ export function KitchenTicketCard({
 }: KitchenTicketCardProps) {
   const isCompletedTicket = ticket.state === 'COMPLETED'
   const isOverdue = ticket.isOverdue
-  const currentTables = ticket.items.map((item) => item.currentTable)
+  const currentTables = ticket.items.map((item) =>
+    item.currentTable === undefined ? ticket.table : item.currentTable,
+  )
   const destination = currentTables[0]
   const destinationLabel = currentTables.some((table) => table?.id !== destination?.id)
     ? 'Nhiều phiên'
@@ -128,8 +130,9 @@ export function KitchenTicketCard({
           const isCooking = item.serveStatus === 'COOKING'
           const isReady = item.serveStatus === 'READY'
           const isServed = item.serveStatus === 'SERVED'
-          const currentTable = item.currentTable
-          const advance = () => onAdvanceItemStatus(item)
+          const currentTable =
+            item.currentTable === undefined ? ticket.table : item.currentTable
+          const advance = () => onAdvanceItemStatus({ ...item, currentTable })
 
           return (
             <div
@@ -144,15 +147,9 @@ export function KitchenTicketCard({
               )}
             >
               <div className="min-w-0 flex-1 space-y-1">
-                <div className="flex items-start gap-2 min-w-0">
-                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground font-bold text-xs shadow-xs">
-                    {item.quantity}
-                  </span>
-                  <span
-                    className="text-sm font-bold text-foreground break-words line-clamp-2 leading-snug flex-1 min-w-0"
-                    title={item.itemName}
-                  >
-                    {item.itemName}
+                <div className="flex items-center gap-1.5">
+                  <span className="text-sm font-bold text-foreground">
+                    {item.quantity}x {item.itemName}
                   </span>
                 </div>
 
@@ -200,7 +197,7 @@ export function KitchenTicketCard({
 
                 {isReady && (
                   <span className="inline-flex items-center rounded-md bg-emerald-100 px-2 py-1 text-xs font-bold text-emerald-800 border border-emerald-200 shrink-0">
-                    Chờ giao món
+                    Chờ quầy giao món
                   </span>
                 )}
 
