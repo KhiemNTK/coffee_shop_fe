@@ -1,5 +1,25 @@
 # Coffee Shop Frontend
 
+## Customer Wishlist
+
+`/wishlist` supports Google customer sign-in and server-backed favorites shared
+across devices. The public menu and product dialog use the same favorite button;
+staff authentication remains separate. Apply backend migration
+`20261013000000_customer_wishlist` before enabling this UI. Set the existing
+`VITE_GOOGLE_CLIENT_ID` and `VITE_TURNSTILE_SITE_KEY` to match backend configuration.
+No Google secret, customer session token or wishlist snapshot is stored in browser
+storage. Customer mutations send the separate `customerCsrfToken` cookie as
+`X-CSRF-Token`, never retry employee refresh, and include `expectedCustomerId` to
+reject an account changed in another tab. Uncertain save/remove retries preserve
+the original PUT/DELETE intent instead of toggling from a stale UI snapshot.
+
+Favorites show current backend prices and availability. Discontinued items remain
+removable; unavailable items cannot be added to the cart. Private queries are scoped
+by customer ID and discarded on login/logout; ordinary checkout still revalidates
+prices and availability on the server. Google customer registration does not grant
+staff roles or permissions. Password-based customer auth and loyalty are not part
+of this slice.
+
 ## payOS Payments
 
 payOS shares the existing staff invoice gateway with VNPay/MoMo. Provider availability

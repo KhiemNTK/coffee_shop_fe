@@ -3,7 +3,7 @@ import base from './playwright.config.ts'
 
 export default defineConfig({
   ...base,
-  testMatch: '**/google-auth.spec.ts',
+  testMatch: ['**/google-auth.spec.ts', '**/customer-google.spec.ts'],
   testIgnore: [],
   outputDir: './test-results/google',
   webServer: {
