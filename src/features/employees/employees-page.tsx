@@ -186,12 +186,12 @@ export function EmployeesPage() {
         </p>
       )}
       {/* Tabs Navigation */}
-      <div className="flex border-b border-border">
+      <div className="flex overflow-x-auto whitespace-nowrap flex-nowrap border-b border-border gap-1 scrollbar-none pb-px">
         <button
           type="button"
           onClick={() => setActiveTab('employees')}
           disabled={!canReadEmployees}
-          className={`flex items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-semibold transition-colors cursor-pointer ${
+          className={`flex shrink-0 items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-semibold transition-colors cursor-pointer ${
             activeTab === 'employees'
               ? 'border-blue-600 text-blue-600 dark:border-blue-400 dark:text-blue-400'
               : 'border-transparent text-muted-foreground hover:text-foreground'
@@ -208,7 +208,7 @@ export function EmployeesPage() {
           <button
             type="button"
             onClick={() => setActiveTab('positions')}
-            className={`flex items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-semibold transition-colors cursor-pointer ${
+            className={`flex shrink-0 items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-semibold transition-colors cursor-pointer ${
               activeTab === 'positions'
                 ? 'border-blue-600 text-blue-600 dark:border-blue-400 dark:text-blue-400'
                 : 'border-transparent text-muted-foreground hover:text-foreground'
@@ -226,7 +226,7 @@ export function EmployeesPage() {
           <button
             type="button"
             onClick={() => setActiveTab('roles')}
-            className={`flex items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-semibold transition-colors cursor-pointer ${
+            className={`flex shrink-0 items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-semibold transition-colors cursor-pointer ${
               activeTab === 'roles'
                 ? 'border-blue-600 text-blue-600 dark:border-blue-400 dark:text-blue-400'
                 : 'border-transparent text-muted-foreground hover:text-foreground'

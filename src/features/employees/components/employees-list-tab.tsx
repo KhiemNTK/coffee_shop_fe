@@ -8,7 +8,6 @@ import {
   RefreshCw,
   Edit2,
   Trash2,
-  AlertCircle,
   Mail,
   Phone,
   ShieldCheck,
@@ -34,12 +33,11 @@ import {
   Card,
   CardContent,
   Input,
-  Dialog,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
 } from '@/shared/ui'
+import { CreateEmployeeModal } from './modals/create-employee-modal'
+import { EditEmployeeModal } from './modals/edit-employee-modal'
+import { AssignRolesModal } from './modals/assign-roles-modal'
+import { DeleteEmployeeModal } from './modals/delete-employee-modal'
 
 export interface EmployeesListTabProps {
   positionsDropdown: PositionDropdownItem[]
@@ -501,594 +499,70 @@ export function EmployeesListTab({
         />
       )}
 
-      {/* MODAL: CREATE EMPLOYEE */}
-      <Dialog
-        open={isCreateOpen}
-        onOpenChange={setIsCreateOpen}
-        className="max-h-[90vh] overflow-y-auto"
-      >
-        <DialogHeader>
-          <DialogTitle className="text-lg font-bold text-foreground">
-            Thêm nhân viên mới
-          </DialogTitle>
-          <DialogDescription className="text-sm text-muted-foreground">
-            Khởi tạo tài khoản nhân sự và liên kết vị trí làm việc
-          </DialogDescription>
-        </DialogHeader>
+      {/* Modals */}
+      <CreateEmployeeModal
+        isOpen={isCreateOpen}
+        onClose={() => setIsCreateOpen(false)}
+        positionsDropdown={positionsDropdown}
+        formData={createEmployeeData}
+        setFormData={setCreateEmployeeData}
+        error={createEmployeeError}
+        setError={setCreateEmployeeError}
+        isPending={createEmployeeMutation.isPending}
+        onSubmit={() => createEmployeeMutation.mutate(createEmployeeData)}
+      />
 
-        {createEmployeeError && (
-          <div className="mt-4 flex items-start gap-2 rounded-xl border border-destructive/20 bg-destructive/5 p-3 text-xs text-destructive">
-            <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
-            <span>{createEmployeeError}</span>
-          </div>
-        )}
-
-        <form
-          onSubmit={(e) => {
-            e.preventDefault()
-            if (!createEmployeeData.positionId) {
-              setCreateEmployeeError('Vui lòng chọn vị trí công việc')
-              return
-            }
-            createEmployeeMutation.mutate(createEmployeeData)
-          }}
-          className="mt-4 space-y-3.5"
-        >
-          <div>
-            <label className="text-xs font-medium text-foreground">
-              Họ và tên <span className="text-destructive">*</span>
-            </label>
-            <Input
-              type="text"
-              placeholder="Ví dụ: Nguyễn Văn An"
-              value={createEmployeeData.fullName}
-              onChange={(e) =>
-                setCreateEmployeeData({
-                  ...createEmployeeData,
-                  fullName: e.target.value,
-                })
-              }
-              required
-              className="mt-1"
-            />
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs font-medium text-foreground">
-                Email đăng nhập <span className="text-destructive">*</span>
-              </label>
-              <Input
-                type="email"
-                placeholder="nhanvien@example.com"
-                value={createEmployeeData.email}
-                onChange={(e) =>
-                  setCreateEmployeeData({
-                    ...createEmployeeData,
-                    email: e.target.value,
-                  })
-                }
-                required
-                className="mt-1"
-              />
-            </div>
-            <div>
-              <label className="text-xs font-medium text-foreground">
-                Tên đăng nhập (Username){' '}
-                <span className="text-destructive">*</span>
-              </label>
-              <Input
-                type="text"
-                placeholder="nguyenvanan"
-                value={createEmployeeData.username}
-                onChange={(e) =>
-                  setCreateEmployeeData({
-                    ...createEmployeeData,
-                    username: e.target.value,
-                  })
-                }
-                required
-                className="mt-1"
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs font-medium text-foreground">
-                Mật khẩu ban đầu <span className="text-destructive">*</span>
-              </label>
-              <Input
-                type="password"
-                placeholder="Tối thiểu 12 ký tự"
-                minLength={12}
-                maxLength={72}
-                value={createEmployeeData.password}
-                onChange={(e) =>
-                  setCreateEmployeeData({
-                    ...createEmployeeData,
-                    password: e.target.value,
-                  })
-                }
-                required
-                className="mt-1"
-              />
-            </div>
-            <div>
-              <label className="text-xs font-medium text-foreground">
-                Vị trí công việc <span className="text-destructive">*</span>
-              </label>
-              <select
-                aria-label="Chọn vị trí công việc"
-                value={createEmployeeData.positionId}
-                onChange={(e) =>
-                  setCreateEmployeeData({
-                    ...createEmployeeData,
-                    positionId: e.target.value,
-                  })
-                }
-                required
-                className="mt-1 w-full rounded-lg border border-border bg-card p-2 text-sm text-foreground focus:outline-hidden focus:ring-2 focus:ring-ring"
-              >
-                <option value="">-- Chọn vị trí --</option>
-                {positionsDropdown.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs font-medium text-foreground">
-                Số điện thoại
-              </label>
-              <Input
-                type="tel"
-                placeholder="0912345678"
-                value={createEmployeeData.phoneNumber || ''}
-                onChange={(e) =>
-                  setCreateEmployeeData({
-                    ...createEmployeeData,
-                    phoneNumber: e.target.value,
-                  })
-                }
-                className="mt-1"
-              />
-            </div>
-            <div>
-              <label className="text-xs font-medium text-foreground">
-                Địa chỉ
-              </label>
-              <Input
-                type="text"
-                placeholder="Địa chỉ cư trú"
-                value={createEmployeeData.address || ''}
-                onChange={(e) =>
-                  setCreateEmployeeData({
-                    ...createEmployeeData,
-                    address: e.target.value,
-                  })
-                }
-                className="mt-1"
-              />
-            </div>
-          </div>
-
-          <DialogFooter className="mt-6 flex justify-end gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => setIsCreateOpen(false)}
-              disabled={createEmployeeMutation.isPending}
-            >
-              Hủy
-            </Button>
-            <Button
-              type="submit"
-              size="sm"
-              disabled={createEmployeeMutation.isPending}
-              className="bg-blue-600 hover:bg-blue-700 text-white"
-            >
-              {createEmployeeMutation.isPending
-                ? 'Đang tạo...'
-                : 'Lưu nhân viên'}
-            </Button>
-          </DialogFooter>
-        </form>
-      </Dialog>
-
-      {/* MODAL: EDIT EMPLOYEE */}
-      <Dialog
-        open={!!editingEmployee}
-        onOpenChange={(open) => !open && setEditingEmployee(null)}
-        className="max-h-[90vh] overflow-y-auto"
-      >
-        {editingEmployee && (
-          <>
-            <DialogHeader>
-              <DialogTitle className="text-lg font-bold text-foreground">
-                Cập nhật thông tin nhân viên
-              </DialogTitle>
-              <DialogDescription className="text-sm text-muted-foreground">
-                Điều chỉnh thông tin hồ sơ và trạng thái tài khoản của{' '}
-                {editingEmployee.fullName}
-              </DialogDescription>
-            </DialogHeader>
-
-            {editEmployeeError && (
-              <div className="mt-4 flex items-start gap-2 rounded-xl border border-destructive/20 bg-destructive/5 p-3 text-xs text-destructive">
-                <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
-                <span>{editEmployeeError}</span>
-              </div>
-            )}
-
-            <form
-              onSubmit={(e) => {
-                e.preventDefault()
-                updateEmployeeMutation.mutate({
-                  id: editingEmployee.id,
-                  data: editEmployeeData,
-                })
-              }}
-              className="mt-4 space-y-3.5"
-            >
-              <div>
-                <label className="text-xs font-medium text-foreground">
-                  Họ và tên
-                </label>
-                <Input
-                  type="text"
-                  value={editEmployeeData.fullName || ''}
-                  onChange={(e) =>
-                    setEditEmployeeData({
-                      ...editEmployeeData,
-                      fullName: e.target.value,
-                    })
-                  }
-                  required
-                  className="mt-1"
-                />
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-medium text-foreground">
-                    Vị trí công việc
-                  </label>
-                  <select
-                    aria-label="Chọn vị trí công việc"
-                    value={editEmployeeData.positionId || ''}
-                    onChange={(e) =>
-                      setEditEmployeeData({
-                        ...editEmployeeData,
-                        positionId: e.target.value,
-                      })
-                    }
-                    className="mt-1 w-full rounded-lg border border-border bg-card p-2 text-sm text-foreground focus:outline-hidden focus:ring-2 focus:ring-ring"
-                  >
-                    <option value="">-- Chưa xếp vị trí --</option>
-                    {positionsDropdown.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="text-xs font-medium text-foreground">
-                    Trạng thái làm việc
-                  </label>
-                  <select
-                    aria-label="Trạng thái làm việc"
-                    value={editEmployeeData.isActive ? 'true' : 'false'}
-                    onChange={(e) =>
-                      setEditEmployeeData({
-                        ...editEmployeeData,
-                        isActive: e.target.value === 'true',
-                      })
-                    }
-                    className="mt-1 w-full rounded-lg border border-border bg-card p-2 text-sm text-foreground focus:outline-hidden focus:ring-2 focus:ring-ring"
-                  >
-                    <option value="true">Đang làm việc (Hoạt động)</option>
-                    <option value="false">Tạm khóa tài khoản</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-medium text-foreground">
-                    Số điện thoại
-                  </label>
-                  <Input
-                    type="tel"
-                    value={editEmployeeData.phoneNumber || ''}
-                    onChange={(e) =>
-                      setEditEmployeeData({
-                        ...editEmployeeData,
-                        phoneNumber: e.target.value,
-                      })
-                    }
-                    className="mt-1"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-medium text-foreground">
-                    Đổi mật khẩu mới (Tùy chọn)
-                  </label>
-                  <Input
-                    type="password"
-                    placeholder="Để trống nếu không đổi"
-                    value={editEmployeeData.password || ''}
-                    onChange={(e) =>
-                      setEditEmployeeData({
-                        ...editEmployeeData,
-                        password: e.target.value || undefined,
-                      })
-                    }
-                    className="mt-1"
-                  />
-                </div>
-              </div>
-
-              <DialogFooter className="mt-6 flex justify-end gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setEditingEmployee(null)}
-                  disabled={updateEmployeeMutation.isPending}
-                >
-                  Hủy
-                </Button>
-                <Button
-                  type="submit"
-                  size="sm"
-                  disabled={updateEmployeeMutation.isPending}
-                  className="bg-blue-600 hover:bg-blue-700 text-white"
-                >
-                  {updateEmployeeMutation.isPending
-                    ? 'Đang lưu...'
-                    : 'Lưu thay đổi'}
-                </Button>
-              </DialogFooter>
-            </form>
-          </>
-        )}
-      </Dialog>
-
-      {/* MODAL: ASSIGN ROLES TO EMPLOYEE */}
-      <Dialog
-        open={!!roleAssignEmployee}
-        onOpenChange={(open) => {
-          if (!open && !replaceRolesMutation.isPending)
-            setRoleAssignEmployee(null)
+      <EditEmployeeModal
+        employee={editingEmployee}
+        onClose={() => setEditingEmployee(null)}
+        positionsDropdown={positionsDropdown}
+        formData={editEmployeeData}
+        setFormData={setEditEmployeeData}
+        error={editEmployeeError}
+        isPending={updateEmployeeMutation.isPending}
+        onSubmit={(e) => {
+          e.preventDefault()
+          if (!editingEmployee) return
+          updateEmployeeMutation.mutate({
+            id: editingEmployee.id,
+            data: editEmployeeData,
+          })
         }}
-      >
-        {roleAssignEmployee && (
-          <>
-            <DialogHeader>
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-500/10 text-blue-600 mb-2">
-                <ShieldCheck className="h-5 w-5" />
-              </div>
-              <DialogTitle className="text-lg font-bold text-foreground">
-                Phân vai trò: {roleAssignEmployee.fullName}
-              </DialogTitle>
-              <DialogDescription className="text-sm text-muted-foreground">
-                Chọn các vai trò phân quyền áp dụng cho tài khoản này
-              </DialogDescription>
-            </DialogHeader>
+      />
 
-            {roleAssignError && (
-              <div className="mt-4 flex items-start gap-2 rounded-xl border border-destructive/20 bg-destructive/5 p-3 text-xs text-destructive">
-                <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
-                <span>{roleAssignError}</span>
-              </div>
-            )}
+      <AssignRolesModal
+        employee={roleAssignEmployee}
+        onClose={() => setRoleAssignEmployee(null)}
+        roles={roles}
+        rolesLoaded={rolesLoaded}
+        roleIds={roleIds}
+        setSelectedRoleIds={setSelectedRoleIds}
+        assignment={assignment}
+        assignmentReady={assignmentReady}
+        roleAssignError={roleAssignError}
+        setRoleAssignError={setRoleAssignError}
+        roleReviewRequired={roleReviewRequired}
+        setRoleReviewRequired={setRoleReviewRequired}
+        isPending={replaceRolesMutation.isPending}
+        onSubmit={(ids) => {
+          if (!roleAssignEmployee) return
+          replaceRolesMutation.mutate({
+            id: roleAssignEmployee.id,
+            roleIds: ids,
+          })
+        }}
+      />
 
-            {assignment.isPending && (
-              <p role="status">Đang tải vai trò hiện tại...</p>
-            )}
-            {assignment.isError && (
-              <div role="alert">
-                <p>{errorMessage(assignment.error)}</p>
-                <Button
-                  variant="outline"
-                  onClick={() => void assignment.refetch()}
-                >
-                  Thử tải lại
-                </Button>
-              </div>
-            )}
-            {!rolesLoaded && (
-              <p role="alert">Danh sách vai trò chưa tải thành công.</p>
-            )}
-            {assignment.isSuccess && !assignment.data.canManageRoles && (
-              <p role="status" className="mt-3 text-sm text-muted-foreground">
-                Không được thay đổi vai trò của tài khoản này.
-              </p>
-            )}
-            {roleReviewRequired && (
-              <Button
-                variant="outline"
-                disabled={assignment.isFetching}
-                onClick={async () => {
-                  const current = await assignment.refetch()
-                  if (current.isSuccess) {
-                    setSelectedRoleIds(null)
-                    setRoleReviewRequired(false)
-                    setRoleAssignError(null)
-                  }
-                }}
-              >
-                <RefreshCw size={16} /> Đối chiếu vai trò
-              </Button>
-            )}
-            <fieldset
-              disabled={!assignmentReady || replaceRolesMutation.isPending}
-              className="mt-4 space-y-2 max-h-60 overflow-y-auto pr-1"
-            >
-              {roles.map((role) => {
-                const isChecked = roleIds.includes(role.id)
-
-                return (
-                  <label
-                    key={role.id}
-                    className="flex items-start gap-3 rounded-xl border border-border/80 p-3 hover:bg-muted/40 cursor-pointer transition-colors"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={isChecked}
-                      disabled={
-                        !assignment.data?.assignableRoleIds.includes(role.id)
-                      }
-                      onChange={(e) => {
-                        if (e.target.checked) {
-                          setSelectedRoleIds([...roleIds, role.id])
-                        } else {
-                          setSelectedRoleIds(
-                            roleIds.filter((id) => id !== role.id),
-                          )
-                        }
-                      }}
-                      className="rounded border-border text-blue-600 focus:ring-blue-500 mt-0.5"
-                    />
-                    <div className="flex-1 text-xs">
-                      <div className="font-semibold text-foreground">
-                        {role.name}
-                      </div>
-                      <div className="text-muted-foreground">
-                        {role.description || '—'}
-                      </div>
-                      {assignment.isSuccess &&
-                        !assignment.data.assignableRoleIds.includes(
-                          role.id,
-                        ) && (
-                          <span className="text-muted-foreground">
-                            Ngoài phạm vi được cấp
-                          </span>
-                        )}
-                    </div>
-                  </label>
-                )
-              })}
-            </fieldset>
-
-            <DialogFooter className="mt-6 flex justify-end gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => setRoleAssignEmployee(null)}
-                disabled={replaceRolesMutation.isPending}
-              >
-                Hủy
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                onClick={() => {
-                  if (!assignmentReady || replaceRolesMutation.isPending) return
-                  const previousIds = assignment.data.employeeRoles.map(
-                    (entry) => entry.role.id,
-                  )
-                  if (
-                    roles.some(
-                      (role) =>
-                        role.isSystemRole &&
-                        role.name === 'OWNER' &&
-                        previousIds.includes(role.id) !==
-                          roleIds.includes(role.id),
-                    ) &&
-                    !window.confirm(
-                      'Thay đổi quyền chủ sở hữu của tài khoản này?',
-                    )
-                  )
-                    return
-                  if (
-                    !roleIds.length &&
-                    !window.confirm(
-                      'Thu hồi toàn bộ vai trò của nhân viên này?',
-                    )
-                  )
-                    return
-                  replaceRolesMutation.mutate({
-                    id: roleAssignEmployee.id,
-                    roleIds,
-                  })
-                }}
-                disabled={!assignmentReady || replaceRolesMutation.isPending}
-                className="bg-blue-600 hover:bg-blue-700 text-white"
-              >
-                {replaceRolesMutation.isPending ? 'Đang lưu...' : 'Lưu vai trò'}
-              </Button>
-            </DialogFooter>
-          </>
-        )}
-      </Dialog>
-
-      {/* MODAL: DELETE EMPLOYEE CONFIRM */}
-      <Dialog
-        open={!!deletingEmployee}
-        onOpenChange={(open) => !open && setDeletingEmployee(null)}
-      >
-        {deletingEmployee && (
-          <>
-            <DialogHeader>
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-destructive/10 text-destructive mb-2">
-                <Trash2 className="h-5 w-5" />
-              </div>
-              <DialogTitle className="text-lg font-bold text-foreground">
-                Xác nhận xóa nhân viên
-              </DialogTitle>
-              <DialogDescription className="text-sm text-muted-foreground">
-                Bạn có chắc chắn muốn xóa nhân viên{' '}
-                <span className="font-semibold text-foreground">
-                  {deletingEmployee.fullName}
-                </span>{' '}
-                (@{deletingEmployee.username})? Toàn bộ phiên đăng nhập của nhân
-                viên này sẽ bị thu hồi ngay lập tức.
-              </DialogDescription>
-            </DialogHeader>
-
-            {deleteEmployeeError && (
-              <div className="mt-4 flex items-start gap-2 rounded-xl border border-destructive/20 bg-destructive/5 p-3 text-xs text-destructive">
-                <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
-                <span>{deleteEmployeeError}</span>
-              </div>
-            )}
-
-            <DialogFooter className="mt-6 flex justify-end gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => setDeletingEmployee(null)}
-                disabled={deleteEmployeeMutation.isPending}
-              >
-                Hủy
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                onClick={() =>
-                  deleteEmployeeMutation.mutate(deletingEmployee.id)
-                }
-                disabled={deleteEmployeeMutation.isPending}
-                className="bg-destructive hover:bg-destructive/90 text-destructive-foreground"
-              >
-                {deleteEmployeeMutation.isPending
-                  ? 'Đang xóa...'
-                  : 'Xác nhận xóa'}
-              </Button>
-            </DialogFooter>
-          </>
-        )}
-      </Dialog>
+      <DeleteEmployeeModal
+        employee={deletingEmployee}
+        onClose={() => setDeletingEmployee(null)}
+        error={deleteEmployeeError}
+        isPending={deleteEmployeeMutation.isPending}
+        onConfirm={() => {
+          if (!deletingEmployee) return
+          deleteEmployeeMutation.mutate(deletingEmployee.id)
+        }}
+      />
     </div>
   )
 }

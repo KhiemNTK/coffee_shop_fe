@@ -8,7 +8,6 @@ import {
   Edit2,
   History,
   ArrowRightLeft,
-  AlertCircle,
 } from 'lucide-react'
 import {
   settingsApi,
@@ -25,22 +24,12 @@ import {
   Badge,
   Card,
   Input,
-  Dialog,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
 } from '@/shared/ui'
-
-const ALLOWED_EQUIPMENT_TRANSITIONS: Record<
-  EquipmentStatus,
-  EquipmentStatus[]
-> = {
-  IN_USE: ['MAINTENANCE', 'BROKEN', 'LIQUIDATED'],
-  MAINTENANCE: ['IN_USE', 'BROKEN', 'LIQUIDATED'],
-  BROKEN: ['MAINTENANCE', 'LIQUIDATED'],
-  LIQUIDATED: [],
-}
+import { ALLOWED_EQUIPMENT_TRANSITIONS } from './equipment.constants'
+import { CreateEquipmentModal } from './modals/create-equipment-modal'
+import { EditEquipmentModal } from './modals/edit-equipment-modal'
+import { TransitionEquipmentModal } from './modals/transition-equipment-modal'
+import { EquipmentHistoryModal } from './modals/equipment-history-modal'
 
 export interface EquipmentTabProps {
   canCreate: boolean
@@ -458,603 +447,69 @@ export function EquipmentTab({
         />
       )}
 
-      {/* MODALS: CREATE EQUIPMENT                            */}
-      {/* ==================================================== */}
-      <Dialog
-        open={isCreateOpen}
-        onOpenChange={setIsCreateOpen}
-        className="max-h-[90vh] overflow-y-auto"
-      >
-        <DialogHeader>
-          <DialogTitle className="text-lg font-bold text-foreground">
-            Thêm thiết bị / máy móc mới
-          </DialogTitle>
-          <DialogDescription className="text-sm text-muted-foreground">
-            Đăng ký tài sản máy móc vào hệ thống quán để theo dõi bảo trì và
-            khấu hao
-          </DialogDescription>
-        </DialogHeader>
+      {/* Modals */}
+      <CreateEquipmentModal
+        isOpen={isCreateOpen}
+        onClose={() => setIsCreateOpen(false)}
+        formData={createEquipmentData}
+        setFormData={setCreateEquipmentData}
+        error={createEquipmentError}
+        isPending={createEquipmentMutation.isPending}
+        onSubmit={(e) => {
+          e.preventDefault()
+          createEquipmentMutation.mutate({
+            ...createEquipmentData,
+            assetCode: createEquipmentData.assetCode.toUpperCase().trim(),
+            quantity: Number(createEquipmentData.quantity),
+          })
+        }}
+      />
 
-        {createEquipmentError && (
-          <div className="mt-4 flex items-start gap-2 rounded-xl border border-destructive/20 bg-destructive/5 p-3 text-xs text-destructive">
-            <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
-            <span>{createEquipmentError}</span>
-          </div>
-        )}
+      <EditEquipmentModal
+        equipment={editingEquipment}
+        onClose={() => setEditingEquipment(null)}
+        formData={editEquipmentData}
+        setFormData={setEditEquipmentData}
+        error={editEquipmentError}
+        isPending={updateEquipmentMutation.isPending}
+        onSubmit={(e) => {
+          e.preventDefault()
+          if (!editingEquipment) return
+          updateEquipmentMutation.mutate({
+            id: editingEquipment.id,
+            data: editEquipmentData,
+          })
+        }}
+      />
 
-        <form
-          onSubmit={(e) => {
-            e.preventDefault()
-            createEquipmentMutation.mutate({
-              ...createEquipmentData,
-              assetCode: createEquipmentData.assetCode.toUpperCase().trim(),
-              quantity: Number(createEquipmentData.quantity),
-            })
-          }}
-          className="mt-4 space-y-3.5"
-        >
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs font-medium text-foreground">
-                Mã tài sản <span className="text-destructive">*</span>
-              </label>
-              <Input
-                type="text"
-                placeholder="VD: EQ-ESP-01"
-                value={createEquipmentData.assetCode}
-                onChange={(e) =>
-                  setCreateEquipmentData({
-                    ...createEquipmentData,
-                    assetCode: e.target.value,
-                  })
-                }
-                required
-                className="mt-1 uppercase font-mono"
-              />
-            </div>
-            <div>
-              <label className="text-xs font-medium text-foreground">
-                Số Serial (nếu có)
-              </label>
-              <Input
-                type="text"
-                placeholder="SN-12345678"
-                value={createEquipmentData.serialNumber || ''}
-                onChange={(e) =>
-                  setCreateEquipmentData({
-                    ...createEquipmentData,
-                    serialNumber: e.target.value,
-                  })
-                }
-                className="mt-1"
-              />
-            </div>
-          </div>
+      <TransitionEquipmentModal
+        equipment={transitioningEquipment}
+        onClose={() => setTransitioningEquipment(null)}
+        formData={transitionData}
+        setFormData={setTransitionData}
+        error={transitionError}
+        isPending={transitionEquipmentMutation.isPending}
+        onSubmit={(e) => {
+          e.preventDefault()
+          if (!transitioningEquipment) return
+          transitionEquipmentMutation.mutate({
+            id: transitioningEquipment.id,
+            data: transitionData,
+          })
+        }}
+      />
 
-          <div>
-            <label className="text-xs font-medium text-foreground">
-              Tên thiết bị <span className="text-destructive">*</span>
-            </label>
-            <Input
-              type="text"
-              placeholder="VD: Máy pha cà phê La Marzocco Linea PB 2 Group"
-              value={createEquipmentData.name}
-              onChange={(e) =>
-                setCreateEquipmentData({
-                  ...createEquipmentData,
-                  name: e.target.value,
-                })
-              }
-              required
-              className="mt-1"
-            />
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs font-medium text-foreground">
-                Số lượng
-              </label>
-              <Input
-                type="number"
-                min="1"
-                value={createEquipmentData.quantity}
-                onChange={(e) =>
-                  setCreateEquipmentData({
-                    ...createEquipmentData,
-                    quantity: parseInt(e.target.value, 10) || 1,
-                  })
-                }
-                required
-                className="mt-1"
-              />
-            </div>
-            <div>
-              <label className="text-xs font-medium text-foreground">
-                Đơn giá mua (VND)
-              </label>
-              <Input
-                type="text"
-                placeholder="250000000"
-                value={createEquipmentData.unitPrice}
-                onChange={(e) =>
-                  setCreateEquipmentData({
-                    ...createEquipmentData,
-                    unitPrice: e.target.value,
-                  })
-                }
-                required
-                className="mt-1"
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs font-medium text-foreground">
-                Ngày mua <span className="text-destructive">*</span>
-              </label>
-              <Input
-                type="date"
-                value={createEquipmentData.purchaseDate}
-                onChange={(e) =>
-                  setCreateEquipmentData({
-                    ...createEquipmentData,
-                    purchaseDate: e.target.value,
-                  })
-                }
-                required
-                className="mt-1"
-              />
-            </div>
-            <div>
-              <label className="text-xs font-medium text-foreground">
-                Vị trí lắp đặt
-              </label>
-              <Input
-                type="text"
-                placeholder="Quầy bar chính, Bếp bánh..."
-                value={createEquipmentData.location || ''}
-                onChange={(e) =>
-                  setCreateEquipmentData({
-                    ...createEquipmentData,
-                    location: e.target.value,
-                  })
-                }
-                className="mt-1"
-              />
-            </div>
-          </div>
-
-          <DialogFooter className="mt-6 flex justify-end gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => setIsCreateOpen(false)}
-              disabled={createEquipmentMutation.isPending}
-            >
-              Hủy
-            </Button>
-            <Button
-              type="submit"
-              size="sm"
-              disabled={createEquipmentMutation.isPending}
-              className="bg-primary text-primary-foreground hover:bg-primary/90"
-            >
-              {createEquipmentMutation.isPending
-                ? 'Đang tạo...'
-                : 'Lưu thiết bị'}
-            </Button>
-          </DialogFooter>
-        </form>
-      </Dialog>
-
-      {/* ==================================================== */}
-      {/* MODALS: EDIT EQUIPMENT                              */}
-      {/* ==================================================== */}
-      <Dialog
-        open={!!editingEquipment}
-        onOpenChange={(open) => !open && setEditingEquipment(null)}
-        className="max-h-[90vh] overflow-y-auto"
-      >
-        {editingEquipment && (
-          <>
-            <DialogHeader>
-              <DialogTitle className="text-lg font-bold text-foreground">
-                Chỉnh sửa thông tin thiết bị
-              </DialogTitle>
-              <DialogDescription className="text-sm text-muted-foreground">
-                Cập nhật thông tin chi tiết cho thiết bị {editingEquipment.name}{' '}
-                ({editingEquipment.assetCode})
-              </DialogDescription>
-            </DialogHeader>
-
-            {editEquipmentError && (
-              <div className="mt-4 flex items-start gap-2 rounded-xl border border-destructive/20 bg-destructive/5 p-3 text-xs text-destructive">
-                <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
-                <span>{editEquipmentError}</span>
-              </div>
-            )}
-
-            <form
-              onSubmit={(e) => {
-                e.preventDefault()
-                updateEquipmentMutation.mutate({
-                  id: editingEquipment.id,
-                  data: editEquipmentData,
-                })
-              }}
-              className="mt-4 space-y-3.5"
-            >
-              <div>
-                <label className="text-xs font-medium text-foreground">
-                  Tên thiết bị
-                </label>
-                <Input
-                  type="text"
-                  value={editEquipmentData.name || ''}
-                  onChange={(e) =>
-                    setEditEquipmentData({
-                      ...editEquipmentData,
-                      name: e.target.value,
-                    })
-                  }
-                  required
-                  className="mt-1"
-                />
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-medium text-foreground">
-                    Số Serial
-                  </label>
-                  <Input
-                    type="text"
-                    value={editEquipmentData.serialNumber || ''}
-                    onChange={(e) =>
-                      setEditEquipmentData({
-                        ...editEquipmentData,
-                        serialNumber: e.target.value,
-                      })
-                    }
-                    className="mt-1"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-medium text-foreground">
-                    Vị trí lắp đặt
-                  </label>
-                  <Input
-                    type="text"
-                    value={editEquipmentData.location || ''}
-                    onChange={(e) =>
-                      setEditEquipmentData({
-                        ...editEquipmentData,
-                        location: e.target.value,
-                      })
-                    }
-                    className="mt-1"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-medium text-foreground">
-                    Số lượng
-                  </label>
-                  <Input
-                    type="number"
-                    min="1"
-                    value={editEquipmentData.quantity || 1}
-                    onChange={(e) =>
-                      setEditEquipmentData({
-                        ...editEquipmentData,
-                        quantity: parseInt(e.target.value, 10) || 1,
-                      })
-                    }
-                    className="mt-1"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-medium text-foreground">
-                    Đơn giá mua (VND)
-                  </label>
-                  <Input
-                    type="text"
-                    value={editEquipmentData.unitPrice || '0'}
-                    onChange={(e) =>
-                      setEditEquipmentData({
-                        ...editEquipmentData,
-                        unitPrice: e.target.value,
-                      })
-                    }
-                    className="mt-1"
-                  />
-                </div>
-              </div>
-
-              <DialogFooter className="mt-6 flex justify-end gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setEditingEquipment(null)}
-                  disabled={updateEquipmentMutation.isPending}
-                >
-                  Hủy
-                </Button>
-                <Button
-                  type="submit"
-                  size="sm"
-                  disabled={updateEquipmentMutation.isPending}
-                  className="bg-primary text-primary-foreground hover:bg-primary/90"
-                >
-                  {updateEquipmentMutation.isPending
-                    ? 'Đang lưu...'
-                    : 'Lưu thay đổi'}
-                </Button>
-              </DialogFooter>
-            </form>
-          </>
-        )}
-      </Dialog>
-
-      {/* ==================================================== */}
-      {/* MODALS: TRANSITION EQUIPMENT STATUS                 */}
-      {/* ==================================================== */}
-      <Dialog
-        open={!!transitioningEquipment}
-        onOpenChange={(open) => !open && setTransitioningEquipment(null)}
-        className="max-h-[90vh] overflow-y-auto"
-      >
-        {transitioningEquipment && (
-          <>
-            <DialogHeader>
-              <DialogTitle className="text-lg font-bold text-foreground">
-                Chuyển trạng thái: {transitioningEquipment.name}
-              </DialogTitle>
-              <DialogDescription className="text-sm text-muted-foreground">
-                Trạng thái hiện tại:{' '}
-                <span className="font-semibold">
-                  {transitioningEquipment.status}
-                </span>
-              </DialogDescription>
-            </DialogHeader>
-
-            {transitionError && (
-              <div className="mt-4 flex items-start gap-2 rounded-xl border border-destructive/20 bg-destructive/5 p-3 text-xs text-destructive">
-                <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
-                <span>{transitionError}</span>
-              </div>
-            )}
-
-            <form
-              onSubmit={(e) => {
-                e.preventDefault()
-                transitionEquipmentMutation.mutate({
-                  id: transitioningEquipment.id,
-                  data: transitionData,
-                })
-              }}
-              className="mt-4 space-y-3.5"
-            >
-              <div>
-                <label className="text-xs font-medium text-foreground">
-                  Trạng thái mục tiêu{' '}
-                  <span className="text-destructive">*</span>
-                </label>
-                <select
-                  aria-label="Chọn trạng thái mục tiêu"
-                  value={transitionData.status}
-                  onChange={(e) =>
-                    setTransitionData({
-                      ...transitionData,
-                      status: e.target.value as EquipmentStatus,
-                    })
-                  }
-                  required
-                  className="mt-1 w-full rounded-lg border border-border bg-card p-2 text-sm text-foreground focus:outline-hidden focus:ring-2 focus:ring-ring"
-                >
-                  {ALLOWED_EQUIPMENT_TRANSITIONS[
-                    transitioningEquipment.status
-                  ].map((s) => (
-                    <option key={s} value={s}>
-                      {s === 'IN_USE' && 'IN_USE - Đang hoạt động tốt'}
-                      {s === 'MAINTENANCE' &&
-                        'MAINTENANCE - Đang bảo trì / Sửa chữa'}
-                      {s === 'BROKEN' && 'BROKEN - Hỏng hóc'}
-                      {s === 'LIQUIDATED' && 'LIQUIDATED - Thanh lý tài sản'}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="text-xs font-medium text-foreground">
-                  Lý do chuyển trạng thái{' '}
-                  <span className="text-destructive">*</span>
-                </label>
-                <Input
-                  type="text"
-                  placeholder="VD: Thay gioăng cao su định kỳ, sửa bơm nước..."
-                  value={transitionData.reason}
-                  onChange={(e) =>
-                    setTransitionData({
-                      ...transitionData,
-                      reason: e.target.value,
-                    })
-                  }
-                  required
-                  className="mt-1"
-                />
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-medium text-foreground">
-                    Chi phí phát sinh (VND)
-                  </label>
-                  <Input
-                    type="text"
-                    placeholder="0"
-                    value={transitionData.cost || '0'}
-                    onChange={(e) =>
-                      setTransitionData({
-                        ...transitionData,
-                        cost: e.target.value,
-                      })
-                    }
-                    className="mt-1"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-medium text-foreground">
-                    Lịch bảo trì tiếp theo (tùy chọn)
-                  </label>
-                  <Input
-                    type="date"
-                    value={transitionData.nextMaintenanceAt || ''}
-                    onChange={(e) =>
-                      setTransitionData({
-                        ...transitionData,
-                        nextMaintenanceAt: e.target.value,
-                      })
-                    }
-                    className="mt-1"
-                  />
-                </div>
-              </div>
-
-              <DialogFooter className="mt-6 flex justify-end gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setTransitioningEquipment(null)}
-                  disabled={transitionEquipmentMutation.isPending}
-                >
-                  Hủy
-                </Button>
-                <Button
-                  type="submit"
-                  size="sm"
-                  disabled={transitionEquipmentMutation.isPending}
-                  className="bg-primary text-primary-foreground hover:bg-primary/90"
-                >
-                  {transitionEquipmentMutation.isPending
-                    ? 'Đang chuyển...'
-                    : 'Xác nhận chuyển'}
-                </Button>
-              </DialogFooter>
-            </form>
-          </>
-        )}
-      </Dialog>
-
-      {/* ==================================================== */}
-      {/* MODALS: VIEW EQUIPMENT LIFECYCLE EVENTS             */}
-      {/* ==================================================== */}
-      <Dialog
-        open={!!viewingEventsEquipment}
-        onOpenChange={(open) => !open && setViewingEventsEquipment(null)}
-        maxWidth="lg"
-        className="max-h-[85vh] flex flex-col"
-      >
-        {viewingEventsEquipment && (
-          <>
-            <DialogHeader>
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-500/10 text-blue-600 mb-2">
-                <History className="h-5 w-5" />
-              </div>
-              <DialogTitle className="text-lg font-bold text-foreground">
-                Lịch sử bảo trì & vòng đời: {viewingEventsEquipment.name}
-              </DialogTitle>
-              <DialogDescription className="text-sm text-muted-foreground">
-                Mã tài sản:{' '}
-                <span className="font-mono">
-                  {viewingEventsEquipment.assetCode}
-                </span>
-              </DialogDescription>
-            </DialogHeader>
-
-            <div className="mt-4 flex-1 overflow-y-auto pr-1 space-y-3">
-              {eventsError ? (
-                <p role="alert" className="text-sm text-destructive">
-                  {errorMessage(eventsError)}{' '}
-                  <Button
-                    variant="outline"
-                    onClick={() => void refetchEvents()}
-                  >
-                    Thử lại
-                  </Button>
-                </p>
-              ) : isLoadingEvents ? (
-                <div className="py-12 text-center text-muted-foreground">
-                  Đang tải lịch sử sự kiện...
-                </div>
-              ) : !equipmentEventsData?.list ||
-                equipmentEventsData.list.length === 0 ? (
-                <div className="py-12 text-center text-muted-foreground">
-                  Chưa ghi nhận sự kiện bảo trì nào cho thiết bị này.
-                </div>
-              ) : (
-                <div className="relative border-l-2 border-border ml-4 space-y-4 py-2">
-                  {equipmentEventsData.list.map((ev) => (
-                    <div key={ev.id} className="relative pl-6">
-                      <div className="absolute -left-2 top-1.5 h-3.5 w-3.5 rounded-full border-2 border-card bg-primary" />
-                      <div className="rounded-xl border border-border/80 bg-card p-3 shadow-xs">
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="font-semibold text-xs text-foreground">
-                            {ev.fromStatus
-                              ? `${ev.fromStatus} → ${ev.toStatus}`
-                              : ev.toStatus}
-                          </span>
-                          <span className="text-[11px] text-muted-foreground font-mono">
-                            {formatDate(ev.occurredAt || ev.createdAt)}
-                          </span>
-                        </div>
-                        <p className="mt-1 text-xs text-foreground/90">
-                          {ev.reason}
-                        </p>
-                        {ev.cost && ev.cost !== '0' && (
-                          <div className="mt-1 text-xs font-medium text-amber-700 dark:text-amber-400">
-                            Chi phí: {formatVnd(ev.cost)}
-                          </div>
-                        )}
-                        <div className="mt-1.5 text-[11px] text-muted-foreground">
-                          Thực hiện bởi: {ev.employee?.fullName || 'Hệ thống'}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {equipmentEventsData && !eventsError && (
-              <Pagination
-                page={eventsPage}
-                totalPages={equipmentEventsData.totalPages}
-                onPage={setEventsPage}
-                disabled={isFetchingEvents}
-              />
-            )}
-            <DialogFooter className="mt-6 flex justify-end pt-3 border-t border-border">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => setViewingEventsEquipment(null)}
-              >
-                Đóng
-              </Button>
-            </DialogFooter>
-          </>
-        )}
-      </Dialog>
+      <EquipmentHistoryModal
+        equipment={viewingEventsEquipment}
+        onClose={() => setViewingEventsEquipment(null)}
+        eventsError={eventsError}
+        isLoadingEvents={isLoadingEvents}
+        isFetchingEvents={isFetchingEvents}
+        refetchEvents={refetchEvents}
+        equipmentEventsData={equipmentEventsData}
+        eventsPage={eventsPage}
+        setEventsPage={setEventsPage}
+      />
     </div>
   )
 }

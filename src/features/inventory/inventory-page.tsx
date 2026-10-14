@@ -189,7 +189,7 @@ export default function InventoryPage() {
       />
 
       {/* Tabs Control */}
-      <div className="flex flex-wrap border-b border-border gap-2">
+      <div className="flex overflow-x-auto whitespace-nowrap flex-nowrap border-b border-border gap-2 pb-px scrollbar-none">
         <Button
           variant={activeTab === 'waste' ? 'default' : 'outline'}
           onClick={() => setActiveTab('waste')}
