@@ -152,3 +152,62 @@ export function visibleStaffDestinations(permissionKeys: readonly string[]) {
     ),
   )
 }
+
+export interface StaffNavGroup {
+  key: string
+  label: string
+  items: Array<(typeof staffDestinations)[number]>
+}
+
+export const staffNavGroups: StaffNavGroup[] = [
+  {
+    key: 'operations',
+    label: 'Vận hành quán',
+    items: staffDestinations.filter((d) =>
+      ['pos', 'kitchen', 'online-orders', 'tables', 'reservations'].includes(
+        d.path,
+      ),
+    ),
+  },
+  {
+    key: 'sales',
+    label: 'Thu ngân & Doanh thu',
+    items: staffDestinations.filter((d) =>
+      ['shifts', 'invoices', 'reconciliation', 'promotions'].includes(d.path),
+    ),
+  },
+  {
+    key: 'catalog',
+    label: 'Thực đơn & Kho hàng',
+    items: staffDestinations.filter((d) =>
+      ['menu', 'inventory'].includes(d.path),
+    ),
+  },
+  {
+    key: 'management',
+    label: 'Quản lý & Nhân sự',
+    items: staffDestinations.filter((d) =>
+      ['reports', 'employees', 'operations'].includes(d.path),
+    ),
+  },
+  {
+    key: 'system',
+    label: 'Hệ thống & Thiết bị',
+    items: staffDestinations.filter((d) =>
+      ['settings', 'printing', 'audit-logs'].includes(d.path),
+    ),
+  },
+]
+
+export function visibleGroupedStaffDestinations(permissionKeys: readonly string[]) {
+  const visiblePaths = new Set(
+    visibleStaffDestinations(permissionKeys).map((item) => item.path),
+  )
+
+  return staffNavGroups
+    .map((group) => ({
+      ...group,
+      items: group.items.filter((item) => visiblePaths.has(item.path)),
+    }))
+    .filter((group) => group.items.length > 0)
+}

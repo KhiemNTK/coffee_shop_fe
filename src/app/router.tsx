@@ -18,6 +18,8 @@ const PasswordRecoveryPage = lazy(() => import('../features/auth/password-recove
 const PaymentReturnPage = lazy(() => import('../features/invoices/payment-return-page'))
 const ReorderPage = lazy(() => import('../features/online-orders/reorder-page'))
 const PickupPage = lazy(() => import('../features/online-orders/pickup-page'))
+const CartPage = lazy(() => import('../features/online-orders/cart-page'))
+const WishlistPage = lazy(() => import('../features/customers/wishlist-page'))
 const ReconciliationPage = lazy(() => import('../features/reconciliation/reconciliation-page'))
 const StaffMenuPage = lazy(() => import('../features/menu/staff-menu-page'))
 const CashierShiftPage = lazy(() => import('../features/cashier-shifts/cashier-shift-page'))
@@ -89,13 +91,23 @@ export function AppRouter() {
     <BrowserRouter>
       <Suspense
         fallback={
-          <div className="feedback" role="status">
-            {translate('common.loading')}
+          <div
+            className="feedback min-h-[60vh] flex flex-col items-center justify-center gap-3 p-8 text-stone-500"
+            role="status"
+            aria-live="polite"
+          >
+            <div className="w-9 h-9 rounded-full border-2 border-amber-600/20 border-t-amber-600 animate-spin" aria-hidden="true" />
+            <span className="font-medium text-sm text-stone-600 dark:text-stone-300 animate-pulse tracking-wide">
+              {translate('common.loading')}
+            </span>
           </div>
         }
       >
         <Routes>
           <Route path="/" element={<MenuPage />} />
+          <Route path="/menu" element={<MenuPage />} />
+          <Route path="/cart" element={<CartPage />} />
+          <Route path="/wishlist" element={<WishlistPage />} />
           <Route path="/order" element={<OnlineOrderPage />} />
           <Route path="/reorder" element={<ReorderPage />} />
           <Route path="/pickup" element={<PickupPage />} />

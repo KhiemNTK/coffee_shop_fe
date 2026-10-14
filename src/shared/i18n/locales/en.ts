@@ -646,5 +646,15 @@ const en: Record<keyof typeof vi, string> = {
     'The item submission is unconfirmed. Check the same batch before adding items or taking payment.',
   'pos.retrySameBatch': 'Check the same batch',
   'pos.openOrder': 'Open order →',
+  'wishlist.title': 'Favorites',
+  'wishlist.add': 'Add to favorites',
+  'wishlist.remove': 'Remove favorite',
+  'wishlist.customerSignIn': 'Customer sign-in',
+  'wishlist.googleUnavailable': 'Google sign-in is not configured.',
+  'wishlist.empty': 'No favorite items yet.',
+  'wishlist.archived': 'Item discontinued',
+  'wishlist.unavailable': 'Currently unavailable',
+  'wishlist.limit': 'Your wishlist has reached 100 items. Remove one before adding another.',
+  'wishlist.accountChanged': 'The customer account changed. Reload before retrying.',
 }
 export default en

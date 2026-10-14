@@ -89,17 +89,49 @@ export default function SignInPage() {
         </div>
       </header>
 
-      <main className="flex min-h-[calc(100vh-140px)] items-center justify-center p-4">
-        <Card className="w-full max-w-md shadow-xl border-border bg-card rounded-2xl">
-          <CardHeader className="space-y-1">
-            <p className="text-xs font-bold uppercase tracking-wider text-primary">
-              {translate('auth.staffHeading')}
-            </p>
-            <CardTitle className="text-2xl font-bold tracking-tight text-foreground">
-              {translate('auth.signIn')}
-            </CardTitle>
-            <CardDescription>{translate('auth.description')}</CardDescription>
-          </CardHeader>
+      <main className="flex min-h-[calc(100vh-60px)] items-center justify-center lg:p-0">
+        <div className="flex w-full min-h-[calc(100vh-60px)]">
+          {/* Left Hero Branded Column (Desktop only) */}
+          <div className="hidden lg:flex lg:w-1/2 relative bg-primary flex-col justify-between p-12 text-white overflow-hidden">
+            <img
+              src="/hero-coffee.jpg"
+              alt="Coffee Homes"
+              className="absolute inset-0 h-full w-full object-cover opacity-25 mix-blend-luminosity"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-primary via-primary/85 to-primary/50 z-10" />
+
+            <div className="relative z-20">
+              <div className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3.5 py-1 text-xs font-bold uppercase tracking-widest text-accent border border-accent/40 backdrop-blur-xs">
+                <span>COFFEE HOMES · OPERATIONS</span>
+              </div>
+            </div>
+
+            <div className="relative z-20 max-w-md space-y-4">
+              <h2 className="text-3xl font-extrabold tracking-tight leading-tight">
+                Nền tảng Quản lý Vận hành & Bán hàng Chuyên nghiệp.
+              </h2>
+              <p className="text-sm text-emerald-100/90 leading-relaxed font-normal">
+                Đồng bộ hóa thời gian thực giữa quầy thu ngân POS, nhà bếp KDS, quản lý kho nguyên liệu và kiểm toán tài chính.
+              </p>
+            </div>
+
+            <div className="relative z-20 text-xs text-emerald-200/70">
+              © 2026 Coffee Homes. Giải pháp chuyển đổi số cho chuỗi cà phê.
+            </div>
+          </div>
+
+          {/* Right Form Column */}
+          <div className="w-full lg:w-1/2 flex items-center justify-center p-4 sm:p-8 lg:p-12">
+            <Card className="w-full max-w-md shadow-xl border-border bg-card rounded-2xl">
+              <CardHeader className="space-y-1">
+                <p className="text-xs font-bold uppercase tracking-wider text-primary">
+                  {translate('auth.staffHeading')}
+                </p>
+                <CardTitle className="text-2xl font-bold tracking-tight text-foreground">
+                  {translate('auth.signIn')}
+                </CardTitle>
+                <CardDescription>{translate('auth.description')}</CardDescription>
+              </CardHeader>
 
           <CardContent>
             {unlinkUncertain && (
@@ -256,6 +288,8 @@ export default function SignInPage() {
             </form>
           </CardContent>
         </Card>
+          </div>
+        </div>
       </main>
     </div>
   )

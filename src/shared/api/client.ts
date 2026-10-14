@@ -24,12 +24,12 @@ export function resetSessionRequests() {
   sessionRequests = new AbortController()
 }
 
-function csrfToken() {
+function csrfToken(cookieName = 'csrfToken') {
   return (
     document.cookie
       .split('; ')
-      .find((value) => value.startsWith('csrfToken='))
-      ?.slice('csrfToken='.length) ?? ''
+      .find((value) => value.startsWith(`${cookieName}=`))
+      ?.slice(cookieName.length + 1) ?? ''
   )
 }
 
@@ -54,7 +54,7 @@ async function http(
   const headers = new Headers({ Accept: 'application/json', 'Accept-Language': currentLanguage() })
   if (method !== 'GET') {
     headers.set('Content-Type', 'application/json')
-    const csrf = csrfToken()
+    const csrf = csrfToken(path.startsWith('/customers/') ? 'customerCsrfToken' : 'csrfToken')
     if (csrf) headers.set('X-CSRF-Token', csrf)
   }
   const response = await fetch(`/api/v1${path}`, {
@@ -245,6 +245,8 @@ export function errorMessage(error: unknown) {
   if (error instanceof Error && !(error instanceof ApiError) && error.message) return error.message
   if (!(error instanceof ApiError)) return translate('error.connection')
   if (error.code === 'CLIENT_RESPONSE_INVALID') return translate('error.invalidResponse')
+  if (error.code === 'WISHLIST_LIMIT_REACHED') return translate('wishlist.limit')
+  if (error.code === 'CUSTOMER_SESSION_CHANGED') return translate('wishlist.accountChanged')
   if (error.code === 'INVENTORY_STOCKTAKE_COUNTS_CHANGED') return translate('error.countsChanged')
   if (error.code === 'INVENTORY_STOCKTAKE_SNAPSHOT_STALE') return translate('error.snapshotStale')
   if (error.code === 'INVENTORY_INSUFFICIENT_STOCK') return translate('error.insufficientStock')

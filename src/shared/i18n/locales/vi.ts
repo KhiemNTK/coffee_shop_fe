@@ -642,5 +642,15 @@ const vi = {
     'Chưa xác nhận được lần gửi món. Kiểm tra lại cùng nội dung trước khi thêm món khác hoặc thanh toán.',
   'pos.retrySameBatch': 'Kiểm tra lại cùng batch',
   'pos.openOrder': 'Mở đơn →',
+  'wishlist.title': 'Món yêu thích',
+  'wishlist.add': 'Thêm vào yêu thích',
+  'wishlist.remove': 'Bỏ yêu thích',
+  'wishlist.customerSignIn': 'Đăng nhập khách hàng',
+  'wishlist.googleUnavailable': 'Đăng nhập Google chưa được cấu hình.',
+  'wishlist.empty': 'Chưa có món yêu thích.',
+  'wishlist.archived': 'Món đã ngừng kinh doanh',
+  'wishlist.unavailable': 'Hiện không phục vụ',
+  'wishlist.limit': 'Đã đạt giới hạn 100 món yêu thích. Hãy bỏ một món trước khi thêm.',
+  'wishlist.accountChanged': 'Tài khoản khách đã thay đổi. Tải lại trước khi thử lại.',
 } as const
 export default vi
