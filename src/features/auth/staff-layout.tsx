@@ -1,7 +1,17 @@
 import { useTranslation } from 'react-i18next'
 import { useRef, useState } from 'react'
 import { Link, Navigate, NavLink, Outlet, useNavigate, useOutletContext } from 'react-router-dom'
-import { Coffee, ExternalLink, LayoutDashboard, LogOut, Menu, UserRound, X } from 'lucide-react'
+import {
+  Coffee,
+  ExternalLink,
+  LayoutDashboard,
+  LogOut,
+  Menu,
+  PanelLeftClose,
+  PanelLeftOpen,
+  UserRound,
+  X,
+} from 'lucide-react'
 import { useSession, type Session } from './session'
 import { visibleGroupedStaffDestinations, visibleStaffDestinations } from './staff-navigation'
 import { authCommand, ApiError, errorMessage } from '../../shared/api/client'
@@ -47,6 +57,7 @@ export function StaffLayout() {
   const [leaving, setLeaving] = useState(false)
   const [logoutError, setLogoutError] = useState<unknown>()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const session = useSession(!leaving)
   const submitting = useRef(false)
 
@@ -141,7 +152,7 @@ export function StaffLayout() {
   }
 
   return (
-    <div className="min-h-screen bg-muted/20">
+    <div className="staff-workspace min-h-screen">
       {/* Top Header */}
       <header className="flex h-14 items-center justify-between border-b border-border bg-card px-4 sm:px-6 shadow-xs sticky top-0 z-30">
         <div className="flex items-center gap-3">
@@ -158,7 +169,7 @@ export function StaffLayout() {
 
           <Link to="/staff" className="flex items-center gap-2 text-base font-bold text-primary">
             <Coffee className="h-5 w-5" />
-            <span className="tracking-tight">Coffee Homes</span>
+            <span>Coffee Homes</span>
           </Link>
 
           <span className="hidden sm:inline text-xs text-muted-foreground/40">|</span>
@@ -372,15 +383,36 @@ export function StaffLayout() {
       )}
 
       {/* Main Layout Container */}
-      <div className="mx-auto flex max-w-[1480px]">
+      <div className="mx-auto flex max-w-[1920px]">
         {/* Desktop Sidebar (Grouped SaaS structure) */}
-        <aside className="w-64 shrink-0 border-r border-border bg-card p-3 hidden md:block min-h-[calc(100vh-3.5rem)] sticky top-14 self-start max-h-[calc(100vh-3.5rem)] overflow-y-auto">
+        <aside
+          className={cn(
+            'staff-sidebar hidden shrink-0 self-start overflow-y-auto border-r p-3 md:sticky md:top-14 md:block md:min-h-[calc(100vh-3.5rem)] md:max-h-[calc(100vh-3.5rem)]',
+            sidebarCollapsed ? 'w-[72px]' : 'w-[236px]',
+          )}
+        >
+          <button
+            type="button"
+            aria-label={sidebarCollapsed ? 'Mở rộng thanh điều hướng' : 'Thu gọn thanh điều hướng'}
+            title={sidebarCollapsed ? 'Mở rộng thanh điều hướng' : 'Thu gọn thanh điều hướng'}
+            aria-expanded={!sidebarCollapsed}
+            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+            className="mb-3 flex h-11 w-11 items-center justify-center rounded-md text-white hover:bg-white/10"
+          >
+            {sidebarCollapsed ? (
+              <PanelLeftOpen size={18} aria-hidden="true" />
+            ) : (
+              <PanelLeftClose size={18} aria-hidden="true" />
+            )}
+          </button>
           <nav className="space-y-4" aria-label={translate('common.staff')}>
             {/* Primary Workdesk Dashboard */}
             <div>
               <NavLink
                 to={workdeskItem.to}
                 end={workdeskItem.end}
+                title={workdeskItem.label}
+                aria-label={workdeskItem.label}
                 className={({ isActive }) =>
                   cn(
                     'flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-bold transition-colors',
@@ -391,20 +423,27 @@ export function StaffLayout() {
                 }
               >
                 <workdeskItem.icon className="h-4 w-4 shrink-0" />
-                <span>{workdeskItem.label}</span>
+                <span className={sidebarCollapsed ? 'sr-only' : ''}>{workdeskItem.label}</span>
               </NavLink>
             </div>
 
             {/* Grouped Operational Sections */}
             {groupedNav.map((group) => (
               <div key={group.key} className="space-y-1">
-                <div className="px-3 pt-1 text-[11px] font-bold uppercase tracking-wider text-muted-foreground/70 select-none">
+                <div
+                  className={cn(
+                    'staff-sidebar-label px-3 pt-1 text-[11px] font-bold uppercase select-none',
+                    sidebarCollapsed && 'sr-only',
+                  )}
+                >
                   {group.label}
                 </div>
                 {group.items.map((item) => (
                   <NavLink
                     key={item.path}
                     to={'/staff/' + item.path}
+                    title={translate(`nav.${item.path}`)}
+                    aria-label={translate(`nav.${item.path}`)}
                     className={({ isActive }) =>
                       cn(
                         'flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-semibold transition-colors',
@@ -415,7 +454,9 @@ export function StaffLayout() {
                     }
                   >
                     <item.icon className="h-4 w-4 shrink-0" />
-                    <span>{translate(`nav.${item.path}`)}</span>
+                    <span className={sidebarCollapsed ? 'sr-only' : ''}>
+                      {translate(`nav.${item.path}`)}
+                    </span>
                   </NavLink>
                 ))}
               </div>
@@ -426,6 +467,8 @@ export function StaffLayout() {
               <NavLink
                 to={accountItem.to}
                 end={accountItem.end}
+                title={accountItem.label}
+                aria-label={accountItem.label}
                 className={({ isActive }) =>
                   cn(
                     'flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-semibold transition-colors',
@@ -436,14 +479,14 @@ export function StaffLayout() {
                 }
               >
                 <accountItem.icon className="h-4 w-4 shrink-0" />
-                <span>{accountItem.label}</span>
+                <span className={sidebarCollapsed ? 'sr-only' : ''}>{accountItem.label}</span>
               </NavLink>
             </div>
           </nav>
         </aside>
 
         {/* Content Area */}
-        <main className="min-w-0 flex-1 p-4 sm:p-6 lg:p-8">
+        <main className="min-w-0 max-w-[1680px] flex-1 p-4 md:p-5 lg:p-7">
           <Outlet context={session.data} />
         </main>
       </div>

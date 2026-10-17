@@ -28,5 +28,5 @@ export function Badge({
     outline: 'border border-border text-foreground bg-transparent font-medium',
   }[variant]
 
-  return <span className={cn(baseStyles, variantStyles, className)} {...props} />
+  return <span data-badge={variant} className={cn(baseStyles, variantStyles, className)} {...props} />
 }

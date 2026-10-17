@@ -52,8 +52,9 @@ async function http(
   timeoutMs = 10_000,
 ) {
   const headers = new Headers({ Accept: 'application/json', 'Accept-Language': currentLanguage() })
+  const multipart = body instanceof FormData
   if (method !== 'GET') {
-    headers.set('Content-Type', 'application/json')
+    if (!multipart) headers.set('Content-Type', 'application/json')
     const csrf = csrfToken(path.startsWith('/customers/') ? 'customerCsrfToken' : 'csrfToken')
     if (csrf) headers.set('X-CSRF-Token', csrf)
   }
@@ -62,7 +63,7 @@ async function http(
     headers,
     credentials: 'include',
     signal: AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]),
-    body: body === undefined ? undefined : JSON.stringify(body),
+    body: body === undefined ? undefined : multipart ? body : JSON.stringify(body),
   })
   if (!response.ok) {
     const error = z
@@ -245,6 +246,11 @@ export function errorMessage(error: unknown) {
   if (error instanceof Error && !(error instanceof ApiError) && error.message) return error.message
   if (!(error instanceof ApiError)) return translate('error.connection')
   if (error.code === 'CLIENT_RESPONSE_INVALID') return translate('error.invalidResponse')
+  if (error.code === 'IMAGE_UPLOAD_DISABLED') return translate('menu.image.disabled')
+  if (error.code === 'IMAGE_STORAGE_UNAVAILABLE') return translate('menu.image.unavailable')
+  if (error.code === 'IMAGE_UPLOAD_INVALID') return translate('menu.image.invalid')
+  if (error.code === 'IMAGE_UPLOAD_NOT_AVAILABLE') return translate('menu.image.expired')
+  if (error.code === 'IMAGE_UPLOAD_TOO_LARGE') return translate('menu.image.tooLarge')
   if (error.code === 'WISHLIST_LIMIT_REACHED') return translate('wishlist.limit')
   if (error.code === 'CUSTOMER_SESSION_CHANGED') return translate('wishlist.accountChanged')
   if (error.code === 'INVENTORY_STOCKTAKE_COUNTS_CHANGED') return translate('error.countsChanged')
