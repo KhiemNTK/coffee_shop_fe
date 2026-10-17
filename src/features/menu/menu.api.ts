@@ -14,7 +14,14 @@ export const moneySchema = z.union([
     .pipe(decimalSchema),
 ])
 const categorySchema = z.object({ id: z.uuid(), name: z.string() })
-export const menuImageUrlSchema = z.url().max(2048).refine(value => { const url = new URL(value); return url.protocol === 'https:' && !url.username && !url.password })
+export const menuImageUrlSchema = z.url().max(2048).refine(value => {
+  try {
+    const url = new URL(value)
+    return url.protocol === 'https:' && !url.username && !url.password
+  } catch {
+    return false
+  }
+})
 export const itemSchema = z.object({
   id: z.uuid(),
   name: z.string(),
