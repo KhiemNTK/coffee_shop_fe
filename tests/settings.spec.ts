@@ -533,13 +533,13 @@ test.describe('Settings, Equipment and Exceptions Management', () => {
       .getByRole('button', { name: /Hàng đợi Ngoại lệ/ })
       .click({ force: true })
 
-    await expect(page.getByText('Đối soát Cổng TT')).toBeVisible()
+    await expect(page.getByRole('tab', { name: /^Đối soát Cổng TT/ })).toHaveAttribute('aria-selected', 'true')
     await expect(
       page.getByText('Lệch tiền cổng PayOS - Mã đơn #ORD-8821'),
     ).toBeVisible()
 
     // Switch exception sub-kind to FEEDBACK
-    await page.getByText('Khiếu nại khách').first().click()
+    await page.getByRole('tab', { name: /^Khiếu nại khách/ }).click()
     await expect(
       page.getByText('Cà phê bị nguội khi giao tới nơi').first(),
     ).toBeVisible()

@@ -313,6 +313,7 @@ test.describe('real Docker backend contract', () => {
     await page.goto('/staff')
     await expect(page.getByRole('heading', { name: prefix, exact: true })).toBeVisible()
     const checks = await page.evaluate(async (fixture) => {
+      const { ApiError } = await import('/src/shared/api/client.ts')
       const failures: string[] = []
       let passed = 0
       const check = async (module: string, name: string, args: unknown[] = []) => {
@@ -322,7 +323,12 @@ test.describe('real Docker backend contract', () => {
           const owner = parts.length === 2 ? api[parts[0]!] : api
           await owner[parts.at(-1)!](...args)
           passed++
-        } catch (error) { failures.push(name + ': ' + String(error)) }
+        } catch (error) {
+          const details = error instanceof ApiError
+            ? ` [${error.code ?? error.status}] ${error.validationIssues?.join('; ') ?? ''}`
+            : ''
+          failures.push(name + ': ' + String(error) + details)
+        }
       }
       await check('menu/menu.api', 'getCategories')
       await check('menu/menu.api', 'getMenu', [{ keyword: '', categoryId: '', page: 1 }])
@@ -373,7 +379,7 @@ test.describe('real Docker backend contract', () => {
       await check('reservations/reservations.api', 'getReservations', [{}])
       return { passed, failures }
     }, ids)
-    expect(checks.failures).toEqual([])
+    expect(checks.failures, 'API contract mismatch: check the backend SHA recorded by CI and its BACKEND_REF repository variable.').toEqual([])
     expect(checks.passed).toBe(47)
     await page.goto('/staff/invoices')
     await page.getByRole('row', { name: `Chi tiết hóa đơn ${prefix}`, exact: true }).click()

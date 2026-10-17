@@ -6,12 +6,20 @@ export class ApiError extends Error {
   readonly code?: string
   readonly requestId?: string
   readonly serverMessage?: string
-  constructor(status: number, code?: string, requestId?: string, serverMessage?: string) {
+  readonly validationIssues?: string[]
+  constructor(
+    status: number,
+    code?: string,
+    requestId?: string,
+    serverMessage?: string,
+    validationIssues?: string[],
+  ) {
     super(serverMessage || 'API request failed')
     this.status = status
     this.code = code
     this.requestId = requestId
     this.serverMessage = serverMessage
+    this.validationIssues = validationIssues
   }
 }
 
@@ -169,6 +177,7 @@ async function request<T>(
       'CLIENT_RESPONSE_INVALID',
       result.response.headers.get('x-request-id') ?? undefined,
       'Phản hồi không hợp lệ. Vui lòng kiểm tra trạng thái giao dịch trước khi thử lại.',
+      parsed.error.issues.map((issue) => `${issue.path.join('.') || '<root>'}: ${issue.code}`),
     )
   }
   result.signal.throwIfAborted()

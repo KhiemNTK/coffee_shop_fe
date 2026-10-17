@@ -29,6 +29,7 @@ export function useKitchenSse(
 
     let source: EventSource | null = null
     let active = true
+    let refreshTimeout: number | undefined
 
     function refresh() {
       void queryClient.invalidateQueries({ queryKey: kitchenKeys.tickets(employeeId) })
@@ -59,10 +60,14 @@ export function useKitchenSse(
       }
 
       source.addEventListener('kitchen.refresh', () => {
-        if (!active) return
-        setLastRefreshedAt(new Date().toLocaleTimeString('vi-VN'))
-        if (soundEnabledRef.current) playKitchenChime()
-        refresh()
+        if (!active || refreshTimeout !== undefined) return
+        refreshTimeout = window.setTimeout(() => {
+          refreshTimeout = undefined
+          if (!active) return
+          setLastRefreshedAt(new Date().toLocaleTimeString('vi-VN'))
+          if (soundEnabledRef.current) playKitchenChime()
+          refresh()
+        }, 250)
       })
 
       source.addEventListener('heartbeat', () => {
@@ -82,6 +87,7 @@ export function useKitchenSse(
 
     return () => {
       active = false
+      window.clearTimeout(refreshTimeout)
       if (reconnectTimeoutRef.current) {
         window.clearTimeout(reconnectTimeoutRef.current)
       }

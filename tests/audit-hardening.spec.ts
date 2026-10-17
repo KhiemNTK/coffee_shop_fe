@@ -85,6 +85,53 @@ test('coalesces a burst of KDS events into one refresh and cancels scheduled wor
   expect({ tickets, workloads }).toEqual(ended)
 })
 
+test('reports missing authorization and exception fields without accepting an older backend contract', async ({ page }) => {
+  await page.route('**/api/v1/menu/public/categories', route => route.fulfill({ json: envelope([]) }))
+  await page.route('**/api/v1/menu/public/items?*', route => route.fulfill({
+    json: envelope({ list: [], totalItems: 0, totalPages: 0, currentPage: 1 }),
+  }))
+  const id = '86000000-0000-4000-8000-000000000099'
+  await page.route(`**/api/v1/roles/${id}/permissions`, route => route.fulfill({
+    json: envelope({ id, name: 'Old contract', rolePermissions: [] }),
+  }))
+  await page.route(`**/api/v1/employees/${id}/roles`, route => route.fulfill({
+    json: envelope({ id, email: 'fixture@example.test', fullName: 'Fixture', isActive: true, employeeRoles: [] }),
+  }))
+  await page.route('**/api/v1/management/exceptions/summary', route => route.fulfill({
+    json: envelope({ asOf: new Date().toISOString(), counts: { PAYMENT: 0, CASH_EXPENSE: 0, CASH_HANDOVER: 0, FEEDBACK: 0 }, total: 0 }),
+  }))
+  await page.goto('/')
+  const failures = await page.evaluate(async id => {
+    const clientPath = '/src/shared/api/client.ts'
+    const employeesPath = '/src/features/employees/employees.api.ts'
+    const operationsPath = '/src/features/operations/operations.api.ts'
+    const { ApiError } = await import(clientPath)
+    const { getRolePermissions, getEmployeeRoles } = await import(employeesPath)
+    const { operationsApi } = await import(operationsPath)
+    const failures = []
+    for (const call of [
+      () => getRolePermissions(id),
+      () => getEmployeeRoles(id),
+      () => operationsApi.getManagementExceptionsSummary(),
+    ]) {
+      try {
+        await call()
+        failures.push({ code: 'ACCEPTED_INVALID_RESPONSE' })
+      } catch (error) {
+        if (!(error instanceof ApiError)) throw error
+        const detail = error as { code?: string; validationIssues?: string[] }
+        failures.push({ code: detail.code, issues: detail.validationIssues })
+      }
+    }
+    return failures
+  }, id)
+  expect(failures).toEqual([
+    { code: 'CLIENT_RESPONSE_INVALID', issues: ['data.canManagePermissions: invalid_type'] },
+    { code: 'CLIENT_RESPONSE_INVALID', issues: ['data.canManageRoles: invalid_type', 'data.assignableRoleIds: invalid_type'] },
+    { code: 'CLIENT_RESPONSE_INVALID', issues: ['data.counts.KITCHEN_OVERDUE: invalid_type', 'data.counts.ONLINE_PICKUP_LATE: invalid_type', 'data.counts.OUTBOX_DEAD_LETTER: invalid_type'] },
+  ])
+})
+
 test('closed ASAP intake blocks a fresh checkout and still offers scheduled pickup', async ({
   page,
 }, info) => {

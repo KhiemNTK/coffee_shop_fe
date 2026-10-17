@@ -206,6 +206,9 @@ This gate never uses a real Google account; see [auth and notification acceptanc
 - CI requires repository variable `BACKEND_REF` to be a full committed backend SHA.
   There is no fallback to an old or mutable contract revision. Commit the backend
   changes before setting that variable and running remote integration.
+  A full SHA can still point to an old contract. If adapters reject role flags or
+  exception counts, compare `BACKEND_REF` with the intended backend release SHA.
+  Contract test errors include missing field paths, never the raw response body.
 
 ## Deployment Boundary
 

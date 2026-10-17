@@ -273,7 +273,7 @@ test('kitchen event invalidates the current actor POS keys without invalidating 
   await page.route('**/api/v1/kitchen/tickets?*', route => route.fulfill({ json: envelope(paged([])) }))
   await page.goto('/staff/kitchen')
   await expect(page.getByRole('heading', { name: /Bếp|pha chế/i }).first()).toBeVisible()
-  const result = await page.evaluate(async ({ actor, sessionId }) => {
+  const keys = await page.evaluate(async ({ actor, sessionId }) => {
     const path = '/src/app/query-client.ts'
     const { queryClient } = await import(path)
     const keys = [['private', actor, 'orders', 'session', sessionId], ['private', actor, 'dining-tables'],
@@ -282,9 +282,13 @@ test('kitchen event invalidates the current actor POS keys without invalidating 
     keys.forEach(key => queryClient.setQueryData(key, {}))
     const source = (window as unknown as { kitchenSource: EventTarget }).kitchenSource
     source.dispatchEvent(new Event('kitchen.refresh'))
-    return keys.map(key => queryClient.getQueryState(key)?.isInvalidated)
+    return keys
   }, { actor: defaultMockAdminEmployee.id, sessionId: id })
-  expect(result).toEqual([true, true, true, false, true, false])
+  await expect.poll(() => page.evaluate(async keys => {
+    const path = '/src/app/query-client.ts'
+    const { queryClient } = await import(path)
+    return keys.map(key => queryClient.getQueryState(key)?.isInvalidated)
+  }, keys)).toEqual([true, true, true, false, true, false])
 })
 
 test('business report preserves unknown rates and avoids a fabricated recommendation lift', async ({ page }, info) => {
