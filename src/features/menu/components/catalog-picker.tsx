@@ -24,6 +24,7 @@ export function CatalogPicker({ employeeId, resource, label, selected, onChange,
   return <div className="min-w-0 space-y-2" role="group" aria-label={label}>
     <label htmlFor={id} className="text-sm font-medium">{label}</label>
     <Input aria-label={`Tìm ${label.toLowerCase()}`} maxLength={120} value={keyword}
+      placeholder={resource === 'category' ? 'Tìm danh mục…' : 'Tìm quầy pha chế…'}
       onChange={event => { setKeyword(event.target.value); setPage(1) }} />
     <select id={id} required={required} value={selected?.id ?? ''}
       disabled={!query.isSuccess || query.isFetching}

@@ -1,20 +1,13 @@
 import { useTranslation } from 'react-i18next'
-import { Check, Clock, Package, Phone, User } from 'lucide-react'
-import { type PendingOrder } from '../online-orders.api'
+import { Check, Clock, Package, Phone } from 'lucide-react'
+import type { PendingOrder } from '../online-orders.api'
 import { formatPrice } from '../../menu/menu.api'
 import { errorMessage } from '../../../shared/api/client'
 import { formatLineAmount } from '../../../shared/lib/format'
 import { formatStoreDateTime } from '../../../shared/lib/store-time'
 import { OrderOptions } from '../../../shared/ui/order-options'
-import {
-  Badge,
-  Button,
-  Card,
-  CardContent,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from '../../../shared/ui'
+import { Badge, Button } from '../../../shared/ui'
+import { StaffOrderQueue } from './staff-order-queue'
 
 interface StaffPendingOrdersTabProps {
   orders: PendingOrder[]
@@ -44,123 +37,134 @@ export function StaffPendingOrdersTab({
   onReject,
 }: StaffPendingOrdersTabProps) {
   const { t: translate } = useTranslation()
-  if (isLoading) {
+  if (isLoading)
     return (
-      <div className="py-12 text-center text-sm text-[#68776f]">
+      <p role="status" className="py-12 text-center text-sm text-muted-foreground">
         {translate('takeaway.loadingPending')}
-      </div>
+      </p>
     )
-  }
-
-  if (isError) {
+  if (isError)
     return (
-      <div role="alert" className="flex flex-wrap items-center gap-3 text-sm text-destructive p-4">
-        <span>{errorMessage(error)}</span>
-        <Button variant="link" onClick={onRefetch} className="text-red-700 font-semibold">
+      <div role="alert" className="flex flex-wrap items-center gap-3 py-4 text-sm text-destructive">
+        {errorMessage(error)}
+        <Button variant="outline" onClick={onRefetch}>
           {translate('common.retry')}
         </Button>
       </div>
     )
-  }
-
-  if (orders.length === 0) {
+  if (!orders.length)
     return (
-      <div className="py-8 text-center text-muted-foreground">
-        <Package size={36} className="mx-auto mb-3 text-[#9ba8a0]" />
-        <p className="text-base font-semibold text-[#1a2723]">{translate('takeaway.noPending')}</p>
+      <div className="py-12 text-center">
+        <Package size={32} aria-hidden="true" className="mx-auto mb-3 text-muted-foreground" />
+        <p className="font-semibold">{translate('takeaway.noPending')}</p>
       </div>
     )
-  }
-
+  const expired = (order: PendingOrder) => Date.parse(order.expiresAt) <= nowMs
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-      {orders.map((order) => {
-        const expiresAt = new Date(order.expiresAt)
-        const isUrgent = expiresAt.getTime() - nowMs < 5 * 60_000
-        return (
-          <Card
-            key={order.id}
-            className="flex flex-col justify-between shadow-xs hover:shadow-sm transition-shadow"
-          >
-            <CardHeader className="pb-3">
-              <div className="flex flex-wrap justify-between items-start gap-2">
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-1.5">
-                    <User size={15} className="text-[#174f3f]" />
-                    <CardTitle className="break-words">{order.pickupName}</CardTitle>
-                  </div>
-                  <div className="flex items-center gap-1.5 text-xs text-[#68776f] mt-1">
-                    <Phone size={13} />
-                    <span>{order.phoneNumber}</span>
-                  </div>
-                </div>
-
-                <Badge variant={isUrgent ? 'destructive' : 'warning'}>
-                  <Clock size={11} />
-                  {translate('takeaway.deadlinePrefix')} {formatStoreDateTime(order.expiresAt)}
-                </Badge>
-              </div>
-
-              {/* Pickup Time info */}
-              <div className="mt-3 rounded-md bg-[#f2f6f3] px-3 py-1.5 text-xs text-[#202d29]">
-                <span className="font-semibold">{translate('takeaway.pickupTimePrefix')} </span>
+    <StaffOrderQueue
+      orders={orders}
+      summary={(order) =>
+        order.items.map((item) => `${item.quantity}x ${item.quotedName}`).join(' · ')
+      }
+      status={(order) => (
+        <Badge variant={expired(order) ? 'destructive' : 'warning'} className="rounded-md">
+          {translate(expired(order) ? 'ops.queue.expired' : 'takeaway.pending')}
+        </Badge>
+      )}
+    >
+      {(order) => (
+        <div className="space-y-5">
+          <header className="border-b border-border pb-4">
+            <p className="text-xs text-muted-foreground">{translate('ops.queue.detail')}</p>
+            <h2 className="mt-1 text-lg font-bold" title={order.id}>
+              #{order.id.slice(-8).toUpperCase()}
+            </h2>
+          </header>
+          <dl className="grid grid-cols-2 gap-4 text-sm">
+            <div className="col-span-2">
+              <dt className="mb-1 text-xs text-muted-foreground">
+                {translate('ops.queue.customer')}
+              </dt>
+              <dd className="break-words font-semibold">
+                {order.pickupName} · {order.phoneNumber}
+              </dd>
+            </div>
+            <div>
+              <dt className="mb-1 text-xs text-muted-foreground">
+                {translate('takeaway.pickupTimePrefix')}
+              </dt>
+              <dd>
                 {order.pickupAt
                   ? formatStoreDateTime(order.pickupAt)
                   : translate('takeaway.asapShort')}
+              </dd>
+            </div>
+            <div>
+              <dt className="mb-1 text-xs text-muted-foreground">
+                {translate('takeaway.deadlinePrefix')}
+              </dt>
+              <dd className={expired(order) ? 'text-destructive' : ''}>
+                {formatStoreDateTime(order.expiresAt)}
+              </dd>
+            </div>
+          </dl>
+          <section className="space-y-3 border-y border-border py-4">
+            <h3 className="text-sm font-semibold">{translate('ops.queue.items')}</h3>
+            {order.items.map((item) => (
+              <div key={item.lineNumber} className="flex items-start justify-between gap-3 text-sm">
+                <div className="min-w-0 flex-1">
+                  <p className="break-words">
+                    <strong>{item.quantity}x</strong> {item.quotedName}
+                  </p>
+                  <OrderOptions options={item.quotedOptions} />
+                  {item.note && (
+                    <p className="mt-1 break-words text-xs text-muted-foreground">{item.note}</p>
+                  )}
+                </div>
+                <span className="shrink-0 font-medium">
+                  {formatLineAmount(item.quotedUnitPrice, item.quantity)}
+                </span>
               </div>
-            </CardHeader>
-
-            <CardContent className="space-y-3 flex-1">
-              <div className="border-t border-[#f0f4f1] pt-3 space-y-2 text-xs">
-                {order.items.map((it, idx) => (
-                  <div key={idx} className="flex flex-wrap justify-between items-baseline gap-2">
-                    <div className="min-w-0 break-words">
-                      <span>
-                        <strong>{it.quantity}x</strong> {it.quotedName}
-                      </span>
-                      <OrderOptions options={it.quotedOptions} />
-                      {it.note && <p className="text-[11px] text-[#68776f] mt-0.5">({it.note})</p>}
-                    </div>
-                    <span className="font-semibold text-[#174f3f]">
-                      {formatLineAmount(it.quotedUnitPrice, it.quantity)}
-                    </span>
-                  </div>
-                ))}
-              </div>
-
-              <div className="flex justify-between items-baseline border-t border-dashed border-[#dce5df] pt-2">
-                <span className="text-xs text-[#68776f]">{translate('common.total')}</span>
-                <strong className="text-base text-[#174f3f]">
-                  {formatPrice(order.quotedSubtotal)}
-                </strong>
-              </div>
-            </CardContent>
-
-            <CardFooter className="grid grid-cols-2 gap-2 pt-0">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => onReject(order)}
-                disabled={!canReview || isBlocked}
-                className="text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700"
-              >
-                {translate('takeaway.rejectShort')}
-              </Button>
-
-              <Button
-                variant="default"
-                size="sm"
-                onClick={() => onAccept(order.id)}
-                disabled={!canReview || isBlocked}
-                isLoading={isAcceptPending}
-              >
-                <Check size={14} />
-                {translate('takeaway.approve')}
-              </Button>
-            </CardFooter>
-          </Card>
-        )
-      })}
-    </div>
+            ))}
+          </section>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="text-sm text-muted-foreground">{translate('ops.queue.quoted')}</span>
+            <strong className="text-xl tabular-nums text-primary">
+              {formatPrice(order.quotedSubtotal)}
+            </strong>
+          </div>
+          <div className="space-y-2">
+            <Button
+              className="min-h-11 w-full"
+              disabled={!canReview || isBlocked || expired(order)}
+              isLoading={isAcceptPending}
+              onClick={() => onAccept(order.id)}
+            >
+              <Check size={16} aria-hidden="true" />
+              {translate('takeaway.approve')}
+            </Button>
+            <Button
+              variant="outline"
+              className="min-h-11 w-full text-destructive"
+              disabled={!canReview || isBlocked}
+              onClick={() => onReject(order)}
+            >
+              {translate('takeaway.rejectShort')}
+            </Button>
+          </div>
+          <a
+            href={`tel:${order.phoneNumber}`}
+            className="inline-flex min-h-11 items-center gap-2 text-sm font-medium text-primary"
+          >
+            <Phone size={15} aria-hidden="true" />
+            {order.phoneNumber}
+          </a>
+          <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <Clock size={12} aria-hidden="true" />
+            {formatStoreDateTime(order.createdAt)}
+          </p>
+        </div>
+      )}
+    </StaffOrderQueue>
   )
 }

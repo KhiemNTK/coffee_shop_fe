@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useOutletContext } from 'react-router-dom'
-import { CalendarDays, Plus, RefreshCw, Sparkles } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
+import { CalendarDays, Clock, LogIn, Plus, RefreshCw, Sparkles } from 'lucide-react'
 import {
   getReservations,
   getReservationRequests,
@@ -14,7 +15,7 @@ import { getDiningTables } from '../pos/pos.api'
 import { posKeys } from '../pos/pos.keys'
 import { errorMessage } from '../../shared/api/client'
 import type { Session } from '../auth/session'
-import { Button } from '../../shared/ui'
+import { Button, OperationsHeader, OperationsSummary } from '../../shared/ui'
 import { ReservationsTab } from './components/reservations-tab'
 import { RequestsTab } from './components/requests-tab'
 import {
@@ -25,6 +26,7 @@ import {
 } from './components/reservation-modals'
 
 export default function StaffReservationsPage() {
+  const { t } = useTranslation()
   const client = useQueryClient()
   const session = useOutletContext<Session>()
   const employeeId = session.employee.id
@@ -68,7 +70,7 @@ export default function StaffReservationsPage() {
   const tables = useQuery({
     queryKey: posKeys.tables(employeeId),
     queryFn: ({ signal }) => getDiningTables(signal),
-    enabled: canReadTables && activeTab === 'reservations',
+    enabled: canReadTables,
     staleTime: 30_000,
   })
   const reservations = useQuery({
@@ -96,14 +98,12 @@ export default function StaffReservationsPage() {
         },
         signal,
       ),
-    enabled: activeTab === 'reservations',
     staleTime: 15_000,
   })
   const requests = useQuery({
     queryKey: ['private', employeeId, 'reservation-requests', reqPage, reqStatus],
     queryFn: ({ signal }) =>
       getReservationRequests({ page: reqPage, itemPerPage: 15, status: reqStatus }, signal),
-    enabled: activeTab === 'requests',
     staleTime: 15_000,
   })
   function invalidate() {
@@ -117,7 +117,6 @@ export default function StaffReservationsPage() {
     void client.invalidateQueries({ queryKey: posKeys.sessions(employeeId) })
   }
   const modalProps = { employeeId, canReadTables, onSettled: invalidate }
-  const activeQuery = activeTab === 'reservations' ? reservations : requests
   const canRunCommand =
     command?.kind === 'approve'
       ? canCreate
@@ -128,39 +127,75 @@ export default function StaffReservationsPage() {
           : canCheckIn
 
   return (
-    <div className="mx-auto max-w-7xl space-y-5 p-4 sm:p-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="flex items-center gap-2 text-2xl font-semibold">
-          <CalendarDays size={24} />
-          Quản lý Đặt bàn
-        </h1>
-        <div className="flex flex-wrap gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={activeQuery.isFetching}
-            onClick={() => {
-              setNow(new Date())
-              void activeQuery.refetch()
-            }}
-          >
-            <RefreshCw size={16} />
-            Làm mới
-          </Button>
-          {canCreate && (
-            <Button size="sm" onClick={() => setCreateOpen(true)}>
-              <Plus size={16} />
-              Tạo đặt bàn mới
+    <div className="space-y-5">
+      <OperationsHeader
+        title="Quản lý Đặt bàn"
+        meta={t('ops.reservations.timeZone')}
+        actions={
+          <>
+            <Button
+              variant="outline"
+              className="min-h-11"
+              disabled={reservations.isFetching || requests.isFetching}
+              onClick={() => {
+                setNow(new Date())
+                void reservations.refetch()
+                void requests.refetch()
+              }}
+            >
+              <RefreshCw size={16} />
+              Làm mới
             </Button>
-          )}
-        </div>
-      </div>
-      <div className="flex flex-wrap border-b border-border">
+            {canCreate && (
+              <Button className="min-h-11" onClick={() => setCreateOpen(true)}>
+                <Plus size={16} />
+                Tạo đặt bàn mới
+              </Button>
+            )}
+          </>
+        }
+      />
+      <OperationsSummary
+        label={t('ops.reservations.schedule')}
+        metrics={[
+          {
+            label: t('ops.reservations.filtered'),
+            value: reservations.isSuccess ? reservations.data.totalItems : '—',
+            icon: CalendarDays,
+          },
+          {
+            label: t('ops.reservations.awaiting'),
+            value: reservations.isSuccess
+              ? reservations.data.list.filter((row) => row.status === 'PENDING').length
+              : '—',
+            icon: Clock,
+            note: t('ops.queue.pageScope'),
+          },
+          {
+            label: t('ops.reservations.arrived'),
+            value: reservations.isSuccess
+              ? reservations.data.list.filter((row) => row.status === 'ARRIVED').length
+              : '—',
+            icon: LogIn,
+            note: t('ops.queue.pageScope'),
+          },
+          {
+            label: t(
+              reqStatus === 'PENDING'
+                ? 'ops.reservations.pendingRequests'
+                : 'ops.reservations.filteredRequests',
+            ),
+            value: requests.isSuccess ? requests.data.totalItems : '—',
+            icon: Sparkles,
+          },
+        ]}
+      />
+      <div className="flex flex-wrap border-b border-border xl:hidden">
         <Button
           variant="ghost"
           aria-pressed={activeTab === 'reservations'}
           onClick={() => setActiveTab('reservations')}
-          className={activeTab === 'reservations' ? 'border-b-2 border-primary rounded-none' : ''}
+          className={`min-h-11 ${activeTab === 'reservations' ? 'border-b-2 border-primary rounded-none' : ''}`}
         >
           <CalendarDays size={16} />
           Lịch đặt bàn tại quán
@@ -169,79 +204,107 @@ export default function StaffReservationsPage() {
           variant="ghost"
           aria-pressed={activeTab === 'requests'}
           onClick={() => setActiveTab('requests')}
-          className={activeTab === 'requests' ? 'border-b-2 border-primary rounded-none' : ''}
+          className={`min-h-11 ${activeTab === 'requests' ? 'border-b-2 border-primary rounded-none' : ''}`}
         >
           <Sparkles size={16} />
           Yêu cầu từ khách online
         </Button>
       </div>
-      {activeQuery.isError && (
-        <div
-          role="alert"
-          className="flex flex-wrap items-center gap-3 rounded-md border border-destructive p-3 text-sm"
+      <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
+        <section
+          aria-label={t('ops.reservations.schedule')}
+          className={`min-w-0 space-y-4 ${activeTab === 'reservations' ? '' : 'hidden xl:block'}`}
         >
-          <p>{errorMessage(activeQuery.error)}</p>
-          <Button variant="outline" size="sm" onClick={() => void activeQuery.refetch()}>
-            <RefreshCw size={16} />
-            Tải lại danh sách
-          </Button>
-        </div>
-      )}
-      {activeTab === 'reservations' && canReadTables && tables.isError && (
-        <div role="alert" className="text-sm text-destructive">
-          Không tải được danh sách bàn.{' '}
-          <Button variant="outline" size="sm" onClick={() => void tables.refetch()}>
-            <RefreshCw size={16} />
-            Tải lại bàn
-          </Button>
-        </div>
-      )}
-      {activeTab === 'reservations' && (
-        <ReservationsTab
-          reservationsData={reservations.data}
-          isLoading={reservations.isPending}
-          tables={tables.data ?? []}
-          hasError={reservations.isError}
-          canReadTables={canReadTables && tables.isSuccess}
-          canReadPos={canReadPos}
-          dateFilter={dateFilter}
-          onDateFilterChange={(value) => {
-            setDateFilter(value)
-            setResPage(1)
-          }}
-          resStatus={resStatus}
-          onResStatusChange={setResStatus}
-          resTableId={resTableId}
-          onResTableIdChange={setResTableId}
-          resSearchPhone={resSearchPhone}
-          onResSearchPhoneChange={setResSearchPhone}
-          resPage={resPage}
-          onResPageChange={setResPage}
-          canCreate={canCreate}
-          canUpdate={canUpdate}
-          canCancel={canCancel}
-          canCheckIn={canCheckIn}
-          onCheckInClick={(reservation) => setCommand({ kind: 'check-in', reservation })}
-          onCreateClick={() => setCreateOpen(true)}
-          onEditClick={setEditTarget}
-          onCancelClick={(reservation) => setCommand({ kind: 'cancel', reservation })}
-        />
-      )}
-      {activeTab === 'requests' && (
-        <RequestsTab
-          requestsData={requests.data}
-          isLoading={requests.isPending}
-          hasError={requests.isError}
-          reqStatus={reqStatus}
-          onReqStatusChange={setReqStatus}
-          reqPage={reqPage}
-          onReqPageChange={setReqPage}
-          canCreate={canCreate}
-          canUpdate={canUpdate}
-          onApproveClick={(request) => setCommand({ kind: 'approve', request })}
-          onRejectClick={(request) => setCommand({ kind: 'reject', request })}
-        />
-      )}
+          <h2 className="flex items-center gap-2 text-base font-bold">
+            <CalendarDays size={18} aria-hidden="true" />
+            {t('ops.reservations.schedule')}
+          </h2>
+          {reservations.isError && (
+            <div
+              role="alert"
+              className="flex flex-wrap items-center gap-3 rounded-md border border-destructive p-3 text-sm"
+            >
+              <p>{errorMessage(reservations.error)}</p>
+              <Button variant="outline" size="sm" onClick={() => void reservations.refetch()}>
+                <RefreshCw size={16} />
+                Tải lại danh sách
+              </Button>
+            </div>
+          )}
+          {canReadTables && tables.isError && (
+            <div role="alert" className="text-sm text-destructive">
+              Không tải được danh sách bàn.{' '}
+              <Button variant="outline" size="sm" onClick={() => void tables.refetch()}>
+                <RefreshCw size={16} />
+                Tải lại bàn
+              </Button>
+            </div>
+          )}
+          <ReservationsTab
+            reservationsData={reservations.data}
+            isLoading={reservations.isPending}
+            tables={tables.data ?? []}
+            hasError={reservations.isError}
+            canReadTables={canReadTables && tables.isSuccess}
+            canReadPos={canReadPos}
+            dateFilter={dateFilter}
+            onDateFilterChange={(value) => {
+              setDateFilter(value)
+              setResPage(1)
+            }}
+            resStatus={resStatus}
+            onResStatusChange={setResStatus}
+            resTableId={resTableId}
+            onResTableIdChange={setResTableId}
+            resSearchPhone={resSearchPhone}
+            onResSearchPhoneChange={setResSearchPhone}
+            resPage={resPage}
+            onResPageChange={setResPage}
+            canCreate={canCreate}
+            canUpdate={canUpdate}
+            canCancel={canCancel}
+            canCheckIn={canCheckIn}
+            onCheckInClick={(reservation) => setCommand({ kind: 'check-in', reservation })}
+            onCreateClick={() => setCreateOpen(true)}
+            onEditClick={setEditTarget}
+            onCancelClick={(reservation) => setCommand({ kind: 'cancel', reservation })}
+          />
+        </section>
+        <section
+          aria-label={t('ops.reservations.requests')}
+          className={`min-w-0 space-y-4 ${activeTab === 'requests' ? '' : 'hidden xl:block'}`}
+        >
+          <h2 className="flex items-center gap-2 text-base font-bold">
+            <Sparkles size={18} aria-hidden="true" />
+            {t('ops.reservations.requests')}
+          </h2>
+          {requests.isError && (
+            <div
+              role="alert"
+              className="flex flex-wrap items-center gap-3 rounded-md border border-destructive p-3 text-sm"
+            >
+              <p>{errorMessage(requests.error)}</p>
+              <Button variant="outline" size="sm" onClick={() => void requests.refetch()}>
+                <RefreshCw size={16} />
+                Tải lại yêu cầu
+              </Button>
+            </div>
+          )}
+          <RequestsTab
+            requestsData={requests.data}
+            isLoading={requests.isPending}
+            hasError={requests.isError}
+            reqStatus={reqStatus}
+            onReqStatusChange={setReqStatus}
+            reqPage={reqPage}
+            onReqPageChange={setReqPage}
+            canCreate={canCreate}
+            canUpdate={canUpdate}
+            onApproveClick={(request) => setCommand({ kind: 'approve', request })}
+            onRejectClick={(request) => setCommand({ kind: 'reject', request })}
+          />
+        </section>
+      </div>
       <CreateReservationModal
         {...modalProps}
         open={canCreate && createOpen}

@@ -112,7 +112,7 @@ test('uncertain KDS status requires a fresh read before the next step', async ({
   await expect(page.getByRole('button', { name: 'Xong món' })).toBeEnabled()
   expect(writes).toEqual(['COOKING'])
   await page.getByRole('button', { name: 'Xong món' }).click()
-  await expect(page.getByText('Chờ giao món')).toBeVisible()
+  await expect(page.getByText('Chờ quầy giao món')).toBeVisible()
   expect(writes).toEqual(['COOKING', 'READY'])
 })
 
@@ -395,7 +395,13 @@ test('public tracking cannot cancel cooking items and preserves exact options, p
       }),
     }),
   )
+  // Wait for the lazy route's initial read before checking its business state.
+  const initialStatus = page.waitForResponse((response) =>
+    new URL(response.url()).pathname === '/api/v1/online-orders/requests/status' &&
+    response.request().method() === 'POST',
+  )
   await page.goto('/order')
+  await initialStatus
   await expect(page.getByText('Size: Large')).toBeVisible()
   await expect(page.getByRole('button', { name: 'Hủy đơn hàng này' })).toHaveCount(0)
   await expect(page.getByText('50.000,25 ₫', { exact: true }).first()).toBeVisible()

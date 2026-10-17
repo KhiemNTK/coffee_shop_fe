@@ -7,12 +7,14 @@ interface InventoryAlertsTabProps {
   data?: ReorderAlertsResponse
   isLoading: boolean
   onImport: (item: ReorderAlertRow) => void
+  canAdjust: boolean
 }
 
 export function InventoryAlertsTab({
   data,
   isLoading,
   onImport,
+  canAdjust,
 }: InventoryAlertsTabProps) {
   return (
     <Card className="border-border/80 shadow-xs overflow-hidden">
@@ -43,10 +45,9 @@ export function InventoryAlertsTab({
                   <tr>
                     <td colSpan={7} className="py-12 text-center text-muted-foreground">
                       <CheckCircle2 className="h-8 w-8 text-emerald-600 mx-auto mb-2" />
-                      <p className="font-semibold text-foreground">Kho hàng an toàn!</p>
-                      <span className="text-xs">
-                        Tất cả nguyên vật liệu đều đang trên mức tối thiểu.
-                      </span>
+                      <p className="font-semibold text-foreground">
+                        Không có nguyên liệu trong danh sách cảnh báo.
+                      </p>
                     </td>
                   </tr>
                 ) : (
@@ -73,14 +74,16 @@ export function InventoryAlertsTab({
                         +{formatQuantity(alert.shortageQuantity)} {alert.unitName}
                       </td>
                       <td className="py-3.5 px-4 sm:px-6 text-center">
-                        <Button
-                          type="button"
-                          size="sm"
-                          onClick={() => onImport(alert)}
-                          className="h-7 text-xs bg-emerald-700 hover:bg-emerald-800 text-white gap-1 font-semibold"
-                        >
-                          <ArrowDownToLine className="h-3.5 w-3.5" /> Tạo phiếu nhập
-                        </Button>
+                        {canAdjust && (
+                          <Button
+                            type="button"
+                            size="sm"
+                            onClick={() => onImport(alert)}
+                            className="h-7 text-xs bg-emerald-700 hover:bg-emerald-800 text-white gap-1 font-semibold"
+                          >
+                            <ArrowDownToLine className="h-3.5 w-3.5" /> Tạo phiếu nhập
+                          </Button>
+                        )}
                       </td>
                     </tr>
                   ))

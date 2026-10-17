@@ -1,19 +1,12 @@
 import { useTranslation } from 'react-i18next'
-import { AlertCircle, Ban, DollarSign, Package, Phone, UserX } from 'lucide-react'
-import { type FulfillmentOrder } from '../online-orders.api'
+import { AlertCircle, Ban, Clock, DollarSign, Package, Phone, UserX } from 'lucide-react'
+import type { FulfillmentOrder } from '../online-orders.api'
 import { formatPrice } from '../../menu/menu.api'
 import { errorMessage } from '../../../shared/api/client'
 import { formatStoreDateTime } from '../../../shared/lib/store-time'
 import { OrderOptions } from '../../../shared/ui/order-options'
-import {
-  Badge,
-  Button,
-  Card,
-  CardContent,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from '../../../shared/ui'
+import { Badge, Button, OperationsSummary } from '../../../shared/ui'
+import { StaffOrderQueue } from './staff-order-queue'
 
 interface StaffFulfillmentOrdersTabProps {
   orders: FulfillmentOrder[]
@@ -49,197 +42,235 @@ export function StaffFulfillmentOrdersTab({
   onCancel,
 }: StaffFulfillmentOrdersTabProps) {
   const { t: translate } = useTranslation()
-  return (
-    <div className="space-y-4">
-      {/* Filter Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-2 border-y border-border py-3 text-sm">
-        <label className="flex items-center gap-2 cursor-pointer select-none">
-          <input
-            type="checkbox"
-            checked={overdueOnly}
-            onChange={(e) => setOverdueOnly(e.target.checked)}
-            className="rounded border-[#bccdc3] text-[#174f3f] focus:ring-[#174f3f]"
-          />
-          <span>{translate('takeaway.overdueOnly')}</span>
-        </label>
-
-        {!isError && !isLoading && totalItems !== undefined && (
-          <span className="text-muted-foreground">
-            {translate('common.totalShort')} {totalItems} {translate('takeaway.processingOrders')}
-          </span>
+  const status = (order: FulfillmentOrder) => (
+    <div className="flex flex-wrap justify-end gap-1">
+      <Badge
+        variant={order.fulfillmentStatus === 'READY' ? 'success' : 'secondary'}
+        className="rounded-md"
+      >
+        {translate(
+          order.fulfillmentStatus === 'READY'
+            ? 'takeaway.readyShort'
+            : order.fulfillmentStatus === 'PREPARING'
+              ? 'takeaway.cookingShort'
+              : order.fulfillmentStatus === 'PARTIALLY_READY'
+                ? 'takeaway.partiallyReadyShort'
+                : 'takeaway.reviewRequired',
         )}
-      </div>
-
-      {isLoading && (
-        <div className="py-12 text-center text-sm text-[#68776f]">
-          {translate('takeaway.loadingFulfillment')}
-        </div>
+      </Badge>
+      {order.isOverdue && (
+        <Badge variant="destructive" className="rounded-md">
+          {translate('takeaway.overdue')}
+        </Badge>
       )}
-
+    </div>
+  )
+  return (
+    <div className="space-y-5">
+      {!isError && !isLoading && totalItems !== undefined && (
+        <OperationsSummary
+          label={translate('takeaway.fulfillmentTab')}
+          metrics={[
+            { label: translate('ops.queue.count'), value: totalItems, icon: Package },
+            {
+              label: translate('ops.queue.readyCount'),
+              value: orders.filter((order) => order.fulfillmentStatus === 'READY').length,
+              icon: DollarSign,
+              note: translate('ops.queue.pageScope'),
+            },
+            {
+              label: translate('ops.queue.preparingCount'),
+              value: orders.filter((order) =>
+                ['PREPARING', 'PARTIALLY_READY'].includes(order.fulfillmentStatus ?? ''),
+              ).length,
+              icon: Clock,
+              note: translate('ops.queue.pageScope'),
+            },
+            {
+              label: translate('ops.queue.lateCount'),
+              value: orders.filter((order) => order.isOverdue).length,
+              icon: AlertCircle,
+              tone: orders.some((order) => order.isOverdue) ? 'danger' : undefined,
+              note: translate('ops.queue.pageScope'),
+            },
+          ]}
+        />
+      )}
+      <label className="flex min-h-11 items-center gap-2 border-b border-border pb-3 text-sm">
+        <input
+          type="checkbox"
+          checked={overdueOnly}
+          onChange={(event) => setOverdueOnly(event.target.checked)}
+          className="h-4 w-4 rounded border-input accent-primary"
+        />
+        {translate('takeaway.overdueOnly')}
+      </label>
+      {isLoading && (
+        <p role="status" className="py-12 text-center text-sm text-muted-foreground">
+          {translate('takeaway.loadingFulfillment')}
+        </p>
+      )}
       {isError && (
         <div
           role="alert"
-          className="flex flex-wrap items-center gap-3 text-sm text-destructive p-4"
+          className="flex flex-wrap items-center gap-3 py-4 text-sm text-destructive"
         >
-          <AlertCircle size={16} />
-          <span>{errorMessage(error)}</span>
-          <Button variant="link" onClick={onRefetch} className="text-red-700 font-semibold">
+          <AlertCircle size={16} aria-hidden="true" />
+          {errorMessage(error)}
+          <Button variant="outline" onClick={onRefetch}>
             {translate('common.retry')}
           </Button>
         </div>
       )}
-
-      {!isLoading && !isError && orders.length === 0 && (
-        <div className="py-8 text-center text-muted-foreground">
-          <Package size={36} className="mx-auto mb-3 text-[#9ba8a0]" />
-          <p className="text-base font-semibold text-[#1a2723]">
-            {translate('takeaway.noPendingPickup')}
-          </p>
+      {!isLoading && !isError && !orders.length && (
+        <div className="py-12 text-center">
+          <Package size={32} aria-hidden="true" className="mx-auto mb-3 text-muted-foreground" />
+          <p className="font-semibold">{translate('takeaway.noPendingPickup')}</p>
         </div>
       )}
-
       {!isLoading && !isError && orders.length > 0 && (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          {orders.map((order) => {
-            const isReady = order.fulfillmentStatus === 'READY'
+        <StaffOrderQueue
+          orders={orders}
+          status={status}
+          summary={(order) =>
+            order.orderItems.map((item) => `${item.quantity}x ${item.menuItem.name}`).join(' · ')
+          }
+        >
+          {(order) => {
+            const allPaid =
+              order.orderItems.length > 0 && order.orderItems.every((item) => item.isPaid)
+            const partlyPaid = !allPaid && order.orderItems.some((item) => item.isPaid)
+            const readyForCash =
+              order.orderItems.length > 0 &&
+              order.orderItems.every((item) => item.serveStatus === 'READY' && !item.isPaid)
             return (
-              <Card
-                key={order.id}
-                className={`flex flex-col justify-between transition-all ${
-                  isReady ? 'ring-2 ring-emerald-600 bg-emerald-50/20' : ''
-                }`}
-              >
-                <CardHeader className="pb-3">
-                  <div className="flex flex-wrap justify-between items-start gap-2">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <CardTitle className="break-words">{order.pickupName}</CardTitle>
-                        <code className="text-xs bg-[#f2f6f3] px-1.5 py-0.5 rounded text-[#174f3f] font-bold">
-                          #{order.id.slice(0, 8).toUpperCase()}
-                        </code>
-                      </div>
-                      <div className="flex items-center gap-1.5 text-xs text-[#68776f] mt-1">
-                        <Phone size={13} />
-                        <span>{order.phoneNumber}</span>
-                      </div>
-                    </div>
-
-                    <div className="flex flex-col items-end gap-1">
-                      {isReady ? (
-                        <Badge variant="success">{translate('takeaway.readyShort')}</Badge>
-                      ) : (
-                        <Badge variant="secondary">
-                          {order.fulfillmentStatus === 'NEEDS_REVIEW'
-                            ? translate('takeaway.reviewRequired')
-                            : order.fulfillmentStatus === 'PARTIALLY_READY'
-                              ? translate('takeaway.partiallyReadyShort')
-                              : translate('takeaway.cookingShort')}
-                        </Badge>
-                      )}
-
-                      {order.isOverdue && (
-                        <Badge variant="destructive">{translate('takeaway.overdue')}</Badge>
-                      )}
-                    </div>
+              <div className="space-y-5">
+                <header className="flex flex-wrap items-start justify-between gap-2 border-b border-border pb-4">
+                  <div>
+                    <p className="text-xs text-muted-foreground">{translate('ops.queue.detail')}</p>
+                    <h2 className="mt-1 text-lg font-bold" title={order.id}>
+                      #{order.id.slice(-8).toUpperCase()}
+                    </h2>
                   </div>
-
-                  {/* Pickup Timing */}
-                  <div className="mt-3 rounded-md bg-[#f8faf9] px-3 py-1.5 text-xs text-[#202d29]">
-                    <span className="font-semibold">{translate('takeaway.scheduledPrefix')} </span>
-                    {order.pickupAt
-                      ? formatStoreDateTime(order.pickupAt)
-                      : translate('takeaway.asapShort')}
+                  {status(order)}
+                </header>
+                <dl className="grid grid-cols-2 gap-4 text-sm">
+                  <div className="col-span-2">
+                    <dt className="mb-1 text-xs text-muted-foreground">
+                      {translate('ops.queue.customer')}
+                    </dt>
+                    <dd className="break-words font-semibold">
+                      {order.pickupName} · {order.phoneNumber}
+                    </dd>
                   </div>
-                </CardHeader>
-
-                <CardContent className="space-y-3 flex-1">
-                  <div className="border-t border-[#f0f4f1] pt-3 space-y-2 text-xs">
-                    {order.orderItems.map((item) => (
-                      <div
-                        key={item.id}
-                        className="flex flex-wrap justify-between items-center gap-2"
-                      >
-                        <div className="min-w-0 break-words">
-                          <strong>{item.quantity}x</strong> {item.menuItem.name}
-                          <OrderOptions options={item.selectedOptions} />
-                        </div>
-                        <Badge
-                          variant={
-                            item.serveStatus === 'READY'
-                              ? 'success'
-                              : item.serveStatus === 'COOKING'
-                                ? 'warning'
-                                : 'secondary'
-                          }
-                        >
-                          {
-                            {
-                              PENDING: translate('pos.pending'),
-                              COOKING: translate('pos.cooking'),
-                              READY: translate('pos.ready'),
-                              SERVED: translate('takeaway.served'),
-                              CANCELLED: translate('common.cancelled'),
-                            }[item.serveStatus]
-                          }
-                        </Badge>
-                      </div>
-                    ))}
+                  <div>
+                    <dt className="mb-1 text-xs text-muted-foreground">
+                      {translate('takeaway.scheduledPrefix')}
+                    </dt>
+                    <dd>
+                      {order.pickupAt
+                        ? formatStoreDateTime(order.pickupAt)
+                        : translate('takeaway.asapShort')}
+                    </dd>
                   </div>
-
-                  <div className="flex justify-between items-baseline border-t border-dashed border-[#dce5df] pt-2">
-                    <span className="text-xs text-[#68776f]">
+                  <div>
+                    <dt className="mb-1 text-xs text-muted-foreground">
                       {translate('takeaway.cashCollectPrefix')}
-                    </span>
-                    <strong className="text-base text-[#174f3f]">
-                      {formatPrice(order.quotedSubtotal)}
-                    </strong>
+                    </dt>
+                    <dd className={allPaid ? 'text-emerald-800' : 'text-amber-800'}>
+                      {translate(
+                        allPaid
+                          ? 'ops.queue.collected'
+                          : partlyPaid
+                            ? 'ops.queue.partialPayment'
+                            : 'ops.queue.unpaid',
+                      )}
+                    </dd>
                   </div>
-                </CardContent>
-
-                <CardFooter className="flex-col gap-2 pt-0">
-                  <Button
-                    variant={isReady ? 'success' : 'secondary'}
-                    size="default"
-                    onClick={() => onCollect(order)}
-                    disabled={!canCollect || !isReady}
-                    className="w-full"
-                  >
-                    <DollarSign size={16} />
-                    {translate('takeaway.collectCash')}
-                  </Button>
-
-                  <div className="flex w-full flex-wrap justify-end gap-3 text-xs">
-                    {canReview && order.isNoShowEligible && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => onNoShow(order.id)}
-                        disabled={isNoShowPending}
-                        className="h-auto p-0 text-amber-700 hover:text-amber-800"
+                </dl>
+                <section className="space-y-3 border-y border-border py-4">
+                  <h3 className="text-sm font-semibold">{translate('ops.queue.items')}</h3>
+                  {order.orderItems.map((item) => (
+                    <div
+                      key={item.id}
+                      className="flex flex-wrap items-start justify-between gap-2 text-sm"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <p className="break-words">
+                          <strong>{item.quantity}x</strong> {item.menuItem.name}
+                        </p>
+                        <OrderOptions options={item.selectedOptions} />
+                      </div>
+                      <Badge
+                        variant={item.serveStatus === 'READY' ? 'success' : 'secondary'}
+                        className="rounded-md"
                       >
-                        <UserX size={13} />
+                        {translate(
+                          (
+                            {
+                              PENDING: 'pos.pending',
+                              COOKING: 'pos.cooking',
+                              READY: 'pos.ready',
+                              SERVED: 'takeaway.served',
+                              CANCELLED: 'common.cancelled',
+                            } as const
+                          )[item.serveStatus],
+                        )}
+                      </Badge>
+                    </div>
+                  ))}
+                </section>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-sm text-muted-foreground">
+                    {translate('ops.queue.quoted')}
+                  </span>
+                  <strong className="text-xl tabular-nums text-primary">
+                    {formatPrice(order.quotedSubtotal)}
+                  </strong>
+                </div>
+                <Button
+                  className="min-h-11 w-full"
+                  disabled={!canCollect || order.fulfillmentStatus !== 'READY' || !readyForCash}
+                  onClick={() => onCollect(order)}
+                >
+                  <DollarSign size={16} aria-hidden="true" />
+                  {translate('takeaway.collectCash')}
+                </Button>
+                {canReview && (
+                  <div className="flex flex-wrap gap-2 border-t border-border pt-3">
+                    {order.isNoShowEligible && (
+                      <Button
+                        variant="outline"
+                        className="min-h-11 text-amber-800"
+                        onClick={() => onNoShow(order.id)}
+                        disabled={isNoShowPending || allPaid || partlyPaid}
+                      >
+                        <UserX size={15} aria-hidden="true" />
                         {translate('takeaway.reportNoShow')}
                       </Button>
                     )}
-
-                    {canReview && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => onCancel(order)}
-                        disabled={isNoShowPending}
-                        className="h-auto p-0 text-red-600 hover:text-red-700"
-                      >
-                        <Ban size={13} />
-                        {translate('takeaway.cancel')}
-                      </Button>
-                    )}
+                    <Button
+                      variant="ghost"
+                      className="min-h-11 text-destructive"
+                      onClick={() => onCancel(order)}
+                      disabled={isNoShowPending || allPaid || partlyPaid}
+                    >
+                      <Ban size={15} aria-hidden="true" />
+                      {translate('takeaway.cancel')}
+                    </Button>
                   </div>
-                </CardFooter>
-              </Card>
+                )}
+                <a
+                  href={`tel:${order.phoneNumber}`}
+                  className="inline-flex min-h-11 items-center gap-2 text-sm font-medium text-primary"
+                >
+                  <Phone size={15} aria-hidden="true" />
+                  {order.phoneNumber}
+                </a>
+              </div>
             )
-          })}
-        </div>
+          }}
+        </StaffOrderQueue>
       )}
     </div>
   )

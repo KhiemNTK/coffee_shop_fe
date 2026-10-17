@@ -11,10 +11,7 @@ import {
   type ManagementExceptionKind,
 } from './operations.api'
 import type { Session } from '../auth/session'
-import {
-  closeIncident,
-  resolveFeedback,
-} from '../reconciliation/reconciliation.api'
+import { closeIncident, resolveFeedback } from '../reconciliation/reconciliation.api'
 import { reconcilePaymentAttempt } from '../invoices/invoices.api'
 import { ApiError, errorMessage } from '@/shared/api/client'
 import { formatVnd } from '@/shared/lib/format'
@@ -28,6 +25,7 @@ import {
   TabsList,
   TabsTrigger,
   TabsContent,
+  AdminTable,
 } from '@/shared/ui'
 import { Pagination } from '@/shared/ui/pagination'
 
@@ -53,20 +51,14 @@ function itemTitle(item: ManagementExceptionItem) {
   )
 }
 
-export function ManagementExceptionsTab({
-  summary,
-}: {
-  summary?: ManagementExceptionsSummary
-}) {
+export function ManagementExceptionsTab({ summary }: { summary?: ManagementExceptionsSummary }) {
   const { employee, authorization } = useOutletContext<Session>()
   const can = (key: string) => authorization.permissionKeys.includes(key)
   const client = useQueryClient()
   const flight = useRef(false)
   const [queuedMessage, setQueuedMessage] = useState('')
   const [params, setParams] = useSearchParams()
-  const kind =
-    ManagementExceptionKindSchema.safeParse(params.get('kind')).data ??
-    'PAYMENT'
+  const kind = ManagementExceptionKindSchema.safeParse(params.get('kind')).data ?? 'PAYMENT'
   const page =
     z.coerce
       .number()
@@ -78,10 +70,7 @@ export function ManagementExceptionsTab({
   const query = useQuery({
     queryKey: ['management-exceptions-list', employee.id, kind, page],
     queryFn: ({ signal }) =>
-      operationsApi.getManagementExceptions(
-        { kind, page, itemPerPage: 20 },
-        signal,
-      ),
+      operationsApi.getManagementExceptions({ kind, page, itemPerPage: 20 }, signal),
     refetchInterval: selectedId && kind === 'OUTBOX_DEAD_LETTER' ? false : 30_000,
     refetchOnWindowFocus: !selectedId || kind !== 'OUTBOX_DEAD_LETTER',
   })
@@ -133,11 +122,7 @@ export function ManagementExceptionsTab({
       if (kind === 'FEEDBACK' && can('/feedback_resolve'))
         return resolveFeedback(selected.id, note.trim())
       if (kind === 'PAYMENT' && can('/payment-reconciliation_manage'))
-        return closeIncident(
-          selected.id,
-          command === 'IGNORE' ? 'IGNORE' : 'RESOLVE',
-          note.trim(),
-        )
+        return closeIncident(selected.id, command === 'IGNORE' ? 'IGNORE' : 'RESOLVE', note.trim())
       throw new Error('Bạn không có quyền xử lý ngoại lệ này.')
     },
     onSuccess: (_data, { command }) => {
@@ -159,8 +144,7 @@ export function ManagementExceptionsTab({
       })
     },
   })
-  const blocked =
-    action.isPending || action.isError || query.isFetching || query.isError
+  const blocked = action.isPending || action.isError || query.isFetching || query.isError
   const close = () => {
     if (!action.isPending) {
       update({ exception: null }, true)
@@ -179,7 +163,7 @@ export function ManagementExceptionsTab({
           }
         }}
       >
-        <TabsList aria-label="Loại ngoại lệ" className="gap-1">
+        <TabsList aria-label="Loại ngoại lệ" className="admin-tabs gap-1">
           {exceptionKinds.map((entry) => (
             <TabsTrigger
               key={entry.id}
@@ -200,9 +184,7 @@ export function ManagementExceptionsTab({
               {query.isSuccess
                 ? query.data.totalItems +
                   ' việc · ' +
-                  formatStoreDateTime(
-                    new Date(query.dataUpdatedAt).toISOString(),
-                  )
+                  formatStoreDateTime(new Date(query.dataUpdatedAt).toISOString())
                 : 'Chưa có dữ liệu xác nhận'}
             </p>
             <Button
@@ -220,10 +202,7 @@ export function ManagementExceptionsTab({
             </Button>
           </div>
           {query.isError ? (
-            <div
-              role="alert"
-              className="space-y-2 border-l-4 border-destructive p-4"
-            >
+            <div role="alert" className="space-y-2 border-l-4 border-destructive p-4">
               <p>{errorMessage(query.error)}</p>
               <Button variant="outline" onClick={() => void query.refetch()}>
                 <RefreshCw className="h-4 w-4" aria-hidden="true" />
@@ -240,49 +219,85 @@ export function ManagementExceptionsTab({
               Không có ngoại lệ tồn đọng
             </div>
           ) : (
-            <div className="divide-y border-y">
-              {query.data.list.map((item) => {
-                const date =
-                  item.occurredAt ||
-                  item.dueAt ||
-                  item.pickupAt ||
-                  item.createdAt ||
-                  item.detectedAt
-                return (
-                  <div
-                    key={item.id}
-                    className="flex items-start justify-between gap-3 py-4"
-                  >
-                    <div className="min-w-0">
-                      <p className="break-words font-semibold">
-                        {itemTitle(item)}
-                      </p>
-                      <Badge variant="outline">
-                        {item.status ||
-                          (item.rating ? item.rating + ' sao' : 'PENDING')}
-                      </Badge>
-                      <p className="text-sm text-muted-foreground">
+            <AdminTable label="Hàng đợi ngoại lệ quản trị">
+              <thead>
+                <tr>
+                  <th>Vấn đề / Sự cố</th>
+                  <th>Danh mục</th>
+                  <th>Trạng thái</th>
+                  <th>Thông tin liên quan</th>
+                  <th>Mốc thời gian</th>
+                  <th className="text-right">Thao tác</th>
+                </tr>
+              </thead>
+              <tbody>
+                {query.data.list.map((item) => {
+                  const date =
+                    item.occurredAt ||
+                    item.dueAt ||
+                    item.pickupAt ||
+                    item.createdAt ||
+                    item.detectedAt
+                  return (
+                    <tr key={item.id} className="align-top">
+                      <td className="max-w-80">
+                        <p className="break-words font-semibold">{itemTitle(item)}</p>
+                        {item.description && item.description !== itemTitle(item) && (
+                          <p
+                            className="mt-1 line-clamp-2 break-words text-xs text-muted-foreground"
+                            title={item.description}
+                          >
+                            {item.description}
+                          </p>
+                        )}
+                        {item.amount !== undefined && <p>{formatVnd(item.amount)}</p>}
+                      </td>
+                      <td>
+                        <Badge variant="secondary">
+                          {exceptionKinds.find((entry) => entry.id === kind)?.label}
+                        </Badge>
+                      </td>
+                      <td>
+                        <Badge
+                          variant={item.status === 'PENDING' ? 'warning' : 'outline'}
+                          title={item.status}
+                        >
+                          {item.status === 'PENDING'
+                            ? 'Chờ xử lý'
+                            : item.status || (item.rating ? item.rating + ' sao' : '—')}
+                        </Badge>
+                      </td>
+                      <td className="max-w-56 text-xs text-muted-foreground">
+                        <span className="break-all font-mono" title={item.id}>
+                          #{item.id.slice(-8).toUpperCase()}
+                        </span>
+                        {item.paymentAttemptId && (
+                          <p className="mt-1 break-all" title={item.paymentAttemptId}>
+                            Payment: {item.paymentAttemptId.slice(-8)}
+                          </p>
+                        )}
+                      </td>
+                      <td className="text-xs text-muted-foreground">
                         {date ? formatStoreDateTime(date) : '—'}
-                      </p>
-                      {item.amount !== undefined && (
-                        <p>{formatVnd(item.amount)}</p>
-                      )}
-                    </div>
-                    <Button
-                      variant="outline"
-                      disabled={action.isPending}
-                      onClick={() => {
-                        update({ exception: item.id })
-                        action.reset()
-                      }}
-                    >
-                      <Eye className="h-4 w-4" aria-hidden="true" />
-                      Chi tiết
-                    </Button>
-                  </div>
-                )
-              })}
-            </div>
+                      </td>
+                      <td className="text-right">
+                        <Button
+                          variant="outline"
+                          disabled={action.isPending}
+                          onClick={() => {
+                            update({ exception: item.id })
+                            action.reset()
+                          }}
+                        >
+                          <Eye className="h-4 w-4" aria-hidden="true" />
+                          Chi tiết
+                        </Button>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </AdminTable>
           )}
           {query.isSuccess && (
             <Pagination
@@ -315,10 +330,13 @@ export function ManagementExceptionsTab({
           {selected && (
             <Dialog open onClose={close} label="Chi tiết ngoại lệ">
               <div className="space-y-4 p-5">
-                <h2 className="pr-8 text-lg font-semibold">
-                  Chi tiết ngoại lệ
-                </h2>
+                <h2 className="pr-8 text-lg font-semibold">Chi tiết ngoại lệ</h2>
                 <p className="break-words">{itemTitle(selected)}</p>
+                {selected.description && selected.description !== itemTitle(selected) && (
+                  <pre className="whitespace-pre-wrap break-words border-l-2 border-border p-3 text-xs">
+                    {selected.description}
+                  </pre>
+                )}
                 <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-2 text-sm">
                   <dt>Mã phiếu</dt>
                   <dd className="break-all">{selected.id}</dd>
@@ -362,9 +380,7 @@ export function ManagementExceptionsTab({
                       <dd>{selected.attempts}</dd>
                       <dt>Phát sinh</dt>
                       <dd>
-                        {selected.occurredAt
-                          ? formatStoreDateTime(selected.occurredAt)
-                          : '—'}
+                        {selected.occurredAt ? formatStoreDateTime(selected.occurredAt) : '—'}
                       </dd>
                     </>
                   )}
@@ -387,10 +403,9 @@ export function ManagementExceptionsTab({
                     </Button>
                   </div>
                 )}
-                {action.isSuccess &&
-                  action.variables.command === 'RECONCILE' && (
-                    <p role="status">Đã kiểm tra lại trạng thái thanh toán.</p>
-                  )}
+                {action.isSuccess && action.variables.command === 'RECONCILE' && (
+                  <p role="status">Đã kiểm tra lại trạng thái thanh toán.</p>
+                )}
                 {kind === 'OUTBOX_DEAD_LETTER' &&
                   selected.availableAt &&
                   can('/outbox-events_retry') && (
@@ -426,47 +441,33 @@ export function ManagementExceptionsTab({
                       Đối soát lại payment
                     </Button>
                   )}
-                {((kind === 'PAYMENT' &&
-                  can('/payment-reconciliation_manage')) ||
+                {((kind === 'PAYMENT' && can('/payment-reconciliation_manage')) ||
                   (kind === 'FEEDBACK' && can('/feedback_resolve'))) && (
                   <ResolutionForm
                     key={kind + selected.id}
                     allowIgnore={kind === 'PAYMENT'}
                     blocked={blocked}
                     pending={action.isPending}
-                    onSubmit={(command, note) =>
-                      action.mutate({ command, note })
-                    }
+                    onSubmit={(command, note) => action.mutate({ command, note })}
                   />
                 )}
-                {((kind === 'CASH_EXPENSE' &&
-                  can('/cashier-shifts_expenses-review')) ||
-                  (kind === 'CASH_HANDOVER' &&
-                    can('/cash-handovers_read'))) && (
+                {((kind === 'CASH_EXPENSE' && can('/cashier-shifts_expenses-review')) ||
+                  (kind === 'CASH_HANDOVER' && can('/cash-handovers_read'))) && (
                   <Link
                     className="inline-flex items-center gap-2 underline"
-                    to={
-                      '/staff/shifts?tab=' +
-                      (kind === 'CASH_EXPENSE' ? 'expenses' : 'handovers')
-                    }
+                    to={'/staff/shifts?tab=' + (kind === 'CASH_EXPENSE' ? 'expenses' : 'handovers')}
                   >
                     <ExternalLink className="h-4 w-4" aria-hidden="true" />
                     Mở nghiệp vụ ca và quỹ
                   </Link>
                 )}
                 {kind === 'PAYMENT' && can('/payment-reconciliation_read') && (
-                  <Link
-                    className="block underline"
-                    to="/staff/reconciliation?tab=payments"
-                  >
+                  <Link className="block underline" to="/staff/reconciliation?tab=payments">
                     Mở danh sách đối soát
                   </Link>
                 )}
                 {kind === 'FEEDBACK' && can('/reports_read') && (
-                  <Link
-                    className="block underline"
-                    to="/staff/reconciliation?tab=feedback"
-                  >
+                  <Link className="block underline" to="/staff/reconciliation?tab=feedback">
                     Mở phản hồi khách
                   </Link>
                 )}
@@ -478,15 +479,14 @@ export function ManagementExceptionsTab({
                     Mở trạm bếp
                   </Link>
                 )}
-                {kind === 'ONLINE_PICKUP_LATE' &&
-                  can('/online-orders_read') && (
-                    <Link
-                      className="block underline"
-                      to="/staff/online-orders?tab=fulfillment&overdueOnly=true"
-                    >
-                      Mở đơn quá giờ hẹn
-                    </Link>
-                  )}
+                {kind === 'ONLINE_PICKUP_LATE' && can('/online-orders_read') && (
+                  <Link
+                    className="block underline"
+                    to="/staff/online-orders?tab=fulfillment&overdueOnly=true"
+                  >
+                    Mở đơn quá giờ hẹn
+                  </Link>
+                )}
                 {selected.orderSessionId && can('/orders_sessions_read') && (
                   <Link
                     className="block underline"
@@ -533,9 +533,7 @@ function ResolutionForm({
       </label>
       {confirm ? (
         <div className="space-y-2 border-t pt-3">
-          <p>
-            Xác nhận {confirm === 'IGNORE' ? 'bỏ qua' : 'đóng'} ngoại lệ này?
-          </p>
+          <p>Xác nhận {confirm === 'IGNORE' ? 'bỏ qua' : 'đóng'} ngoại lệ này?</p>
           <Button
             disabled={blocked || note.trim().length < 3}
             onClick={() => onSubmit(confirm, note)}
@@ -543,11 +541,7 @@ function ResolutionForm({
             <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
             Xác nhận
           </Button>
-          <Button
-            variant="outline"
-            disabled={pending}
-            onClick={() => setConfirm(null)}
-          >
+          <Button variant="outline" disabled={pending} onClick={() => setConfirm(null)}>
             Quay lại
           </Button>
         </div>
@@ -622,23 +616,15 @@ function OutboxRetryForm({
         />
       </label>
       {confirmed && (
-        <p className="text-sm">
-          Xác nhận đã xử lý nguyên nhân lỗi và đưa event lại vào hàng đợi?
-        </p>
+        <p className="text-sm">Xác nhận đã xử lý nguyên nhân lỗi và đưa event lại vào hàng đợi?</p>
       )}
       {uncertain && (
         <p role="status" className="text-sm">
           Chưa xác nhận được kết quả. Gửi lại cùng lệnh hoặc kiểm tra lại ngoại lệ.
         </p>
       )}
-      <Button
-        type="submit"
-        disabled={pending || blocked || rejected || reason.trim().length < 3}
-      >
-        <RefreshCw
-          className={pending ? 'h-4 w-4 animate-spin' : 'h-4 w-4'}
-          aria-hidden="true"
-        />
+      <Button type="submit" disabled={pending || blocked || rejected || reason.trim().length < 3}>
+        <RefreshCw className={pending ? 'h-4 w-4 animate-spin' : 'h-4 w-4'} aria-hidden="true" />
         {pending
           ? 'Đang gửi…'
           : uncertain

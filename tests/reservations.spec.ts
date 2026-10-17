@@ -187,6 +187,9 @@ test.describe('Staff Reservations Management', () => {
     await page.route('**/api/v1/dining-tables', (route) =>
       route.fulfill({ json: envelope(mockDiningTables) }),
     )
+    await page.route('**/api/v1/reservations/requests?*', route =>
+      route.fulfill({ json: envelope({ list: [], totalItems: 0, totalPages: 0, currentPage: 1 }) }),
+    )
   })
 
   test('staff can view reservations and perform check-in', async ({ page }) => {
@@ -304,7 +307,7 @@ test.describe('Staff Reservations Management', () => {
 
   test('update-only staff can reject but cannot approve or fetch unauthorized tables; ALL is explicit', async ({
     page,
-  }) => {
+  }, info) => {
     await page.route('**/api/v1/auth/me/permissions', (route) =>
       route.fulfill({
         json: envelope({
@@ -345,7 +348,9 @@ test.describe('Staff Reservations Management', () => {
       })
     })
     await page.goto('/staff/reservations')
-    await page.getByRole('button', { name: 'Yêu cầu từ khách online' }).click()
+    if (info.project.name === 'mobile') {
+      await page.getByRole('button', { name: 'Yêu cầu từ khách online' }).click()
+    }
     await expect(page.getByRole('button', { name: 'Từ chối', exact: true })).toBeVisible()
     await expect(page.getByRole('button', { name: 'Duyệt & Xếp bàn' })).toHaveCount(0)
     await page.getByLabel('Lọc theo trạng thái yêu cầu').selectOption('ALL')

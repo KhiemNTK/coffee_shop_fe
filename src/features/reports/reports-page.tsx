@@ -2,7 +2,6 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useOutletContext } from 'react-router-dom'
 import {
-  BarChart3,
   CalendarCheck,
   ChefHat,
   FileSpreadsheet,
@@ -28,6 +27,7 @@ import {
   TabsList,
   TabsTrigger,
   cn,
+  OperationsHeader,
 } from '../../shared/ui'
 import { FinancialOverviewTab } from './components/financial-overview-tab'
 import { KitchenOperationsTab } from './components/kitchen-operations-tab'
@@ -53,9 +53,7 @@ function getPresetDates(preset: 'today' | '7days' | '30days' | 'month') {
     return { from: start.toISOString(), to }
   }
   // month
-  const start = new Date(
-    getTodayDateString().slice(0, 7) + '-01T00:00:00+07:00',
-  )
+  const start = new Date(getTodayDateString().slice(0, 7) + '-01T00:00:00+07:00')
   return { from: start.toISOString(), to }
 }
 
@@ -74,9 +72,7 @@ export default function ReportsPage() {
   const canClose = permissions.includes('/reports_close')
 
   // Date filters
-  const [preset, setPreset] = useState<'today' | '7days' | '30days' | 'month'>(
-    'today',
-  )
+  const [preset, setPreset] = useState<'today' | '7days' | '30days' | 'month'>('today')
   const [dateRange, setDateRange] = useState(() => getPresetDates('today'))
   const [granularity, setGranularity] = useState<'day' | 'hour'>('day')
   const [activeTab, setActiveTab] = useState<
@@ -86,8 +82,7 @@ export default function ReportsPage() {
   const [exportError, setExportError] = useState<string | null>(null)
 
   // Daily close date picker (defaults to yesterday or today)
-  const [selectedCloseDate, setSelectedCloseDate] =
-    useState<string>(getTodayDateString)
+  const [selectedCloseDate, setSelectedCloseDate] = useState<string>(getTodayDateString)
   const [confirmCloseModalOpen, setConfirmCloseModalOpen] = useState(false)
 
   function handleSelectPreset(p: 'today' | '7days' | '30days' | 'month') {
@@ -119,13 +114,7 @@ export default function ReportsPage() {
   })
 
   const kitchenSlaQuery = useQuery({
-    queryKey: [
-      'private',
-      employee.id,
-      'kitchen-sla-report',
-      dateRange.from,
-      dateRange.to,
-    ],
+    queryKey: ['private', employee.id, 'kitchen-sla-report', dateRange.from, dateRange.to],
     queryFn: ({ signal }) =>
       getKitchenSlaReport(
         {
@@ -138,13 +127,7 @@ export default function ReportsPage() {
   })
 
   const kitchenBottlenecksQuery = useQuery({
-    queryKey: [
-      'private',
-      employee.id,
-      'kitchen-bottlenecks-report',
-      dateRange.from,
-      dateRange.to,
-    ],
+    queryKey: ['private', employee.id, 'kitchen-bottlenecks-report', dateRange.from, dateRange.to],
     queryFn: ({ signal }) =>
       getKitchenBottlenecks(
         {
@@ -155,8 +138,7 @@ export default function ReportsPage() {
       ),
     enabled:
       activeTab === 'kitchen' &&
-      new Date(dateRange.to).getTime() - new Date(dateRange.from).getTime() <=
-        7 * 86400000,
+      new Date(dateRange.to).getTime() - new Date(dateRange.from).getTime() <= 7 * 86400000,
   })
 
   const dailyCloseQuery = useQuery({
@@ -179,12 +161,7 @@ export default function ReportsPage() {
     onSuccess: () => {
       setConfirmCloseModalOpen(false)
       void queryClient.invalidateQueries({
-        queryKey: [
-          'private',
-          employee.id,
-          'daily-sales-close',
-          selectedCloseDate,
-        ],
+        queryKey: ['private', employee.id, 'daily-sales-close', selectedCloseDate],
       })
     },
   })
@@ -216,128 +193,118 @@ export default function ReportsPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="admin-page space-y-5">
       {/* Top Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <p className="text-xs font-bold uppercase tracking-wider text-primary">
-            BÁO CÁO & THỐNG KÊ
-          </p>
-          <h1 className="flex items-center gap-2.5 text-2xl font-bold tracking-tight text-foreground">
-            <BarChart3 className="h-7 w-7 text-primary" /> Báo cáo Doanh thu &
-            Vận hành
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Theo dõi dòng tiền, lợi nhuận gộp, hiệu suất quầy pha chế và chốt sổ
-            doanh thu ngày.
-          </p>
-        </div>
+      <OperationsHeader
+        title="Báo cáo Doanh thu & Vận hành"
+        meta="Doanh thu · Giá vốn · Kiểm soát tiền mặt"
+        actions={
+          <>
+            {/* Quick preset buttons */}
+            <div className="flex items-center rounded-lg border border-border bg-card p-1 text-xs">
+              <button
+                type="button"
+                aria-pressed={preset === 'today'}
+                onClick={() => handleSelectPreset('today')}
+                className={cn(
+                  'min-h-10 rounded-md px-2.5 py-1 font-medium transition-colors',
+                  preset === 'today'
+                    ? 'bg-primary text-primary-foreground shadow-xs'
+                    : 'text-muted-foreground hover:text-foreground',
+                )}
+              >
+                Hôm nay
+              </button>
+              <button
+                type="button"
+                aria-pressed={preset === '7days'}
+                onClick={() => handleSelectPreset('7days')}
+                className={cn(
+                  'min-h-10 rounded-md px-2.5 py-1 font-medium transition-colors',
+                  preset === '7days'
+                    ? 'bg-primary text-primary-foreground shadow-xs'
+                    : 'text-muted-foreground hover:text-foreground',
+                )}
+              >
+                7 ngày qua
+              </button>
+              <button
+                type="button"
+                aria-pressed={preset === '30days'}
+                onClick={() => handleSelectPreset('30days')}
+                className={cn(
+                  'min-h-10 rounded-md px-2.5 py-1 font-medium transition-colors',
+                  preset === '30days'
+                    ? 'bg-primary text-primary-foreground shadow-xs'
+                    : 'text-muted-foreground hover:text-foreground',
+                )}
+              >
+                30 ngày qua
+              </button>
+              <button
+                type="button"
+                aria-pressed={preset === 'month'}
+                onClick={() => handleSelectPreset('month')}
+                className={cn(
+                  'min-h-10 rounded-md px-2.5 py-1 font-medium transition-colors',
+                  preset === 'month'
+                    ? 'bg-primary text-primary-foreground shadow-xs'
+                    : 'text-muted-foreground hover:text-foreground',
+                )}
+              >
+                Tháng này
+              </button>
+            </div>
 
-        <div className="flex flex-wrap items-center gap-2.5">
-          {/* Quick preset buttons */}
-          <div className="flex items-center rounded-lg border border-border bg-card p-1 text-xs">
-            <button
-              type="button"
-              onClick={() => handleSelectPreset('today')}
-              className={cn(
-                'rounded-md px-2.5 py-1 font-medium transition-colors',
-                preset === 'today'
-                  ? 'bg-primary text-primary-foreground shadow-xs'
-                  : 'text-muted-foreground hover:text-foreground',
-              )}
-            >
-              Hôm nay
-            </button>
-            <button
-              type="button"
-              onClick={() => handleSelectPreset('7days')}
-              className={cn(
-                'rounded-md px-2.5 py-1 font-medium transition-colors',
-                preset === '7days'
-                  ? 'bg-primary text-primary-foreground shadow-xs'
-                  : 'text-muted-foreground hover:text-foreground',
-              )}
-            >
-              7 ngày qua
-            </button>
-            <button
-              type="button"
-              onClick={() => handleSelectPreset('30days')}
-              className={cn(
-                'rounded-md px-2.5 py-1 font-medium transition-colors',
-                preset === '30days'
-                  ? 'bg-primary text-primary-foreground shadow-xs'
-                  : 'text-muted-foreground hover:text-foreground',
-              )}
-            >
-              30 ngày qua
-            </button>
-            <button
-              type="button"
-              onClick={() => handleSelectPreset('month')}
-              className={cn(
-                'rounded-md px-2.5 py-1 font-medium transition-colors',
-                preset === 'month'
-                  ? 'bg-primary text-primary-foreground shadow-xs'
-                  : 'text-muted-foreground hover:text-foreground',
-              )}
-            >
-              Tháng này
-            </button>
-          </div>
-
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              void dashboardQuery.refetch()
-              void kitchenSlaQuery.refetch()
-              void kitchenBottlenecksQuery.refetch()
-            }}
-            disabled={dashboardQuery.isFetching}
-            className="gap-1.5"
-            title="Làm mới dữ liệu"
-          >
-            <RefreshCw
-              className={cn(
-                'h-4 w-4',
-                dashboardQuery.isFetching && 'animate-spin',
-              )}
-            />
-            <span className="hidden sm:inline">Làm mới</span>
-          </Button>
-
-          {canExport && (
             <Button
+              variant="outline"
               size="sm"
-              onClick={() => void handleExportExcel()}
-              disabled={isExporting}
-              className="gap-1.5"
-              title="Xuất bảng tính Excel đa trang"
+              onClick={() => {
+                void dashboardQuery.refetch()
+                void kitchenSlaQuery.refetch()
+                void kitchenBottlenecksQuery.refetch()
+              }}
+              disabled={dashboardQuery.isFetching}
+              className="min-h-10 gap-1.5"
+              title="Làm mới dữ liệu"
+              aria-label="Làm mới dữ liệu"
             >
-              {isExporting ? (
-                <RefreshCw className="h-4 w-4 animate-spin" />
-              ) : (
-                <FileSpreadsheet className="h-4 w-4" />
-              )}
-              {isExporting ? 'Đang xuất...' : 'Xuất Excel'}
+              <RefreshCw className={cn('h-4 w-4', dashboardQuery.isFetching && 'animate-spin')} />
+              <span className="hidden sm:inline">Làm mới</span>
             </Button>
-          )}
-        </div>
-      </div>
+
+            {canExport && (
+              <Button
+                size="sm"
+                onClick={() => void handleExportExcel()}
+                disabled={isExporting}
+                className="min-h-10 gap-1.5"
+                title="Xuất bảng tính Excel đa trang"
+              >
+                {isExporting ? (
+                  <RefreshCw className="h-4 w-4 animate-spin" />
+                ) : (
+                  <FileSpreadsheet className="h-4 w-4" />
+                )}
+                {isExporting ? 'Đang xuất...' : 'Xuất Excel'}
+              </Button>
+            )}
+          </>
+        }
+      />
 
       {exportError && (
-        <div className="rounded-lg border border-destructive/20 bg-destructive/5 p-3 text-xs text-destructive">
+        <div
+          role="alert"
+          className="rounded-lg border border-destructive/20 bg-destructive/5 p-3 text-xs text-destructive"
+        >
           {exportError}
         </div>
       )}
 
       {/* Tabs */}
-      <Tabs
-        value={activeTab}
-        onValueChange={(val) => setActiveTab(val as typeof activeTab)}
-      >
-        <TabsList className="mb-4">
+      <Tabs value={activeTab} onValueChange={(val) => setActiveTab(val as typeof activeTab)}>
+        <TabsList className="admin-tabs mb-4">
           <TabsTrigger value="overview" className="gap-2">
             <TrendingUp className="h-4 w-4" />
             Tổng quan tài chính
@@ -403,9 +370,7 @@ export default function ReportsPage() {
             bottleneckSlots={kitchenBottlenecksQuery.data?.slots}
             isBottlenecksPending={kitchenBottlenecksQuery.isPending}
             bottlenecksError={
-              new Date(dateRange.to).getTime() -
-                new Date(dateRange.from).getTime() >
-              7 * 86400000
+              new Date(dateRange.to).getTime() - new Date(dateRange.from).getTime() > 7 * 86400000
                 ? new ApiError(
                     400,
                     undefined,

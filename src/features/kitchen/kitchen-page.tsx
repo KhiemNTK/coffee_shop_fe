@@ -1,8 +1,9 @@
 import { startTransition, useEffect, useOptimistic, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useOutletContext, useSearchParams } from 'react-router-dom'
 import { z } from 'zod'
-import { AlertCircle, ChefHat, Radio, RefreshCw, Volume2, VolumeX } from 'lucide-react'
+import { AlertCircle, Radio, RefreshCw, Settings2, Volume2, VolumeX } from 'lucide-react'
 import { errorMessage } from '../../shared/api/client'
 import { type Session } from '../auth/session'
 import {
@@ -16,14 +17,15 @@ import {
 import { useKitchenSse } from './use-kitchen-sse'
 import { Button } from '../../shared/ui/button'
 import { Badge } from '../../shared/ui/badge'
-import { cn } from '../../shared/ui/utils'
 import { KitchenWorkloadKpis } from './components/kitchen-workload-kpis'
 import { KitchenStationsBar } from './components/kitchen-stations-bar'
 import { KitchenTicketsGrid } from './components/kitchen-tickets-grid'
 import { Pagination } from '../../shared/ui/pagination'
 import { KitchenStationsManagement } from './components/kitchen-stations-management'
+import { OperationsHeader } from '../../shared/ui'
 
 export default function KitchenPage() {
+  const { t: translate } = useTranslation()
   const { authorization, employee } = useOutletContext<Session>()
   const queryClient = useQueryClient()
   const canReadTickets = authorization.permissionKeys.includes('/kitchen-tickets_read')
@@ -64,15 +66,18 @@ export default function KitchenPage() {
   }, [])
 
   const [soundEnabled, setSoundEnabled] = useState(() => {
-    if (typeof window === 'undefined') return true
-    return localStorage.getItem('coffee_kds_sound') !== 'false'
+    try {
+      return localStorage.getItem('coffee_kds_sound') !== 'false'
+    } catch {
+      return false
+    }
   })
 
   // Real-time SSE connection
   const { status: sseStatus, lastRefreshedAt } = useKitchenSse(
     employee.id,
     canReadTickets && !management,
-    { soundEnabled }
+    { soundEnabled },
   )
 
   // Queries
@@ -158,77 +163,74 @@ export default function KitchenPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header & Trạng thái SSE thời gian thực */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <p className="text-xs font-bold uppercase tracking-wider text-primary">
-            KHU VỰC BẾP & PHA CHẾ
-          </p>
-          <h1 className="flex items-center gap-2.5 text-2xl font-bold tracking-tight text-foreground">
-            <ChefHat className="h-7 w-7 text-primary" /> Điều phối bếp & pha chế (KDS)
-          </h1>
-        </div>
-
-        {/* SSE Indicator */}
-        <div className="flex items-center gap-2.5">
-          <Badge
-            variant={sseStatus === 'connected' ? 'success' : 'warning'}
-            className="gap-1.5 px-3 py-1 text-xs font-semibold"
-          >
-            <Radio className={cn('h-3.5 w-3.5', sseStatus === 'connected' && 'animate-pulse')} />
-            {!canReadTickets
-              ? 'Không có quyền xem vé bếp'
-              : sseStatus === 'connected'
-                ? 'Realtime Live'
-                : 'Đang kết nối lại'}
-          </Badge>
-
-          {lastRefreshedAt && (
-            <span className="text-xs text-muted-foreground hidden md:inline">
-              Cập nhật: {lastRefreshedAt}
-            </span>
-          )}
-
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            onClick={() => {
-              setSoundEnabled((prev) => {
-                const next = !prev
-                localStorage.setItem('coffee_kds_sound', String(next))
-                return next
-              })
-            }}
-            title={soundEnabled ? 'Tắt âm báo vé mới' : 'Bật âm báo vé mới'}
-            aria-label={soundEnabled ? 'Tắt âm báo vé mới' : 'Bật âm báo vé mới'}
-            className={cn(
-              'h-8 w-8 cursor-pointer',
-              !soundEnabled && 'text-muted-foreground opacity-60'
+      <OperationsHeader
+        title={translate('ops.kitchen.title')}
+        meta={
+          lastRefreshedAt ? translate('ops.kitchen.updated', { time: lastRefreshedAt }) : undefined
+        }
+        actions={
+          <>
+            <Badge
+              variant={sseStatus === 'connected' ? 'success' : 'warning'}
+              className="rounded-md"
+            >
+              <Radio size={13} aria-hidden="true" />
+              {!canReadTickets
+                ? 'Không có quyền xem vé bếp'
+                : translate(
+                    sseStatus === 'connected' ? 'ops.kitchen.live' : 'ops.kitchen.reconnecting',
+                  )}
+            </Badge>
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              className="h-11 w-11"
+              aria-pressed={soundEnabled}
+              title={translate(soundEnabled ? 'ops.kitchen.soundOff' : 'ops.kitchen.soundOn')}
+              aria-label={translate(soundEnabled ? 'ops.kitchen.soundOff' : 'ops.kitchen.soundOn')}
+              onClick={() => {
+                const next = !soundEnabled
+                setSoundEnabled(next)
+                try {
+                  localStorage.setItem('coffee_kds_sound', String(next))
+                } catch {
+                  /* Sound still works in this tab. */
+                }
+              }}
+            >
+              {soundEnabled ? (
+                <Volume2 size={18} aria-hidden="true" />
+              ) : (
+                <VolumeX size={18} aria-hidden="true" />
+              )}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              className="h-11 w-11"
+              title={translate('ops.kitchen.refresh')}
+              aria-label={translate('ops.kitchen.refresh')}
+              onClick={() =>
+                void queryClient.invalidateQueries({ queryKey: kitchenKeys.all(employee.id) })
+              }
+            >
+              <RefreshCw size={18} aria-hidden="true" />
+            </Button>
+            {canReadStations && (
+              <Button
+                variant="outline"
+                className="min-h-11"
+                onClick={() => setManagement(!management)}
+              >
+                <Settings2 size={16} aria-hidden="true" />
+                {translate(management ? 'ops.kitchen.back' : 'ops.kitchen.stationSettings')}
+              </Button>
             )}
-          >
-            {soundEnabled ? (
-              <Volume2 className="h-4 w-4 text-primary" />
-            ) : (
-              <VolumeX className="h-4 w-4" />
-            )}
-          </Button>
-
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            onClick={() => {
-              void queryClient.invalidateQueries({ queryKey: kitchenKeys.all(employee.id) })
-            }}
-            title="Làm mới thủ công"
-            aria-label="Làm mới màn hình bếp"
-            className="h-8 w-8 cursor-pointer"
-          >
-            <RefreshCw className="h-4 w-4" />
-          </Button>
-        </div>
-      </div>
+          </>
+        }
+      />
 
       {actionError && (
         <div
@@ -257,11 +259,6 @@ export default function KitchenPage() {
         </div>
       )}
 
-      {canReadStations && (
-        <Button variant="outline" onClick={() => setManagement(!management)}>
-          {management ? 'Về màn hình bếp' : 'Trạm bếp & SLA'}
-        </Button>
-      )}
       {management ? (
         <KitchenStationsManagement />
       ) : (
@@ -309,6 +306,9 @@ export default function KitchenPage() {
               error={ticketsQuery.error}
               onRetry={() => void ticketsQuery.refetch()}
               nowMs={nowMs}
+              dueSoonWindowSeconds={
+                workloadQuery.isSuccess ? workloadQuery.data.dueSoonWindowSeconds : undefined
+              }
               onAdvanceItemStatus={advanceItemStatus}
               isUpdatingStatus={
                 !canUpdateStatus ||

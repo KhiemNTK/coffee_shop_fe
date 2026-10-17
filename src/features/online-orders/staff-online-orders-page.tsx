@@ -3,7 +3,7 @@ import { startTransition, useEffect, useOptimistic, useRef, useState } from 'rea
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useOutletContext, useSearchParams } from 'react-router-dom'
 import { z } from 'zod'
-import { AlertCircle, CheckCircle2, RefreshCw } from 'lucide-react'
+import { AlertCircle, CheckCircle2, Clock, Package, RefreshCw, Utensils } from 'lucide-react'
 import type { Session } from '../auth/session'
 import {
   getPendingOnlineOrders,
@@ -17,7 +17,7 @@ import {
 } from './online-orders.api'
 import { kitchenKeys } from '../kitchen/kitchen.api'
 import { errorMessage } from '../../shared/api/client'
-import { Button, Tabs, TabsList, TabsTrigger } from '../../shared/ui'
+import { Button, OperationsHeader, OperationsSummary, Tabs, TabsList, TabsTrigger } from '../../shared/ui'
 import { Pagination } from '../../shared/ui/pagination'
 import { StaffPendingOrdersTab } from './components/staff-pending-orders-tab'
 import { PickupCollectionPanel } from './components/pickup-panels'
@@ -159,19 +159,18 @@ export default function StaffOnlineOrdersPage() {
   }
   return (
     <div className="space-y-5">
-      {permissions.includes('/orders_items_handoff') && <PickupCollectionPanel />}
-      <header className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-semibold">{translate('takeaway.staffHeading')}</h1>
+      <OperationsHeader title={translate('takeaway.staffHeading')} actions={
         <Button
           variant="outline"
-          size="sm"
+          className="min-h-11"
           disabled={current.isFetching || mutation.isPending}
           onClick={() => void refresh()}
         >
           <RefreshCw size={16} aria-hidden="true" />
           {translate('common.refresh')}
         </Button>
-      </header>
+      } />
+      {permissions.includes('/orders_items_handoff') && <PickupCollectionPanel />}
       {notice && (
         <p role="status" className="flex items-center gap-2 text-sm text-emerald-700">
           <CheckCircle2 size={18} aria-hidden="true" />
@@ -207,14 +206,17 @@ export default function StaffOnlineOrdersPage() {
           <TabsTrigger value="fulfillment">{translate('takeaway.fulfillmentTab')}</TabsTrigger>
         </TabsList>
       </Tabs>
+      {activeTab === 'pending' && pending.isSuccess && <OperationsSummary label={translate('takeaway.pending')} metrics={[
+        { label: translate('ops.queue.count'), value: pending.data.totalItems, icon: Package },
+        { label: translate('ops.queue.expiringCount'), value: pending.data.list.filter(order => {
+          const remaining = Date.parse(order.expiresAt) - nowMs
+          return remaining > 0 && remaining <= 5 * 60_000
+        }).length, icon: AlertCircle, tone: 'warning', note: translate('ops.queue.pageScope') },
+        { label: translate('ops.queue.scheduledCount'), value: pending.data.list.filter(order => order.pickupAt).length, icon: Clock, note: translate('ops.queue.pageScope') },
+        { label: translate('ops.queue.linesCount'), value: pending.data.list.reduce((count, order) => count + order.items.length, 0), icon: Utensils, note: translate('ops.queue.pageScope') },
+      ]} />}
       {activeTab === 'pending' ? (
         <>
-          {pending.isSuccess && (
-            <p className="text-sm text-muted-foreground">
-              {translate('common.totalShort')} {pending.data.totalItems}{' '}
-              {translate('takeaway.pendingOrders')}
-            </p>
-          )}
           <StaffPendingOrdersTab
             orders={pending.data?.list ?? []}
             isLoading={pending.isPending}

@@ -2,10 +2,7 @@ import { useState } from 'react'
 import { Pagination } from '../../shared/ui/pagination'
 import { useOutletContext } from 'react-router-dom'
 import type { Session } from '../auth/session'
-import {
-  InventoryBulkTab,
-  InventoryWasteTab,
-} from './components/inventory-operations'
+import { InventoryBulkTab, InventoryWasteTab } from './components/inventory-operations'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { ProcurementTab } from './components/procurement-tab'
 import { InventoryTaxonomy } from './components/inventory-taxonomy'
@@ -20,7 +17,7 @@ import {
   type InventoryItem,
   type ReorderAlertRow,
 } from './inventory.api'
-import { Badge, Button, cn } from '../../shared/ui'
+import { Badge, Button, OperationsHeader, cn } from '../../shared/ui'
 import { InventoryKpis } from './components/inventory-kpis'
 import { InventoryItemsTab } from './components/inventory-items-tab'
 import { InventoryAlertsTab } from './components/inventory-alerts-tab'
@@ -37,15 +34,14 @@ export default function InventoryPage() {
   const queryClient = useQueryClient()
   const { employee, authorization } = useOutletContext<Session>()
 
+  const canCreate = authorization.permissionKeys.includes('/inventory_create')
+  const canUpdate = authorization.permissionKeys.includes('/inventory_update')
+  const canDelete = authorization.permissionKeys.includes('/inventory_delete')
+  const canAdjust = authorization.permissionKeys.includes('/inventory_stock_adjust')
+
   // Tab: 'items' | 'alerts' | 'transactions'
   const [activeTab, setActiveTab] = useState<
-    | 'items'
-    | 'alerts'
-    | 'transactions'
-    | 'procurement'
-    | 'waste'
-    | 'bulk'
-    | 'taxonomy'
+    'items' | 'alerts' | 'transactions' | 'procurement' | 'waste' | 'bulk' | 'taxonomy'
   >('items')
 
   // Search & Filter state
@@ -59,9 +55,7 @@ export default function InventoryPage() {
 
   // Dialog states
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
-  const [importItem, setImportItem] = useState<
-    InventoryItem | ReorderAlertRow | null
-  >(null)
+  const [importItem, setImportItem] = useState<InventoryItem | ReorderAlertRow | null>(null)
   const [exportItem, setExportItem] = useState<InventoryItem | null>(null)
   const [editItem, setEditItem] = useState<InventoryItem | null>(null)
   const [deleteItem, setDeleteItem] = useState<InventoryItem | null>(null)
@@ -110,7 +104,10 @@ export default function InventoryPage() {
   const transactionsQuery = useQuery({
     queryKey: ['inventory-transactions', employee.id, transactionPage, transactionType],
     queryFn: ({ signal }) =>
-      getInventoryTransactions({ page: transactionPage, itemPerPage: 20, type: transactionType }, signal),
+      getInventoryTransactions(
+        { page: transactionPage, itemPerPage: 20, type: transactionType },
+        signal,
+      ),
     enabled: activeTab === 'transactions',
   })
 
@@ -126,72 +123,64 @@ export default function InventoryPage() {
     },
   })
 
-  const alertCount = alertsQuery.data?.totalItems ?? 0
+  const alertCount = alertsQuery.isSuccess ? alertsQuery.data.totalItems : undefined
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-3">
-          <div className="h-10 w-10 rounded-xl bg-brand-800 text-white flex items-center justify-center shadow-xs">
-            <Boxes className="h-5 w-5" />
-          </div>
-          <div>
-            <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground">
-              Quản lý Kho & Nguyên vật liệu
-            </h1>
-            <p className="text-xs sm:text-sm text-muted-foreground">
-              Theo dõi tồn kho, định mức an toàn, nhập xuất nguyên liệu pha chế
-              và cảnh báo thiếu hàng
-            </p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              void itemsQuery.refetch()
-              void alertsQuery.refetch()
-              if (activeTab === 'transactions') void transactionsQuery.refetch()
-            }}
-            disabled={itemsQuery.isFetching}
-            className="gap-1.5 text-xs font-semibold"
-          >
-            <RefreshCw
-              className={cn(
-                'h-3.5 w-3.5',
-                itemsQuery.isFetching && 'animate-spin',
-              )}
-            />
-            Làm mới
-          </Button>
-
-          <Button
-            type="button"
-            size="sm"
-            onClick={() => setCreateDialogOpen(true)}
-            className="gap-1.5 font-semibold text-xs"
-          >
-            <Plus className="h-4 w-4" />
-            Thêm nguyên liệu
-          </Button>
-        </div>
-      </div>
-
+    <div className="admin-page space-y-5">
+      <OperationsHeader
+        title="Quản lý Kho & Nguyên vật liệu"
+        meta="Tồn kho · Định mức · Nhập xuất nguyên liệu"
+        actions={
+          <>
+            <Button
+              type="button"
+              variant="outline"
+              className="min-h-10"
+              onClick={() => {
+                void itemsQuery.refetch()
+                void alertsQuery.refetch()
+                if (activeTab === 'transactions') void transactionsQuery.refetch()
+              }}
+              disabled={itemsQuery.isFetching}
+            >
+              <RefreshCw size={16} aria-hidden="true" />
+              Làm mới
+            </Button>
+            {canCreate && (
+              <Button type="button" className="min-h-10" onClick={() => setCreateDialogOpen(true)}>
+                <Plus size={16} aria-hidden="true" />
+                Thêm nguyên liệu
+              </Button>
+            )}
+          </>
+        }
+      />
       {/* Overview Stats Cards */}
       <InventoryKpis
-        totalItems={itemsQuery.data?.totalItems ?? 0}
+        totalItems={itemsQuery.isSuccess ? itemsQuery.data.totalItems : undefined}
         alertCount={alertCount}
-        categoriesCount={categoriesQuery.data?.length ?? 0}
+        categoriesCount={categoriesQuery.isSuccess ? categoriesQuery.data.length : undefined}
       />
+      {(categoriesQuery.isError || unitsQuery.isError) && (
+        <div role="alert" className="flex flex-wrap items-center gap-3 text-sm text-destructive">
+          Không tải được nhóm nguyên liệu hoặc đơn vị.
+          <Button
+            variant="outline"
+            onClick={() => {
+              void categoriesQuery.refetch()
+              void unitsQuery.refetch()
+            }}
+          >
+            Tải lại bộ lọc
+          </Button>
+        </div>
+      )}
 
       {/* Tabs Control */}
-      <div className="flex overflow-x-auto whitespace-nowrap flex-nowrap border-b border-border gap-2 pb-px scrollbar-none">
+      <div className="admin-tabs">
         <Button
           variant={activeTab === 'waste' ? 'default' : 'outline'}
+          aria-pressed={activeTab === 'waste'}
           onClick={() => setActiveTab('waste')}
         >
           Hao hụt
@@ -199,6 +188,7 @@ export default function InventoryPage() {
         {authorization.permissionKeys.includes('/inventory_stock_adjust') && (
           <Button
             variant={activeTab === 'bulk' ? 'default' : 'outline'}
+            aria-pressed={activeTab === 'bulk'}
             onClick={() => setActiveTab('bulk')}
           >
             Nhập / Xuất nhiều nguyên liệu
@@ -206,12 +196,14 @@ export default function InventoryPage() {
         )}
         <Button
           variant={activeTab === 'procurement' ? 'default' : 'outline'}
+          aria-pressed={activeTab === 'procurement'}
           onClick={() => setActiveTab('procurement')}
         >
           Mua hàng & Kiểm kê
         </Button>
         <button
           type="button"
+          aria-pressed={activeTab === 'items'}
           onClick={() => setActiveTab('items')}
           className={cn(
             'px-4 py-2.5 text-sm font-semibold border-b-2 transition-colors flex items-center gap-2',
@@ -226,6 +218,7 @@ export default function InventoryPage() {
 
         <button
           type="button"
+          aria-pressed={activeTab === 'alerts'}
           onClick={() => setActiveTab('alerts')}
           className={cn(
             'px-4 py-2.5 text-sm font-semibold border-b-2 transition-colors flex items-center gap-2',
@@ -236,7 +229,7 @@ export default function InventoryPage() {
         >
           <AlertTriangle className="h-4 w-4 text-amber-600" />
           Cảnh báo cần nhập hàng
-          {alertCount > 0 && (
+          {alertCount !== undefined && alertCount > 0 && (
             <Badge variant="destructive" className="h-5 px-1.5 text-[10px]">
               {alertCount}
             </Badge>
@@ -245,6 +238,7 @@ export default function InventoryPage() {
 
         <button
           type="button"
+          aria-pressed={activeTab === 'transactions'}
           onClick={() => setActiveTab('transactions')}
           className={cn(
             'px-4 py-2.5 text-sm font-semibold border-b-2 transition-colors flex items-center gap-2',
@@ -260,9 +254,7 @@ export default function InventoryPage() {
 
       <Button
         variant="outline"
-        onClick={() =>
-          setActiveTab(activeTab === 'taxonomy' ? 'items' : 'taxonomy')
-        }
+        onClick={() => setActiveTab(activeTab === 'taxonomy' ? 'items' : 'taxonomy')}
       >
         Nhóm nguyên liệu & đơn vị
       </Button>
@@ -274,6 +266,9 @@ export default function InventoryPage() {
       {/* TAB 1: ITEMS INVENTORY */}
       {activeTab === 'items' && (
         <InventoryItemsTab
+          canAdjust={canAdjust}
+          canUpdate={canUpdate}
+          canDelete={canDelete}
           keyword={keyword}
           setKeyword={setKeyword}
           selectedCategoryId={selectedCategoryId}
@@ -300,40 +295,66 @@ export default function InventoryPage() {
       )}
 
       {/* TAB 2: REORDER ALERTS */}
-      {activeTab === 'alerts' && (
-        <InventoryAlertsTab
-          data={alertsQuery.data}
-          isLoading={alertsQuery.isLoading}
-          onImport={(alert) => setImportItem(alert)}
-        />
-      )}
+      {activeTab === 'alerts' &&
+        (alertsQuery.isError ? (
+          <div role="alert" className="space-y-3 border-l-4 border-destructive p-4">
+            <p>Không tải được cảnh báo tồn kho.</p>
+            <Button variant="outline" onClick={() => void alertsQuery.refetch()}>
+              Thử lại
+            </Button>
+          </div>
+        ) : (
+          <InventoryAlertsTab
+            canAdjust={canAdjust}
+            data={alertsQuery.data}
+            isLoading={alertsQuery.isLoading}
+            onImport={(alert) => setImportItem(alert)}
+          />
+        ))}
 
       {/* TAB 3: TRANSACTIONS HISTORY */}
       {activeTab === 'transactions' && (
         <section aria-label="Lịch sử xuất nhập" className="space-y-3">
-          <label className="block text-sm">Loại biến động
-            <select className="ml-3 rounded-md border border-border p-2" value={transactionType} onChange={event => {
-              setTransactionType(event.target.value as 'IMPORT' | 'EXPORT' | ''); setTransactionPage(1)
-            }}>
-              <option value="">Tất cả</option><option value="IMPORT">Nhập kho</option><option value="EXPORT">Xuất kho</option>
+          <label className="block text-sm">
+            Loại biến động
+            <select
+              className="ml-3 rounded-md border border-border p-2"
+              value={transactionType}
+              onChange={(event) => {
+                setTransactionType(event.target.value as 'IMPORT' | 'EXPORT' | '')
+                setTransactionPage(1)
+              }}
+            >
+              <option value="">Tất cả</option>
+              <option value="IMPORT">Nhập kho</option>
+              <option value="EXPORT">Xuất kho</option>
             </select>
           </label>
           <InventoryTransactionsTab
-          data={transactionsQuery.data}
-          isLoading={transactionsQuery.isLoading}
-          error={transactionsQuery.error}
-          onRetry={() => void transactionsQuery.refetch()}
-          isFetching={transactionsQuery.isFetching}
+            data={transactionsQuery.data}
+            isLoading={transactionsQuery.isLoading}
+            error={transactionsQuery.error}
+            onRetry={() => void transactionsQuery.refetch()}
+            isFetching={transactionsQuery.isFetching}
           />
-          {!transactionsQuery.isError && transactionsQuery.data && <>
-            <p className="text-sm text-muted-foreground">{transactionsQuery.data.totalItems} giao dịch</p>
-            <Pagination page={transactionPage} totalPages={transactionsQuery.data.totalPages} onPage={setTransactionPage} disabled={transactionsQuery.isFetching} />
-          </>}
+          {!transactionsQuery.isError && transactionsQuery.data && (
+            <>
+              <p className="text-sm text-muted-foreground">
+                {transactionsQuery.data.totalItems} giao dịch
+              </p>
+              <Pagination
+                page={transactionPage}
+                totalPages={transactionsQuery.data.totalPages}
+                onPage={setTransactionPage}
+                disabled={transactionsQuery.isFetching}
+              />
+            </>
+          )}
         </section>
       )}
 
       {/* IMPORT MODAL */}
-      {importItem && (
+      {canAdjust && importItem && (
         <ImportDialog
           item={importItem}
           onClose={() => setImportItem(null)}
@@ -353,7 +374,7 @@ export default function InventoryPage() {
       )}
 
       {/* EXPORT MODAL */}
-      {exportItem && (
+      {canAdjust && exportItem && (
         <ExportDialog
           item={exportItem}
           onClose={() => setExportItem(null)}
@@ -373,7 +394,7 @@ export default function InventoryPage() {
       )}
 
       {/* CREATE ITEM MODAL */}
-      {createDialogOpen && (
+      {canCreate && createDialogOpen && (
         <CreateItemDialog
           onClose={() => setCreateDialogOpen(false)}
           categories={categoriesQuery.data ?? []}
@@ -391,7 +412,7 @@ export default function InventoryPage() {
       )}
 
       {/* EDIT ITEM MODAL */}
-      {editItem && (
+      {canUpdate && editItem && (
         <EditItemDialog
           item={editItem}
           categories={categoriesQuery.data ?? []}
@@ -410,7 +431,7 @@ export default function InventoryPage() {
       )}
 
       {/* DELETE CONFIRM DIALOG */}
-      {deleteItem && (
+      {canDelete && deleteItem && (
         <DeleteInventoryItemDialog
           item={deleteItem}
           isPending={deleteMutation.isPending}

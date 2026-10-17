@@ -2,16 +2,7 @@ import { useState, useMemo, useDeferredValue } from 'react'
 import { useOutletContext } from 'react-router-dom'
 import type { Session } from '../../auth/session'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import {
-  Users,
-  Search,
-  RefreshCw,
-  Edit2,
-  Trash2,
-  Mail,
-  Phone,
-  ShieldCheck,
-} from 'lucide-react'
+import { Users, Search, Edit2, Trash2, Mail, Phone, ShieldCheck } from 'lucide-react'
 import {
   getEmployees,
   createEmployee,
@@ -27,13 +18,7 @@ import {
 } from '@/features/employees/employees.api'
 import { errorMessage } from '@/shared/api/client'
 import { Pagination } from '@/shared/ui/pagination'
-import {
-  Button,
-  Badge,
-  Card,
-  CardContent,
-  Input,
-} from '@/shared/ui'
+import { Button, Badge, AdminTable, Input } from '@/shared/ui'
 import { CreateEmployeeModal } from './modals/create-employee-modal'
 import { EditEmployeeModal } from './modals/edit-employee-modal'
 import { AssignRolesModal } from './modals/assign-roles-modal'
@@ -70,72 +55,51 @@ export function EmployeesListTab({
   const [searchQuery, setSearchQuery] = useState('')
   const [page, setPage] = useState(1)
   const deferredSearchQuery = useDeferredValue(searchQuery)
-  const [statusFilter, setStatusFilter] = useState<
-    'ALL' | 'ACTIVE' | 'INACTIVE'
-  >('ALL')
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'INACTIVE'>('ALL')
   const [positionFilter, setPositionFilter] = useState<string>('ALL')
 
   // Modals state: Employee Create
-  const [createEmployeeData, setCreateEmployeeData] =
-    useState<CreateEmployeeInput>({
-      fullName: '',
-      email: '',
-      username: '',
-      password: '',
-      phoneNumber: '',
-      address: '',
-      positionId: '',
-      isActive: true,
-    })
-  const [createEmployeeError, setCreateEmployeeError] = useState<string | null>(
-    null,
-  )
+  const [createEmployeeData, setCreateEmployeeData] = useState<CreateEmployeeInput>({
+    fullName: '',
+    email: '',
+    username: '',
+    password: '',
+    phoneNumber: '',
+    address: '',
+    positionId: '',
+    isActive: true,
+  })
+  const [createEmployeeError, setCreateEmployeeError] = useState<string | null>(null)
 
   // Modals state: Employee Edit
-  const [editingEmployee, setEditingEmployee] =
-    useState<EmployeeListItem | null>(null)
-  const [editEmployeeData, setEditEmployeeData] = useState<UpdateEmployeeInput>(
-    {
-      fullName: '',
-      phoneNumber: '',
-      address: '',
-      positionId: '',
-      isActive: true,
-    },
-  )
-  const [editEmployeeError, setEditEmployeeError] = useState<string | null>(
-    null,
-  )
+  const [editingEmployee, setEditingEmployee] = useState<EmployeeListItem | null>(null)
+  const [editEmployeeData, setEditEmployeeData] = useState<UpdateEmployeeInput>({
+    fullName: '',
+    phoneNumber: '',
+    address: '',
+    positionId: '',
+    isActive: true,
+  })
+  const [editEmployeeError, setEditEmployeeError] = useState<string | null>(null)
 
   // Modals state: Employee Delete
-  const [deletingEmployee, setDeletingEmployee] =
-    useState<EmployeeListItem | null>(null)
-  const [deleteEmployeeError, setDeleteEmployeeError] = useState<string | null>(
-    null,
-  )
+  const [deletingEmployee, setDeletingEmployee] = useState<EmployeeListItem | null>(null)
+  const [deleteEmployeeError, setDeleteEmployeeError] = useState<string | null>(null)
 
   // Modals state: Employee Role Assignment
-  const [roleAssignEmployee, setRoleAssignEmployee] =
-    useState<EmployeeListItem | null>(null)
+  const [roleAssignEmployee, setRoleAssignEmployee] = useState<EmployeeListItem | null>(null)
   const [selectedRoleIds, setSelectedRoleIds] = useState<string[] | null>(null)
   const [roleAssignError, setRoleAssignError] = useState<string | null>(null)
   const [roleReviewRequired, setRoleReviewRequired] = useState(false)
   const assignment = useQuery({
-    queryKey: [
-      'private',
-      employee.id,
-      'employee-role-assignment',
-      roleAssignEmployee?.id,
-    ],
+    queryKey: ['private', employee.id, 'employee-role-assignment', roleAssignEmployee?.id],
     queryFn: ({ signal }) => getEmployeeRoles(roleAssignEmployee!.id, signal),
     enabled: Boolean(roleAssignEmployee),
     retry: false,
     refetchOnWindowFocus: false,
   })
   const roleIds =
-    selectedRoleIds ??
-    assignment.data?.employeeRoles.map((item) => item.role.id) ??
-    []
+    selectedRoleIds ?? assignment.data?.employeeRoles.map((item) => item.role.id) ?? []
   const assignmentReady =
     rolesLoaded &&
     assignment.isSuccess &&
@@ -151,22 +115,14 @@ export function EmployeesListTab({
     error,
     refetch,
   } = useQuery({
-    queryKey: [
-      'private',
-      'employees',
-      deferredSearchQuery,
-      statusFilter,
-      positionFilter,
-      page,
-    ],
+    queryKey: ['private', 'employees', deferredSearchQuery, statusFilter, positionFilter, page],
     queryFn: ({ signal }) =>
       getEmployees(
         {
           page,
           itemPerPage: 20,
           search: deferredSearchQuery.trim() || undefined,
-          isActive:
-            statusFilter === 'ALL' ? undefined : statusFilter === 'ACTIVE',
+          isActive: statusFilter === 'ALL' ? undefined : statusFilter === 'ACTIVE',
           positionId: positionFilter === 'ALL' ? undefined : positionFilter,
         },
         signal,
@@ -263,240 +219,208 @@ export function EmployeesListTab({
 
   return (
     <div className="space-y-4">
-      {/* Filter Bar */}
-      <Card className="border border-border/70 shadow-xs">
-        <CardContent className="p-4">
-          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            {/* Search */}
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                type="text"
-                placeholder="Tìm theo tên nhân viên, username hoặc email..."
-                value={searchQuery}
-                onChange={(e) => {
-                  setSearchQuery(e.target.value)
-                  setPage(1)
-                }}
-                className="pl-9"
-              />
-            </div>
-
-            {/* Filters */}
-            <div className="flex flex-wrap items-center gap-2">
-              <select
-                aria-label="Lọc theo trạng thái"
-                value={statusFilter}
-                onChange={(e) => {
-                  setStatusFilter(
-                    e.target.value as 'ALL' | 'ACTIVE' | 'INACTIVE',
-                  )
-                  setPage(1)
-                }}
-                className="h-8.5 rounded-lg border border-border bg-card px-2.5 text-xs text-foreground focus:outline-hidden focus:ring-2 focus:ring-ring"
-              >
-                <option value="ALL">Tất cả trạng thái</option>
-                <option value="ACTIVE">Đang làm việc</option>
-                <option value="INACTIVE">Tạm khóa</option>
-              </select>
-
-              <select
-                aria-label="Lọc theo vị trí"
-                value={positionFilter}
-                onChange={(e) => {
-                  setPositionFilter(e.target.value)
-                  setPage(1)
-                }}
-                className="h-8.5 rounded-lg border border-border bg-card px-2.5 text-xs text-foreground focus:outline-hidden focus:ring-2 focus:ring-ring"
-              >
-                <option value="ALL">Tất cả vị trí</option>
-                {positionsDropdown.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Employee Table */}
+      <section aria-label="Bộ lọc nhân sự" className="admin-toolbar">
+        <div className="relative min-w-0 flex-1 basis-64">
+          <Search
+            size={16}
+            aria-hidden="true"
+            className="absolute left-3 top-3 text-muted-foreground"
+          />
+          <Input
+            type="search"
+            aria-label="Tìm nhân viên"
+            placeholder="Tìm theo tên nhân viên, username hoặc email..."
+            value={searchQuery}
+            onChange={(event) => {
+              setSearchQuery(event.target.value)
+              setPage(1)
+            }}
+            className="pl-9"
+          />
+        </div>
+        <select
+          aria-label="Lọc theo trạng thái"
+          value={statusFilter}
+          onChange={(event) => {
+            setStatusFilter(event.target.value as 'ALL' | 'ACTIVE' | 'INACTIVE')
+            setPage(1)
+          }}
+          className="min-w-0 rounded-md border border-input bg-card px-3 text-sm"
+        >
+          <option value="ALL">Tất cả trạng thái</option>
+          <option value="ACTIVE">Đang làm việc</option>
+          <option value="INACTIVE">Tạm khóa</option>
+        </select>
+        <select
+          aria-label="Lọc theo vị trí"
+          value={positionFilter}
+          onChange={(event) => {
+            setPositionFilter(event.target.value)
+            setPage(1)
+          }}
+          className="min-w-0 rounded-md border border-input bg-card px-3 text-sm"
+        >
+          <option value="ALL">Tất cả vị trí</option>
+          {positionsDropdown.map((position) => (
+            <option key={position.id} value={position.id}>
+              {position.name}
+            </option>
+          ))}
+        </select>
+      </section>
       {error ? (
-        <p role="alert" className="text-sm text-destructive">
+        <div role="alert" className="border-l-4 border-destructive p-4 text-sm">
           {errorMessage(error)}{' '}
           <Button variant="outline" onClick={() => void refetch()}>
             Thử lại
           </Button>
-        </p>
-      ) : isLoadingEmployees ? (
-        <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border py-16">
-          <RefreshCw className="h-8 w-8 animate-spin text-muted-foreground" />
-          <p className="mt-3 text-sm text-muted-foreground">
-            Đang tải danh sách nhân sự...
-          </p>
         </div>
+      ) : isLoadingEmployees ? (
+        <p role="status" className="py-12 text-center text-sm text-muted-foreground">
+          Đang tải danh sách nhân sự...
+        </p>
       ) : employees.length === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border bg-card/50 py-16 text-center">
-          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted text-muted-foreground">
-            <Users className="h-6 w-6" />
-          </div>
-          <h3 className="mt-4 text-base font-semibold text-foreground">
-            Không tìm thấy nhân viên
-          </h3>
-          <p className="mt-1 text-sm text-muted-foreground max-w-sm">
-            Không có dữ liệu phù hợp với điều kiện tìm kiếm hoặc hệ thống chưa
-            có nhân sự.
+        <div className="py-12 text-center">
+          <Users size={28} aria-hidden="true" className="mx-auto mb-3 text-muted-foreground" />
+          <h3 className="text-base font-semibold">Không tìm thấy nhân viên</h3>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Không có dữ liệu phù hợp với điều kiện tìm kiếm hoặc hệ thống chưa có nhân sự.
           </p>
         </div>
       ) : (
-        <Card className="border border-border/80 overflow-hidden shadow-xs">
-          <div className="w-full max-w-full overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead className="border-b border-border bg-muted/40 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                <tr>
-                  <th className="px-4 py-3">Nhân viên</th>
-                  <th className="px-4 py-3">Vị trí</th>
-                  <th className="px-4 py-3">Liên hệ</th>
-                  <th className="px-4 py-3">Trạng thái</th>
-                  <th className="px-4 py-3 text-right">Thao tác</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {employees.map((emp) => {
-                  const posName = emp.positionId
-                    ? positionMap.get(emp.positionId) || '—'
-                    : 'Chưa xếp'
-
-                  return (
-                    <tr
-                      key={emp.id}
-                      className="hover:bg-muted/30 transition-colors"
-                    >
-                      <td className="px-4 py-3.5">
-                        <div className="flex items-center gap-3">
-                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-100 font-bold text-xs text-blue-800 dark:bg-blue-950 dark:text-blue-300">
-                            {emp.fullName.slice(0, 2).toUpperCase()}
-                          </div>
-                          <div>
-                            <div className="font-semibold text-foreground leading-tight">
-                              {emp.fullName}
-                            </div>
-                            <div className="text-xs text-muted-foreground">
-                              @{emp.username}
-                            </div>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3.5">
-                        <Badge
+        <AdminTable label="Danh sách nhân sự">
+          <thead>
+            <tr>
+              <th>Nhân viên</th>
+              <th>Vị trí</th>
+              <th>Liên hệ</th>
+              <th>Trạng thái</th>
+              <th className="text-right">Thao tác</th>
+            </tr>
+          </thead>
+          <tbody>
+            {employees.map((emp) => {
+              const posName = emp.positionId ? positionMap.get(emp.positionId) || '—' : 'Chưa xếp'
+              const initials = emp.fullName
+                .trim()
+                .split(/\s+/)
+                .slice(-2)
+                .map((word) => word[0])
+                .join('')
+                .toUpperCase()
+              return (
+                <tr key={emp.id}>
+                  <td className="max-w-64">
+                    <div className="flex items-center gap-3">
+                      <span
+                        aria-hidden="true"
+                        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary-light text-xs font-bold text-primary"
+                      >
+                        {initials}
+                      </span>
+                      <div className="min-w-0">
+                        <strong className="block break-words">{emp.fullName}</strong>
+                        <span className="block break-words text-xs text-muted-foreground">
+                          @{emp.username}
+                        </span>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="max-w-56">
+                    <Badge variant="secondary" className="max-w-full break-words" title={posName}>
+                      {posName}
+                    </Badge>
+                  </td>
+                  <td className="max-w-72">
+                    <div className="space-y-1 text-xs text-muted-foreground">
+                      <p className="flex items-start gap-1.5">
+                        <Mail size={14} aria-hidden="true" className="mt-0.5 shrink-0" />
+                        <span className="break-all">{emp.email}</span>
+                      </p>
+                      {emp.phoneNumber && (
+                        <p className="flex items-center gap-1.5">
+                          <Phone size={14} aria-hidden="true" />
+                          {emp.phoneNumber}
+                        </p>
+                      )}
+                    </div>
+                  </td>
+                  <td>
+                    <Badge variant={emp.isActive ? 'success' : 'warning'}>
+                      {emp.isActive ? 'Hoạt động' : 'Tạm khóa'}
+                    </Badge>
+                  </td>
+                  <td>
+                    <div className="admin-actions">
+                      {canManageRoles && (
+                        <Button
+                          size="sm"
                           variant="outline"
-                          className="border-blue-200 bg-blue-50/50 text-blue-700 dark:border-blue-800 dark:bg-blue-950/40 dark:text-blue-300"
+                          onClick={() => handleOpenRoleAssign(emp)}
+                          title="Phân quyền vai trò"
+                          aria-label={`Phân quyền vai trò ${emp.fullName}`}
                         >
-                          {posName}
-                        </Badge>
-                      </td>
-                      <td className="px-4 py-3.5">
-                        <div className="space-y-0.5 text-xs text-muted-foreground">
-                          <div className="flex items-center gap-1.5">
-                            <Mail className="h-3.5 w-3.5 text-muted-foreground" />
-                            <span>{emp.email}</span>
-                          </div>
-                          {emp.phoneNumber && (
-                            <div className="flex items-center gap-1.5">
-                              <Phone className="h-3.5 w-3.5 text-muted-foreground" />
-                              <span>{emp.phoneNumber}</span>
-                            </div>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3.5">
-                        {emp.isActive ? (
-                          <Badge
-                            variant="outline"
-                            className="border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300"
-                          >
-                            Hoạt động
-                          </Badge>
-                        ) : (
-                          <Badge
-                            variant="outline"
-                            className="border-border bg-muted text-muted-foreground"
-                          >
-                            Tạm khóa
-                          </Badge>
-                        )}
-                      </td>
-                      <td className="px-4 py-3.5 text-right">
-                        <div className="flex items-center justify-end gap-1.5">
-                          {/* Manage Roles */}
-                          {canManageRoles && (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => void handleOpenRoleAssign(emp)}
-                              className="h-7 px-2 text-xs gap-1 border-blue-200 text-blue-700 hover:bg-blue-50 dark:border-blue-800 dark:text-blue-300"
-                              title="Phân quyền vai trò"
-                            >
-                              <ShieldCheck className="h-3.5 w-3.5" />
-                              <span className="hidden sm:inline">Vai trò</span>
-                            </Button>
-                          )}
-
-                          {/* Edit Employee */}
-                          {canUpdate && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setEditingEmployee(emp)
-                                setEditEmployeeData({
-                                  fullName: emp.fullName,
-                                  phoneNumber: emp.phoneNumber || '',
-                                  address: emp.address || '',
-                                  positionId: emp.positionId || '',
-                                  isActive: emp.isActive,
-                                })
-                                setEditEmployeeError(null)
-                              }}
-                              className="rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground cursor-pointer"
-                              title="Chỉnh sửa thông tin"
-                            >
-                              <Edit2 className="h-4 w-4" />
-                            </button>
-                          )}
-
-                          {/* Delete Employee */}
-                          {canDelete && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setDeletingEmployee(emp)
-                                setDeleteEmployeeError(null)
-                              }}
-                              className="rounded-md p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive cursor-pointer"
-                              title="Xóa nhân viên"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
-        </Card>
+                          <ShieldCheck size={15} aria-hidden="true" />
+                          Vai trò
+                        </Button>
+                      )}
+                      {canUpdate && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-10 w-10"
+                          title="Chỉnh sửa thông tin"
+                          aria-label={`Chỉnh sửa thông tin ${emp.fullName}`}
+                          onClick={() => {
+                            setEditingEmployee(emp)
+                            setEditEmployeeData({
+                              fullName: emp.fullName,
+                              phoneNumber: emp.phoneNumber || '',
+                              address: emp.address || '',
+                              positionId: emp.positionId || '',
+                              isActive: emp.isActive,
+                            })
+                            setEditEmployeeError(null)
+                          }}
+                        >
+                          <Edit2 size={16} aria-hidden="true" />
+                        </Button>
+                      )}
+                      {canDelete && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-10 w-10 text-destructive"
+                          title="Xóa nhân viên"
+                          aria-label={`Xóa nhân viên ${emp.fullName}`}
+                          onClick={() => {
+                            setDeletingEmployee(emp)
+                            setDeleteEmployeeError(null)
+                          }}
+                        >
+                          <Trash2 size={16} aria-hidden="true" />
+                        </Button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </AdminTable>
       )}
-
       {employeesData && !error && (
-        <Pagination
-          page={page}
-          totalPages={employeesData.totalPages}
-          onPage={setPage}
-          disabled={isFetching}
-        />
+        <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-muted-foreground">
+          <span>
+            {employeesData.totalItems} nhân viên · Trang {employeesData.currentPage}
+          </span>
+          <Pagination
+            page={page}
+            totalPages={employeesData.totalPages}
+            onPage={setPage}
+            disabled={isFetching}
+          />
+        </div>
       )}
 
       {/* Modals */}

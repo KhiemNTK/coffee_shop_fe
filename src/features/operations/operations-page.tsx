@@ -1,10 +1,10 @@
 import { useQuery } from '@tanstack/react-query'
 import { useOutletContext } from 'react-router-dom'
-import { Activity, RefreshCw } from 'lucide-react'
+import { Activity, ChefHat, Clock, CreditCard, RefreshCw } from 'lucide-react'
 import type { Session } from '../auth/session'
 import { errorMessage } from '@/shared/api/client'
 import { formatStoreDateTime } from '@/shared/lib/store-time'
-import { Button } from '@/shared/ui'
+import { Button, OperationsHeader, OperationsSummary } from '@/shared/ui'
 import { operationsApi } from './operations.api'
 import { ManagementExceptionsTab } from './exception-queue'
 
@@ -12,41 +12,61 @@ export default function OperationsPage() {
   const { employee } = useOutletContext<Session>()
   const summary = useQuery({
     queryKey: ['management-exceptions-summary', employee.id],
-    queryFn: ({ signal }) =>
-      operationsApi.getManagementExceptionsSummary(signal),
+    queryFn: ({ signal }) => operationsApi.getManagementExceptionsSummary(signal),
     refetchInterval: 30_000,
   })
   return (
-    <div className="space-y-5">
-      <header className="flex flex-wrap items-start justify-between gap-3 border-b pb-4">
-        <div>
-          <h1 className="flex items-center gap-2 text-2xl font-semibold">
-            <Activity className="h-6 w-6 shrink-0" aria-hidden="true" />
-            Trung tâm vận hành
-          </h1>
-          {summary.isSuccess && (
-            <p className="mt-1 text-sm text-muted-foreground">
-              {summary.data.total} việc cần xử lý ·{' '}
-              {formatStoreDateTime(summary.data.asOf)}
-            </p>
-          )}
-        </div>
-        <Button
-          variant="outline"
-          size="icon"
-          aria-label="Làm mới tổng quan"
-          title="Làm mới tổng quan"
-          disabled={summary.isFetching}
-          onClick={() => void summary.refetch()}
-        >
-          <RefreshCw className="h-4 w-4" aria-hidden="true" />
-        </Button>
-      </header>
+    <div className="admin-page space-y-5">
+      <OperationsHeader
+        title="Trung tâm vận hành"
+        meta={
+          summary.isSuccess
+            ? `${summary.data.total} việc cần xử lý · ${formatStoreDateTime(summary.data.asOf)} · Giờ Việt Nam`
+            : undefined
+        }
+        actions={
+          <Button
+            variant="outline"
+            size="icon"
+            aria-label="Làm mới tổng quan"
+            title="Làm mới tổng quan"
+            className="h-10 w-10"
+            disabled={summary.isFetching}
+            onClick={() => void summary.refetch()}
+          >
+            <RefreshCw className="h-4 w-4" aria-hidden="true" />
+          </Button>
+        }
+      />
       {summary.isPending && <p role="status">Đang tải tổng quan vận hành...</p>}
       {summary.isError && <p role="alert">{errorMessage(summary.error)}</p>}
-      <ManagementExceptionsTab
-        summary={summary.isError ? undefined : summary.data}
+      <OperationsSummary
+        label="Tổng quan ngoại lệ"
+        variant="cards"
+        metrics={[
+          {
+            label: 'Tổng việc cần xử lý',
+            value: summary.isSuccess ? summary.data.total : '—',
+            icon: Activity,
+          },
+          {
+            label: 'Đối soát cổng thanh toán',
+            value: summary.isSuccess ? summary.data.counts.PAYMENT : '—',
+            icon: CreditCard,
+          },
+          {
+            label: 'Phiếu bếp trễ',
+            value: summary.isSuccess ? summary.data.counts.KITCHEN_OVERDUE : '—',
+            icon: ChefHat,
+          },
+          {
+            label: 'Đơn quá giờ hẹn',
+            value: summary.isSuccess ? summary.data.counts.ONLINE_PICKUP_LATE : '—',
+            icon: Clock,
+          },
+        ]}
       />
+      <ManagementExceptionsTab summary={summary.isError ? undefined : summary.data} />
     </div>
   )
 }

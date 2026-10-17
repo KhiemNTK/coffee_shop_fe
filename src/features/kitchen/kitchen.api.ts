@@ -49,8 +49,10 @@ export const kitchenTicketSchema = z.object({
   ticketNumber: z.string(),
   state: z.enum(['PENDING', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED']),
   isOverdue: z.boolean(),
-  dueAt: z.string(),
-  createdAt: z.string(),
+  dueAt: z.iso.datetime({ offset: true }),
+  availableAt: z.iso.datetime({ offset: true }).optional(),
+  isScheduled: z.boolean().optional(),
+  createdAt: z.iso.datetime({ offset: true }),
   station: z.object({
     id: z.uuid(),
     code: z.string(),

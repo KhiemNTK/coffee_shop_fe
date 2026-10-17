@@ -145,9 +145,9 @@ export function PickupCollectionPanel() {
   return (
     <section
       aria-label={translate('takeaway.handoffCode')}
-      className="space-y-3 border-y border-border py-4"
+      className="space-y-3 border-y border-border bg-card px-4 py-4"
     >
-      <h2 className="text-lg font-semibold">{translate('takeaway.handoffCode')}</h2>
+      <h2 className="text-sm font-semibold">{translate('takeaway.handoffCode')}</h2>
       <form
         className="flex flex-wrap gap-2"
         onSubmit={(event) => {
@@ -164,6 +164,7 @@ export function PickupCollectionPanel() {
         <Input
           aria-label={translate('takeaway.pickupLink')}
           type="password"
+          placeholder={translate('takeaway.pickupLink')}
           autoComplete="off"
           value={value}
           disabled={collect.isPending}
@@ -172,10 +173,10 @@ export function PickupCollectionPanel() {
             setCredential(null)
             collect.reset()
           }}
-          className="min-w-0 flex-1"
+          className="min-h-11 min-w-0 flex-1"
         />
-        <Button type="submit" disabled={!value.trim() || collect.isPending}>
-          <QrCode size={16} />
+        <Button type="submit" className="min-h-11" disabled={!value.trim() || collect.isPending}>
+          <QrCode size={16} aria-hidden="true" />
           {translate('takeaway.check')}
         </Button>
       </form>

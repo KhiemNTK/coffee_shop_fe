@@ -1,21 +1,10 @@
 import { useState } from 'react'
 import { useIsFetching, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useOutletContext } from 'react-router-dom'
-import {
-  Users,
-  Briefcase,
-  Shield,
-  Plus,
-  RefreshCw,
-  CheckCircle2,
-} from 'lucide-react'
-import {
-  getEmployees,
-  getPositionsDropdown,
-  getAllRoles,
-} from '@/features/employees/employees.api'
+import { Users, Briefcase, Shield, Plus, RefreshCw, CheckCircle2 } from 'lucide-react'
+import { getEmployees, getPositionsDropdown, getAllRoles } from '@/features/employees/employees.api'
 import type { Session } from '@/features/auth/session'
-import { Button, Badge } from '@/shared/ui'
+import { Button, Badge, OperationsHeader } from '@/shared/ui'
 import { EmployeesListTab } from './components/employees-list-tab'
 import { PositionsTab } from './components/positions-tab'
 import { RolesTab } from './components/roles-tab'
@@ -47,9 +36,9 @@ export function EmployeesPage() {
     permissions.includes('/roles_permissions_update')
 
   // Active Tab
-  const [activeTab, setActiveTab] = useState<
-    'employees' | 'positions' | 'roles'
-  >(canReadEmployees ? 'employees' : canReadPositions ? 'positions' : 'roles')
+  const [activeTab, setActiveTab] = useState<'employees' | 'positions' | 'roles'>(
+    canReadEmployees ? 'employees' : canReadPositions ? 'positions' : 'roles',
+  )
 
   // Notification Toast
   const [toastMessage, setToastMessage] = useState<string | null>(null)
@@ -65,7 +54,7 @@ export function EmployeesPage() {
     enabled: canReadEmployees,
   })
 
-  const { data: positionsDropdown = [] } = useQuery({
+  const { data: positionsDropdown = [], isSuccess: positionsLoaded } = useQuery({
     queryKey: ['private', 'positions-dropdown'],
     queryFn: ({ signal }) => getPositionsDropdown(signal),
     enabled: canReadPositions,
@@ -84,7 +73,7 @@ export function EmployeesPage() {
 
   const stats = {
     total: employeesData?.totalItems ?? '—',
-    positionsCount: positionsDropdown.length,
+    positionsCount: positionsLoaded ? positionsDropdown.length : '—',
   }
 
   const handleRefresh = () => {
@@ -98,7 +87,7 @@ export function EmployeesPage() {
   const refreshing = useIsFetching({ queryKey: ['private', activeTab] }) > 0
 
   return (
-    <div className="mx-auto max-w-7xl space-y-6 p-4 sm:p-6 lg:p-8 w-full">
+    <div className="admin-page w-full space-y-5">
       {/* Toast Notification */}
       {toastMessage && (
         <div className="flex items-center justify-between rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200 shadow-xs">
@@ -116,84 +105,56 @@ export function EmployeesPage() {
         </div>
       )}
 
-      {/* Header Bar */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-500/10 text-blue-600 dark:bg-blue-400/10 dark:text-blue-400">
-              <Users className="h-5 w-5" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold tracking-tight text-foreground">
-                Quản lý Nhân sự & Phân quyền
-              </h1>
-              <p className="text-sm text-muted-foreground">
-                Hồ sơ nhân viên, chức danh vị trí công việc và ma trận phân
-                quyền bảo mật
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleRefresh}
-            disabled={refreshing}
-            aria-label="Làm mới"
-            title="Làm mới"
-            className="gap-2"
-          >
-            <RefreshCw className="h-4 w-4" />
-            <span className="hidden sm:inline">Làm mới</span>
-          </Button>
-
-          {activeTab === 'employees' && canCreateEmployee && (
+      <OperationsHeader
+        title="Quản lý Nhân sự & Phân quyền"
+        meta="Hồ sơ nhân viên · Vị trí công việc · Vai trò bảo mật"
+        actions={
+          <>
             <Button
-              onClick={() => setIsCreateEmployeeOpen(true)}
-              size="sm"
-              className="gap-2 bg-blue-600 hover:bg-blue-700 text-white"
+              variant="outline"
+              className="min-h-10"
+              onClick={handleRefresh}
+              disabled={refreshing}
+              aria-label="Làm mới"
+              title="Làm mới"
             >
-              <Plus className="h-4 w-4" />
-              <span>Thêm nhân viên</span>
+              <RefreshCw size={16} aria-hidden="true" />
+              Làm mới
             </Button>
-          )}
-
-          {activeTab === 'positions' && canCreatePosition && (
-            <Button
-              onClick={() => setIsCreatePositionOpen(true)}
-              size="sm"
-              className="gap-2 bg-blue-600 hover:bg-blue-700 text-white"
-            >
-              <Plus className="h-4 w-4" />
-              <span>Thêm vị trí mới</span>
-            </Button>
-          )}
-        </div>
-      </div>
+            {activeTab === 'employees' && canCreateEmployee && (
+              <Button className="min-h-10" onClick={() => setIsCreateEmployeeOpen(true)}>
+                <Plus size={16} aria-hidden="true" />
+                Thêm nhân viên
+              </Button>
+            )}
+            {activeTab === 'positions' && canCreatePosition && (
+              <Button className="min-h-10" onClick={() => setIsCreatePositionOpen(true)}>
+                <Plus size={16} aria-hidden="true" />
+                Thêm vị trí mới
+              </Button>
+            )}
+          </>
+        }
+      />
 
       {rolesError && canReadRoles && (
         <p role="alert" className="text-sm text-destructive">
           {errorMessage(rolesError)}{' '}
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => void refetchRoles()}
-          >
+          <Button variant="outline" size="sm" onClick={() => void refetchRoles()}>
             Thử tải vai trò
           </Button>
         </p>
       )}
       {/* Tabs Navigation */}
-      <div className="flex overflow-x-auto whitespace-nowrap flex-nowrap border-b border-border gap-1 scrollbar-none pb-px">
+      <div className="admin-tabs">
         <button
           type="button"
+          aria-pressed={activeTab === 'employees'}
           onClick={() => setActiveTab('employees')}
           disabled={!canReadEmployees}
           className={`flex shrink-0 items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-semibold transition-colors cursor-pointer ${
             activeTab === 'employees'
-              ? 'border-blue-600 text-blue-600 dark:border-blue-400 dark:text-blue-400'
+              ? 'border-primary text-primary'
               : 'border-transparent text-muted-foreground hover:text-foreground'
           }`}
         >
@@ -207,10 +168,11 @@ export function EmployeesPage() {
         {canReadPositions && (
           <button
             type="button"
+            aria-pressed={activeTab === 'positions'}
             onClick={() => setActiveTab('positions')}
             className={`flex shrink-0 items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-semibold transition-colors cursor-pointer ${
               activeTab === 'positions'
-                ? 'border-blue-600 text-blue-600 dark:border-blue-400 dark:text-blue-400'
+                ? 'border-primary text-primary'
                 : 'border-transparent text-muted-foreground hover:text-foreground'
             }`}
           >
@@ -225,10 +187,11 @@ export function EmployeesPage() {
         {canReadRoles && (
           <button
             type="button"
+            aria-pressed={activeTab === 'roles'}
             onClick={() => setActiveTab('roles')}
             className={`flex shrink-0 items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-semibold transition-colors cursor-pointer ${
               activeTab === 'roles'
-                ? 'border-blue-600 text-blue-600 dark:border-blue-400 dark:text-blue-400'
+                ? 'border-primary text-primary'
                 : 'border-transparent text-muted-foreground hover:text-foreground'
             }`}
           >
