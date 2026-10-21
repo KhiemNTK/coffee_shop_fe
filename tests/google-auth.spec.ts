@@ -110,7 +110,7 @@ test('Google login waits for CAPTCHA, submits once and never persists credential
       local: { ...localStorage },
       session: { ...sessionStorage },
     })),
-  ).toEqual({ local: {}, session: {} })
+  ).toEqual({ local: { coffee_shop_language: 'vi' }, session: {} })
 })
 
 test('blocked Google script can be retried without bypassing CAPTCHA', async ({
@@ -295,12 +295,14 @@ test('successful unlink clears both tabs without retaining Google credentials', 
   await page.getByRole('button', { name: 'Hủy liên kết và đăng xuất' }).click()
   await expect(page).toHaveURL(/\/sign-in$/)
   await expect(other).toHaveURL(/\/sign-in$/)
-  expect(
-    await page.evaluate(() => ({
-      local: { ...localStorage },
-      session: { ...sessionStorage },
-    })),
-  ).toEqual({ local: {}, session: {} })
+  for (const tab of [page, other]) {
+    expect(
+      await tab.evaluate(() => ({
+        local: { ...localStorage },
+        session: { ...sessionStorage },
+      })),
+    ).toEqual({ local: { coffee_shop_language: 'vi' }, session: {} })
+  }
 })
 
 for (const linked of [false, true]) {
