@@ -192,7 +192,7 @@ export function DiningTablesGrid({
                 <Button
                   size="sm"
                   onClick={() => navigate(`/staff/pos/sessions/${activeSession.id}`)}
-                  className="w-full gap-1.5 bg-amber-600 hover:bg-amber-700 text-white text-xs h-8 shadow-xs"
+                  className="w-full gap-1.5 bg-[#E87800] hover:bg-[#d06b00] text-white text-xs h-8 shadow-xs font-semibold"
                 >
                   <UtensilsCrossed className="h-3.5 w-3.5" />
                   Vào đơn POS
@@ -204,7 +204,7 @@ export function DiningTablesGrid({
                   size="sm"
                   variant="outline"
                   onClick={() => navigate('/staff/pos')}
-                  className="w-full gap-1.5 text-emerald-700 border-emerald-500/30 hover:bg-emerald-500/10 dark:text-emerald-300 dark:border-emerald-500/30 text-xs h-8 shadow-xs"
+                  className="w-full gap-1.5 text-primary border-primary/40 hover:bg-primary/5 text-xs h-8 shadow-xs font-semibold"
                 >
                   <Coffee className="h-3.5 w-3.5" />
                   Mở bàn tại POS

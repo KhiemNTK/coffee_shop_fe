@@ -273,15 +273,15 @@ export function DiningTablesPage() {
       {/* Header Bar */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/10 text-amber-600 dark:bg-amber-400/10 dark:text-amber-400">
-              <LayoutGrid className="h-5 w-5" />
+          <div className="flex items-center gap-3.5">
+            <div className="flex h-13 w-13 items-center justify-center rounded-2xl bg-[#FFF3E3] text-[#E87800] border border-amber-200/60 shadow-xs shrink-0">
+              <LayoutGrid className="h-6 w-6" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold tracking-tight text-foreground">
+              <h1 className="text-2xl sm:text-[26px] font-bold tracking-tight text-[#101D38]">
                 Sơ đồ & Quản lý Bàn ăn
               </h1>
-              <p className="text-sm text-muted-foreground">
+              <p className="text-sm text-[#66768B] mt-0.5">
                 Theo dõi tình trạng bàn thời gian thực, quản lý phân bổ và điều phối phục vụ
               </p>
             </div>
@@ -294,7 +294,7 @@ export function DiningTablesPage() {
             size="sm"
             onClick={() => void refetch()}
             disabled={isLoading || isRefetching}
-            className="gap-2"
+            className="gap-2 h-9 px-3.5 border-border/80 bg-card text-foreground/80 hover:bg-muted"
           >
             <RefreshCw className={`h-4 w-4 ${isRefetching ? 'animate-spin' : ''}`} />
             <span className="hidden sm:inline">Làm mới</span>
@@ -304,7 +304,7 @@ export function DiningTablesPage() {
             <Button
               onClick={handleOpenCreate}
               size="sm"
-              className="gap-2 bg-amber-600 hover:bg-amber-700 text-white"
+              className="gap-2 bg-primary hover:bg-primary-hover text-white h-9 px-4 font-semibold shadow-xs"
             >
               <Plus className="h-4 w-4" />
               <span>Thêm bàn mới</span>
@@ -317,44 +317,50 @@ export function DiningTablesPage() {
       <DiningTableKpis stats={stats} />
 
       {/* Filter and Control Bar */}
-      <Card className="border border-border/70 shadow-xs">
-        <CardContent className="p-4">
+      <Card className="border border-border/80 bg-card shadow-xs rounded-xl">
+        <CardContent className="p-3 sm:p-4">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             {/* Search Input */}
             <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 type="text"
-                placeholder="Tìm kiếm bàn theo tên (ví dụ: Bàn 01, VIP, Tầng 2...)..."
+                placeholder="Tìm kiếm bàn theo tên hoặc ID (ví dụ: Bàn 01, VIP, Tầng 2...)"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-9"
+                className="pl-9.5 h-10 text-sm bg-surface-soft/60 border-border/80 focus:bg-card"
               />
             </div>
 
             {/* Filter Tabs & Options */}
             <div className="flex flex-wrap items-center gap-2">
               {/* Status Segmented Buttons */}
-              <div className="inline-flex rounded-lg border border-border bg-muted/40 p-1">
+              <div className="inline-flex rounded-lg border border-border/80 bg-muted/30 p-1 gap-1">
                 {(
                   [
-                    { key: 'ALL', label: 'Tất cả' },
-                    { key: 'EMPTY', label: 'Trống' },
-                    { key: 'OCCUPIED', label: 'Có khách' },
-                    { key: 'RESERVED', label: 'Đã đặt' },
+                    { key: 'ALL', label: 'Tất cả', count: stats.total },
+                    { key: 'EMPTY', label: 'Trống', count: stats.empty, dotColor: 'bg-emerald-500' },
+                    { key: 'OCCUPIED', label: 'Có khách', count: stats.occupied, dotColor: 'bg-amber-500' },
+                    { key: 'RESERVED', label: 'Đã đặt', count: stats.reserved, dotColor: 'bg-purple-500' },
                   ] as const
                 ).map((tab) => (
                   <button
                     key={tab.key}
                     type="button"
                     onClick={() => setStatusFilter(tab.key)}
-                    className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                    className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
                       statusFilter === tab.key
-                        ? 'bg-card text-foreground shadow-xs'
-                        : 'text-muted-foreground hover:text-foreground'
+                        ? 'bg-[#062F29] text-white shadow-xs font-semibold'
+                        : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
                     }`}
                   >
-                    {tab.label}
+                    {'dotColor' in tab && tab.dotColor && (
+                      <span className={`h-1.5 w-1.5 rounded-full ${tab.dotColor}`} />
+                    )}
+                    <span>{tab.label}</span>
+                    <span className={statusFilter === tab.key ? 'text-white/80' : 'text-muted-foreground'}>
+                      ({tab.count})
+                    </span>
                   </button>
                 ))}
               </div>
@@ -364,7 +370,7 @@ export function DiningTablesPage() {
                 aria-label="Sắp xếp danh sách bàn"
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value as any)}
-                className="h-8.5 rounded-lg border border-border bg-card px-2.5 text-xs text-foreground focus:outline-hidden focus:ring-2 focus:ring-ring"
+                className="h-9 rounded-lg border border-border/80 bg-card px-2.5 text-xs text-foreground focus:outline-hidden focus:ring-2 focus:ring-ring"
               >
                 <option value="name_asc">Tên (A → Z)</option>
                 <option value="name_desc">Tên (Z → A)</option>
@@ -372,14 +378,14 @@ export function DiningTablesPage() {
               </select>
 
               {/* View Switcher */}
-              <div className="inline-flex rounded-lg border border-border bg-muted/40 p-1">
+              <div className="inline-flex rounded-lg border border-border/80 bg-muted/30 p-1">
                 <button
                   type="button"
                   aria-label="Chế độ lưới"
                   onClick={() => setViewMode('grid')}
                   className={`rounded-md p-1.5 text-xs transition-colors ${
                     viewMode === 'grid'
-                      ? 'bg-card text-foreground shadow-xs'
+                      ? 'bg-[#062F29] text-white shadow-xs'
                       : 'text-muted-foreground hover:text-foreground'
                   }`}
                   title="Chế độ thẻ lưới"
@@ -388,11 +394,11 @@ export function DiningTablesPage() {
                 </button>
                 <button
                   type="button"
-                  aria-label="Chế độ bảng"
+                  aria-label="Chế độ danh sách"
                   onClick={() => setViewMode('table')}
                   className={`rounded-md p-1.5 text-xs transition-colors ${
                     viewMode === 'table'
-                      ? 'bg-card text-foreground shadow-xs'
+                      ? 'bg-[#062F29] text-white shadow-xs'
                       : 'text-muted-foreground hover:text-foreground'
                   }`}
                   title="Chế độ bảng danh sách"

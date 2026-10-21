@@ -311,117 +311,122 @@ export function PrintDevicesTab({
           )}
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {devices.map((device) => {
             const isOnline = device.isOnline
             return (
               <Card
                 key={device.id}
-                className={`flex flex-col justify-between border shadow-xs transition-all hover:shadow-sm ${
+                className={`flex flex-col justify-between rounded-2xl border shadow-xs transition-all hover:shadow-md ${
                   !device.isActive
                     ? 'border-border/60 bg-muted/20 opacity-80'
-                    : 'border-border bg-card'
+                    : 'border-border/80 bg-card'
                 }`}
               >
-                <CardHeader className="pb-3">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      <span
-                        className={`flex h-2.5 w-2.5 rounded-full ${
-                          isOnline
-                            ? 'bg-emerald-500 animate-pulse'
-                            : device.status === 'ERROR'
-                              ? 'bg-rose-500'
-                              : device.status === 'PAUSED'
-                                ? 'bg-amber-500'
-                                : 'bg-muted-foreground/50'
-                        }`}
-                        title={isOnline ? 'Đang trực tuyến' : 'Ngoại tuyến'}
-                      />
-                      <CardTitle className="text-base font-bold text-foreground truncate max-w-[200px]">
-                        {device.name}
-                      </CardTitle>
+                <CardHeader className="p-4 pb-3">
+                  <div className="flex items-start justify-between gap-2.5">
+                    <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary border border-primary/20 shadow-xs">
+                        <Printer className="h-5 w-5" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <CardTitle className="text-sm font-bold text-foreground leading-tight truncate" title={device.name}>
+                          {device.name}
+                        </CardTitle>
+                        <span className="text-[10px] text-muted-foreground font-mono truncate block">
+                          ID: {device.id.slice(0, 8)}
+                        </span>
+                      </div>
                     </div>
+
+                    <div className="shrink-0">
+                      <Badge
+                        variant={
+                          device.status === 'READY'
+                            ? 'outline'
+                            : device.status === 'ERROR'
+                              ? 'destructive'
+                              : 'secondary'
+                        }
+                        className={`text-[11px] font-semibold gap-1 ${
+                          device.status === 'READY'
+                            ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-800 dark:text-emerald-300'
+                            : ''
+                        }`}
+                      >
+                        {device.status === 'READY' && <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />}
+                        {device.status === 'READY'
+                          ? 'Sẵn sàng'
+                          : device.status === 'ERROR'
+                            ? 'Báo lỗi'
+                            : 'Tạm dừng'}
+                      </Badge>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-1.5 pt-2">
+                    <Badge variant="outline" className="text-[10px] font-mono">
+                      Khổ {device.paperSize}
+                    </Badge>
                     <Badge
-                      variant={
-                        device.type === 'RECEIPT' ? 'default' : 'secondary'
-                      }
-                      className="text-[11px] shrink-0 font-medium"
+                      variant={device.type === 'RECEIPT' ? 'default' : 'secondary'}
+                      className="text-[10px] font-medium"
                     >
                       {device.type === 'RECEIPT' ? 'Hóa đơn' : 'Bếp & Bar'}
                     </Badge>
-                  </div>
-
-                  <div className="flex flex-wrap items-center gap-1.5 pt-1">
-                    <Badge variant="outline" className="text-[11px] font-mono">
-                      Khổ {device.paperSize}
-                    </Badge>
                     {device.isDefault && (
-                      <Badge className="bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30 text-[11px]">
+                      <Badge className="bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30 text-[10px]">
                         Mặc định
                       </Badge>
                     )}
-                    <Badge
-                      variant={
-                        device.status === 'READY'
-                          ? 'outline'
-                          : device.status === 'ERROR'
-                            ? 'destructive'
-                            : 'secondary'
-                      }
-                      className="text-[11px]"
-                    >
-                      {device.status === 'READY'
-                        ? 'Sẵn sàng'
-                        : device.status === 'ERROR'
-                          ? 'Báo lỗi'
-                          : 'Tạm dừng'}
-                    </Badge>
                     {!device.isActive && (
-                      <Badge variant="destructive" className="text-[11px]">
+                      <Badge variant="destructive" className="text-[10px]">
                         Vô hiệu hóa
                       </Badge>
                     )}
                   </div>
                 </CardHeader>
 
-                <CardContent className="space-y-3 pb-3 text-xs">
-                  {/* Connection Signal */}
-                  <div className="rounded-lg border border-border/60 bg-muted/30 p-2.5">
+                <CardContent className="space-y-2.5 px-4 pb-3 pt-0 text-xs">
+                  {/* Connection Signal Inset Region */}
+                  <div className="rounded-xl border border-border/60 bg-muted/30 p-2.5">
                     <div className="flex items-center justify-between text-[11px]">
-                      <span className="text-muted-foreground flex items-center gap-1">
+                      <span className="text-muted-foreground flex items-center gap-1 font-medium">
                         <Radio className="h-3 w-3 text-muted-foreground" />
                         Tín hiệu Agent:
                       </span>
                       <span
-                        className={`font-semibold ${
+                        className={`font-semibold flex items-center gap-1 ${
                           isOnline
-                            ? 'text-emerald-600 dark:text-emerald-400'
+                            ? 'text-emerald-700 dark:text-emerald-400'
                             : 'text-muted-foreground'
                         }`}
                       >
-                        {isOnline
-                          ? 'Trực tuyến (Online)'
-                          : 'Ngoại tuyến (Offline)'}
+                        <span
+                          className={`h-1.5 w-1.5 rounded-full ${
+                            isOnline ? 'bg-emerald-500' : 'bg-muted-foreground/40'
+                          }`}
+                        />
+                        {isOnline ? 'Trực tuyến (Online)' : 'Ngoại tuyến (Offline)'}
                       </span>
                     </div>
                     <div className="mt-1 flex items-center justify-between text-[11px] text-muted-foreground">
                       <span>Lần cuối kết nối:</span>
-                      <span>{formatDateTime(device.lastSeenAt)}</span>
+                      <span className="font-mono text-[10px]">{formatDateTime(device.lastSeenAt)}</span>
                     </div>
                   </div>
 
                   {/* Error banner if present */}
                   {device.lastError && (
-                    <div className="rounded-lg border border-rose-200 bg-rose-50 dark:border-rose-900/50 dark:bg-rose-950/30 p-2 text-rose-700 dark:text-rose-400 text-[11px] flex items-start gap-1.5">
-                      <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-                      <span className="break-all">{device.lastError}</span>
+                    <div className="rounded-xl border border-rose-200 bg-rose-50 dark:border-rose-900/50 dark:bg-rose-950/30 p-2 text-rose-700 dark:text-rose-400 text-[11px] flex items-start gap-1.5">
+                      <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5 text-rose-600" />
+                      <span className="break-all font-medium">{device.lastError}</span>
                     </div>
                   )}
                 </CardContent>
 
                 {/* Actions Bar */}
-                <div className="border-t border-border/70 p-3 bg-muted/10 flex items-center justify-between gap-1.5">
+                <div className="border-t border-border/70 p-2.5 px-3 bg-muted/10 flex items-center justify-between gap-1.5">
                   <div className="flex items-center gap-1">
                     {canManageDevices && (
                       <>
@@ -429,7 +434,7 @@ export function PrintDevicesTab({
                           variant="ghost"
                           size="sm"
                           onClick={() => handleOpenEdit(device)}
-                          className="h-8 px-2 text-xs gap-1"
+                          className="h-7 px-2 text-xs gap-1 hover:bg-primary/5 hover:text-primary"
                           title="Sửa cấu hình máy in"
                         >
                           <Edit2 className="h-3.5 w-3.5" />
@@ -440,7 +445,7 @@ export function PrintDevicesTab({
                           variant="ghost"
                           size="sm"
                           onClick={() => setRotatingDevice(device)}
-                          className="h-8 px-2 text-xs gap-1 text-indigo-600 dark:text-indigo-400"
+                          className="h-7 px-2 text-xs gap-1 text-primary hover:bg-primary/5 hover:text-primary-hover"
                           title="Tạo lại API Key"
                         >
                           <Key className="h-3.5 w-3.5" />
@@ -455,7 +460,7 @@ export function PrintDevicesTab({
                       variant="ghost"
                       size="sm"
                       onClick={() => setDeletingDevice(device)}
-                      className="h-8 px-2 text-xs text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/30"
+                      className="h-7 px-2 text-xs text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/30"
                       title="Xóa máy in"
                     >
                       <Trash2 className="h-3.5 w-3.5" />

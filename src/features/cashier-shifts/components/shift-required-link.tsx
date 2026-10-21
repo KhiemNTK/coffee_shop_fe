@@ -1,0 +1,22 @@
+import { Link, useOutletContext } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
+import { ArrowRight } from 'lucide-react'
+import type { Session } from '../../auth/session'
+import { buttonVariants } from '../../../shared/ui'
+
+export function ShiftRequiredLink() {
+  const { authorization } = useOutletContext<Session>()
+  const { t } = useTranslation()
+  if (
+    !['/cashier-shifts_current', '/cashier-shifts_open', '/funds_read'].every((key) =>
+      authorization.permissionKeys.includes(key),
+    )
+  )
+    return null
+  return (
+    <Link to="/staff/shifts?tab=current" className={buttonVariants({ variant: 'outline' })}>
+      <ArrowRight size={16} aria-hidden="true" />
+      {t('pos.openShift')}
+    </Link>
+  )
+}

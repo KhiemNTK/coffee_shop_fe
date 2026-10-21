@@ -1,7 +1,7 @@
 import { useTranslation } from 'react-i18next'
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Link, useNavigate, useOutletContext } from 'react-router-dom'
+import { useNavigate, useOutletContext } from 'react-router-dom'
 import {
   AlertCircle,
   Armchair,
@@ -14,6 +14,7 @@ import {
 import { errorMessage } from '../../shared/api/client'
 import { type Session } from '../auth/session'
 import { getCurrentShift } from '../cashier-shifts/cashier-shifts.api'
+import { ShiftRequiredLink } from '../cashier-shifts/components/shift-required-link'
 import { getDiningTables, getActiveSessions, openOrderSession, type DiningTable } from './pos.api'
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '../../shared/ui/card'
 import { Button } from '../../shared/ui/button'
@@ -194,12 +195,7 @@ export default function PosTablesPage() {
               <strong>{translate('pos.notice')}</strong> {translate('pos.noShift')}
             </span>
           </div>
-          <Link
-            to="/staff/shifts"
-            className="inline-flex items-center justify-center rounded-md bg-amber-600 px-3.5 py-1.5 text-xs font-semibold text-white shadow-xs hover:bg-amber-700 transition-colors shrink-0"
-          >
-            {translate('pos.openShift')}
-          </Link>
+          <ShiftRequiredLink />
         </div>
       )}
 

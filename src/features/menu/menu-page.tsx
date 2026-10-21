@@ -2,26 +2,15 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
-import {
-  ArrowLeft,
-  ArrowRight,
-  RotateCw,
-  Search,
-  X,
-} from 'lucide-react'
-import {
-  getCategories,
-  getMenu,
-  getPublicStore,
-  type MenuFilters,
-  type MenuItem,
-} from './menu.api'
+import { ArrowLeft, ArrowRight, RotateCw, Search, X } from 'lucide-react'
+import { getCategories, getMenu, getPublicStore, type MenuFilters, type MenuItem } from './menu.api'
 import { Button } from '@/shared/ui/button'
 import { Input } from '@/shared/ui/input'
 import { cn } from '@/shared/ui/utils'
 import { SiteHeader } from '@/shared/components/site-header'
 import { ProductDetailModal } from './components/product-detail-modal'
 import { CartCheckoutDrawer } from '../online-orders/components/cart-checkout-drawer'
+import { OrderTrackingView } from '../online-orders/components/order-tracking-view'
 import { useCart, type CartItem } from '../online-orders/cart'
 import { rememberOrder, type OrderAccess } from '../online-orders/order-access-storage'
 
@@ -45,8 +34,9 @@ export function MenuPage() {
   const [filters, setFilters] = useState<MenuFilters>(initialFilters)
   const [selectedProduct, setSelectedProduct] = useState<MenuItem | null>(null)
   const [isCartOpen, setIsCartOpen] = useState(false)
+  const [unstoredOrder, setUnstoredOrder] = useState<OrderAccess | null>(null)
 
-  const { items: cartItems, addItem, updateQuantity, removeItem } = useCart()
+  const { items: cartItems, addItem, updateQuantity, removeItem, clearCart } = useCart()
 
   const store = useQuery({
     queryKey: ['public-store'],
@@ -81,9 +71,18 @@ export function MenuPage() {
   }
 
   function handleOrderCreated(order: OrderAccess) {
-    rememberOrder(order)
     setIsCartOpen(false)
-    navigate('/order')
+    clearCart()
+    if (order.customerId) {
+      navigate(`/account/orders/${order.requestId}`)
+      return
+    }
+    try {
+      rememberOrder(order)
+      navigate('/order')
+    } catch {
+      setUnstoredOrder(order)
+    }
   }
 
   function handleSelectFeaturedCategory(categoryId: string) {
@@ -92,6 +91,17 @@ export function MenuPage() {
   }
 
   const featuredBestsellers = menu.data?.list.slice(0, 5) ?? []
+
+  if (unstoredOrder)
+    return (
+      <div className="min-h-screen bg-background">
+        <SiteHeader />
+        <main className="mx-auto max-w-3xl space-y-4 px-4 py-8">
+          <p role="alert">{translate('takeaway.storageWarning')}</p>
+          <OrderTrackingView orderAuth={unstoredOrder} onNewOrder={() => setUnstoredOrder(null)} />
+        </main>
+      </div>
+    )
 
   return (
     <div className="min-h-screen bg-background text-foreground flex flex-col font-sans">
@@ -112,17 +122,11 @@ export function MenuPage() {
 
       {/* 5. Kệ món bán chạy nhất */}
       {!filtered && filters.page === 1 && (menu.data?.totalItems ?? 0) > 5 && (
-        <BestsellersShelf
-          items={featuredBestsellers}
-          onSelect={handleSelectItem}
-        />
+        <BestsellersShelf items={featuredBestsellers} onSelect={handleSelectItem} />
       )}
 
       {/* 6. Menu Catalog Main */}
-      <main
-        className="mx-auto max-w-7xl px-4 py-8 sm:px-6 sm:py-12 flex-1 w-full"
-        id="menu"
-      >
+      <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 sm:py-12 flex-1 w-full" id="menu">
         {/* Banner Khám phá thực đơn with Search inside */}
         <div className="relative rounded-[16px] overflow-hidden bg-primary text-white p-6 sm:p-10 mb-8 shadow-md">
           <img
@@ -257,16 +261,18 @@ export function MenuPage() {
               <div className="flex items-center gap-2">
                 <span className="text-base font-extrabold text-foreground">
                   {filters.categoryId
-                    ? categories.data?.find((c) => c.id === filters.categoryId)?.name ??
-                      'Danh mục'
+                    ? (categories.data?.find((c) => c.id === filters.categoryId)?.name ??
+                      'Danh mục')
                     : filters.keyword
                       ? `Tìm kiếm: "${filters.keyword}"`
                       : 'Tất cả món'}
                 </span>
                 <span className="text-xs font-semibold text-muted-foreground" role="status">
-                  ({menu.data
+                  (
+                  {menu.data
                     ? translate('menu.count', { count: menu.data.totalItems })
-                    : translate('common.loading')})
+                    : translate('common.loading')}
+                  )
                 </span>
               </div>
 
@@ -361,11 +367,7 @@ export function MenuPage() {
               ) : (
                 <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
                   {menu.data.list.map((item) => (
-                    <MenuCard
-                      key={item.id}
-                      item={item}
-                      onSelect={handleSelectItem}
-                    />
+                    <MenuCard key={item.id} item={item} onSelect={handleSelectItem} />
                   ))}
                 </div>
               )}
@@ -437,10 +439,7 @@ export function MenuPage() {
       )}
 
       {/* 9. Site Footer */}
-      <StoreFooter
-        storeData={store.data ?? undefined}
-        copyrightYear={copyrightYear}
-      />
+      <StoreFooter storeData={store.data ?? undefined} copyrightYear={copyrightYear} />
     </div>
   )
 }

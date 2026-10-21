@@ -20,6 +20,8 @@ const ReorderPage = lazy(() => import('../features/online-orders/reorder-page'))
 const PickupPage = lazy(() => import('../features/online-orders/pickup-page'))
 const CartPage = lazy(() => import('../features/online-orders/cart-page'))
 const WishlistPage = lazy(() => import('../features/customers/wishlist-page'))
+const CustomerSignInPage = lazy(() => import('../features/customers/customer-sign-in'))
+const CustomerAccountPage = lazy(() => import('../features/customers/customer-account-page'))
 const ReconciliationPage = lazy(() => import('../features/reconciliation/reconciliation-page'))
 const StaffMenuPage = lazy(() => import('../features/menu/staff-menu-page'))
 const CashierShiftPage = lazy(() => import('../features/cashier-shifts/cashier-shift-page'))
@@ -96,7 +98,10 @@ export function AppRouter() {
             role="status"
             aria-live="polite"
           >
-            <div className="w-9 h-9 rounded-full border-2 border-amber-600/20 border-t-amber-600 animate-spin" aria-hidden="true" />
+            <div
+              className="w-9 h-9 rounded-full border-2 border-amber-600/20 border-t-amber-600 animate-spin"
+              aria-hidden="true"
+            />
             <span className="font-medium text-sm text-stone-600 dark:text-stone-300 animate-pulse tracking-wide">
               {translate('common.loading')}
             </span>
@@ -108,6 +113,10 @@ export function AppRouter() {
           <Route path="/menu" element={<MenuPage />} />
           <Route path="/cart" element={<CartPage />} />
           <Route path="/wishlist" element={<WishlistPage />} />
+          <Route path="/customer/sign-in" element={<CustomerSignInPage />} />
+          <Route path="/account" element={<CustomerAccountPage />} />
+          <Route path="/account/orders/:orderId" element={<CustomerAccountPage />} />
+          <Route path="/account/orders/:orderId/reorder" element={<ReorderPage />} />
           <Route path="/order" element={<OnlineOrderPage />} />
           <Route path="/reorder" element={<ReorderPage />} />
           <Route path="/pickup" element={<PickupPage />} />

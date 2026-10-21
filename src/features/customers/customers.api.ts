@@ -1,4 +1,4 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { z } from 'zod'
 import { apiGet, apiMutate, ApiError } from '../../shared/api/client'
 import { itemSchema } from '../menu/menu.api'
@@ -83,7 +83,30 @@ export function customerLogout() {
   )
 }
 
-export type FavoriteIntent = { menuItemId: string; expectedCustomerId: string; remove: boolean }
+export function useCustomerLogout() {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: customerLogout,
+    retry: false,
+    onMutate: () => client.cancelQueries({ queryKey: ['customer'] }),
+    onSuccess: () => {
+      client.removeQueries({
+        queryKey: ['customer'],
+        predicate: (query) => query.queryKey[1] !== 'me',
+      })
+      client.setQueryData(customerKey, null)
+    },
+    onSettled: () => {
+      void client.invalidateQueries({ queryKey: customerKey })
+    },
+  })
+}
+
+export type FavoriteIntent = {
+  menuItemId: string
+  expectedCustomerId: string
+  remove: boolean
+}
 export function saveFavorite(intent: FavoriteIntent) {
   return apiMutate(
     `/customers/wishlist/${intent.menuItemId}`,

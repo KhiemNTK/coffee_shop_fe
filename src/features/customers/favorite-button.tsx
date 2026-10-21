@@ -1,6 +1,6 @@
 import { useRef } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { AlertCircle, Heart, LoaderCircle } from 'lucide-react'
 import { ApiError, errorMessage } from '../../shared/api/client'
@@ -10,6 +10,7 @@ import { customerKey, saveFavorite, useWishlist, wishlistKey } from './customers
 export function FavoriteButton({ itemId, className }: { itemId: string; className?: string }) {
   const { t } = useTranslation()
   const navigate = useNavigate()
+  const location = useLocation()
   const client = useQueryClient()
   const { customer, wishlist } = useWishlist()
   const flight = useRef(false)
@@ -18,7 +19,9 @@ export function FavoriteButton({ itemId, className }: { itemId: string; classNam
     mutationFn: saveFavorite,
     retry: false,
     onSuccess: (_, intent) => {
-      void client.invalidateQueries({ queryKey: wishlistKey(intent.expectedCustomerId) })
+      void client.invalidateQueries({
+        queryKey: wishlistKey(intent.expectedCustomerId),
+      })
     },
     onError: (error) => {
       if (
@@ -49,9 +52,7 @@ export function FavoriteButton({ itemId, className }: { itemId: string; classNam
       disabled={
         customer.isPending ||
         mutation.isPending ||
-        Boolean(
-          customer.data && (wishlist.isPending || wishlist.isError || wishlist.isFetching),
-        )
+        Boolean(customer.data && (wishlist.isPending || wishlist.isError || wishlist.isFetching))
       }
       className={cn(
         'inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-md bg-white/95 text-primary shadow-xs disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
@@ -61,7 +62,16 @@ export function FavoriteButton({ itemId, className }: { itemId: string; classNam
         event.stopPropagation()
         if (flight.current) return
         if (!customer.data) {
-          navigate('/wishlist')
+          if (customer.isError) {
+            void customer.refetch()
+            return
+          }
+          navigate('/customer/sign-in', {
+            state: {
+              returnTo: location.pathname + location.search,
+              favoriteItemId: itemId,
+            },
+          })
           return
         }
         if (retry && mutation.variables?.expectedCustomerId !== customer.data.id) return
@@ -69,7 +79,11 @@ export function FavoriteButton({ itemId, className }: { itemId: string; classNam
         mutation.mutate(
           retry && mutation.variables
             ? mutation.variables
-            : { menuItemId: itemId, expectedCustomerId: customer.data.id, remove: saved },
+            : {
+                menuItemId: itemId,
+                expectedCustomerId: customer.data.id,
+                remove: saved,
+              },
         )
       }}
     >

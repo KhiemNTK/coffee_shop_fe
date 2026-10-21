@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react'
 import { z } from 'zod'
+import { useTranslation } from 'react-i18next'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Coins, Lock, RefreshCw, Send, Unlock, Wallet } from 'lucide-react'
 import { ApiError, errorMessage } from '../../../shared/api/client'
@@ -29,8 +30,9 @@ import {
 
 const cashCommandSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('OPEN'), fundId: z.string().min(1), startingCash: z.string().min(1) }),
-  z.object({ kind: z.literal('CLOSE'), reportedEndingCash: z.string().min(1), closingNote: z.string() }),
-  z.object({ kind: z.literal('MOVEMENT'), type: z.enum(['INCOME', 'EXPENSE']), amount: z.string().min(1), description: z.string().min(1) }),
+  // Legacy recovery commands remain visible, but cannot infer a new shift target.
+  z.object({ kind: z.literal('CLOSE'), expectedShiftId: z.string().min(1).optional(), reportedEndingCash: z.string().min(1), closingNote: z.string() }),
+  z.object({ kind: z.literal('MOVEMENT'), expectedShiftId: z.string().min(1).optional(), type: z.enum(['INCOME', 'EXPENSE']), amount: z.string().min(1), description: z.string().min(1) }),
 ])
 type CashCommand = z.infer<typeof cashCommandSchema>
 
@@ -56,6 +58,7 @@ export function CurrentShiftTab({
   onError,
   onSuccess,
 }: CurrentShiftTabProps) {
+  const { t } = useTranslation()
   const queryClient = useQueryClient()
   const recoveryKey = pendingIntentKey(employeeId, 'cashier-shift.command')
   const [submitted, setSubmitted] = useState(() => readPendingIntent(recoveryKey, cashCommandSchema))
@@ -101,10 +104,13 @@ export function CurrentShiftTab({
 
   // Mutations
   const command = useMutation({
-    mutationFn: async ({ payload, idempotencyKey }: PendingIntent<CashCommand>) => payload.kind === 'OPEN'
-      ? openCashierShift(payload.fundId, payload.startingCash, idempotencyKey)
-      : payload.kind === 'CLOSE' ? closeCashierShift(payload.reportedEndingCash, payload.closingNote, idempotencyKey)
-        : addCashMovement(payload.type, payload.amount, payload.description, idempotencyKey),
+    mutationFn: async ({ payload, idempotencyKey }: PendingIntent<CashCommand>) => {
+      if (payload.kind === 'OPEN') return openCashierShift(payload.fundId, payload.startingCash, idempotencyKey)
+      if (!payload.expectedShiftId) throw new ApiError(409, 'CASHIER_SHIFT_CHANGED')
+      return payload.kind === 'CLOSE'
+        ? closeCashierShift(payload.expectedShiftId, payload.reportedEndingCash, payload.closingNote, idempotencyKey)
+        : addCashMovement(payload.expectedShiftId, payload.type, payload.amount, payload.description, idempotencyKey)
+    },
     onSuccess: (data, { payload }) => {
       sessionStorage.removeItem(recoveryKey)
       setSubmitted(null)
@@ -139,6 +145,10 @@ export function CurrentShiftTab({
     if (!submitted && (!currentShiftQuery.isSuccess || currentShiftQuery.isFetching)) { onError('Đang kiểm tra trạng thái ca. Chờ tải xong trước khi gửi giao dịch mới.'); return }
     if (submitted && isPendingIntentExpired(submitted)) { onError('Yêu cầu quá thời hạn phục hồi. Liên hệ quản lý để đối soát, không tạo giao dịch khác.'); return }
     const intent = submitted ?? { payload, createdAt: Date.now(), idempotencyKey: crypto.randomUUID() }
+    if (intent.payload.kind !== 'OPEN' && !intent.payload.expectedShiftId) {
+      onError(t('error.legacyCashCommand'))
+      return
+    }
     try { writePendingIntent(recoveryKey, intent) }
     catch { onError('Không lưu được yêu cầu phục hồi. Chưa gửi giao dịch; kiểm tra bộ nhớ trình duyệt.'); return }
     flight.current = true
@@ -161,13 +171,15 @@ export function CurrentShiftTab({
 
   if (submitted) {
     const payload = submitted.payload
+    const missingShift = payload.kind !== 'OPEN' && !payload.expectedShiftId
     const amount = payload.kind === 'OPEN' ? payload.startingCash : payload.kind === 'CLOSE' ? payload.reportedEndingCash : payload.amount
     return <section aria-label="Phục hồi giao dịch ca" className="space-y-3 border-l-4 border-amber-500 p-4">
       <h2 className="text-base font-semibold">{payload.kind === 'OPEN' ? 'Mở ca' : payload.kind === 'CLOSE' ? 'Đóng ca' : 'Thu / chi tiền mặt'} · {formatPrice(amount)}</h2>
       <p role="status">{command.isPending ? 'Đang xác nhận giao dịch…' : 'Chưa xác nhận được kết quả. Giữ nguyên yêu cầu trước khi thực hiện giao dịch khác.'}</p>
       {payload.kind === 'MOVEMENT' && <p>{payload.type} · {payload.description}</p>}
       {command.error && <p role="alert">{errorMessage(command.error)}</p>}
-      {isPendingIntentExpired(submitted) ? <p role="alert">Yêu cầu đã quá thời hạn phục hồi an toàn. Liên hệ quản lý để đối soát.</p>
+      {missingShift ? <p role="alert">{t('error.legacyCashCommand')}</p>
+        : isPendingIntentExpired(submitted) ? <p role="alert">Yêu cầu đã quá thời hạn phục hồi an toàn. Liên hệ quản lý để đối soát.</p>
         : <Button disabled={command.isPending} onClick={() => submitCommand(payload)}><RefreshCw size={16} aria-hidden="true" />Kiểm tra lại cùng yêu cầu</Button>}
     </section>
   }
@@ -409,7 +421,7 @@ export function CurrentShiftTab({
               <form
                 onSubmit={(e) => {
                   e.preventDefault()
-                  submitCommand({ kind: 'MOVEMENT', type: movementType, amount: movementAmount, description: movementDesc })
+                  submitCommand({ kind: 'MOVEMENT', expectedShiftId: shift.id, type: movementType, amount: movementAmount, description: movementDesc })
                 }}
                 className="flex flex-col gap-3 pt-2"
               >
@@ -576,7 +588,7 @@ export function CurrentShiftTab({
                   onError('Vui lòng nhập số tiền thực kiểm trong két')
                   return
                 }
-                submitCommand({ kind: 'CLOSE', reportedEndingCash, closingNote })
+                submitCommand({ kind: 'CLOSE', expectedShiftId: shift.id, reportedEndingCash, closingNote })
               }}
               className="flex flex-col gap-4 max-w-lg"
             >

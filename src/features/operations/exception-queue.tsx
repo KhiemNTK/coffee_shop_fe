@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useOutletContext, useSearchParams } from 'react-router-dom'
 import { CheckCircle2, RefreshCw, ExternalLink, Eye } from 'lucide-react'
@@ -93,10 +94,12 @@ export function ManagementExceptionsTab({ summary }: { summary?: ManagementExcep
     mutationFn: async ({
       command,
       note = '',
+      customerReply,
       outbox,
     }: {
       command: 'RESOLVE' | 'IGNORE' | 'RECONCILE' | 'RETRY_EVENT'
       note?: string
+      customerReply?: string
       outbox?: { id: string; expectedAvailableAt: string }
     }) => {
       if (command === 'RETRY_EVENT') {
@@ -120,7 +123,7 @@ export function ManagementExceptionsTab({ summary }: { summary?: ManagementExcep
       }
       if (note.trim().length < 3) throw new Error('Cần ghi chú xử lý.')
       if (kind === 'FEEDBACK' && can('/feedback_resolve'))
-        return resolveFeedback(selected.id, note.trim())
+        return resolveFeedback(selected.id, note.trim(), customerReply)
       if (kind === 'PAYMENT' && can('/payment-reconciliation_manage'))
         return closeIncident(selected.id, command === 'IGNORE' ? 'IGNORE' : 'RESOLVE', note.trim())
       throw new Error('Bạn không có quyền xử lý ngoại lệ này.')
@@ -446,9 +449,10 @@ export function ManagementExceptionsTab({ summary }: { summary?: ManagementExcep
                   <ResolutionForm
                     key={kind + selected.id}
                     allowIgnore={kind === 'PAYMENT'}
+                    isFeedback={kind === 'FEEDBACK'}
                     blocked={blocked}
                     pending={action.isPending}
-                    onSubmit={(command, note) => action.mutate({ command, note })}
+                    onSubmit={(command, note, customerReply) => action.mutate({ command, note, customerReply })}
                   />
                 )}
                 {((kind === 'CASH_EXPENSE' && can('/cashier-shifts_expenses-review')) ||
@@ -506,16 +510,20 @@ export function ManagementExceptionsTab({ summary }: { summary?: ManagementExcep
 
 function ResolutionForm({
   allowIgnore,
+  isFeedback,
   blocked,
   pending,
   onSubmit,
 }: {
   allowIgnore: boolean
+  isFeedback: boolean
   blocked: boolean
   pending: boolean
-  onSubmit: (command: 'RESOLVE' | 'IGNORE', note: string) => void
+  onSubmit: (command: 'RESOLVE' | 'IGNORE', note: string, customerReply?: string) => void
 }) {
+  const { t } = useTranslation()
   const [note, setNote] = useState('')
+  const [customerReply, setCustomerReply] = useState('')
   const [confirm, setConfirm] = useState<'RESOLVE' | 'IGNORE' | null>(null)
   return (
     <div className="space-y-3">
@@ -531,12 +539,16 @@ function ResolutionForm({
           }}
         />
       </label>
+      {isFeedback && <label className="block text-sm">
+        {t('feedback.customerReply')}
+        <Input value={customerReply} maxLength={500} disabled={pending} onChange={event => { setCustomerReply(event.target.value); setConfirm(null) }} />
+      </label>}
       {confirm ? (
         <div className="space-y-2 border-t pt-3">
           <p>Xác nhận {confirm === 'IGNORE' ? 'bỏ qua' : 'đóng'} ngoại lệ này?</p>
           <Button
             disabled={blocked || note.trim().length < 3}
-            onClick={() => onSubmit(confirm, note)}
+            onClick={() => onSubmit(confirm, note, customerReply)}
           >
             <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
             Xác nhận

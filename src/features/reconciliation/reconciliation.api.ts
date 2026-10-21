@@ -78,7 +78,7 @@ export function reconcileBank(id: string) {
 export function ignoreBankEntry(id: string, reason: string) {
   return apiMutate('/bank-reconciliation/entries/' + id + '/ignore', 'POST', bankEntrySchema, { reason })
 }
-export function resolveFeedback(id: string, resolutionNote: string) {
+export function resolveFeedback(id: string, resolutionNote: string, customerReply?: string) {
   return apiMutate('/orders/takeaway/feedback/' + id + '/resolve', 'POST',
-    z.object({ id: z.string(), resolvedAt: z.string().nullable() }), { resolutionNote })
+    z.object({ id: z.string(), resolvedAt: z.string().nullable() }), { resolutionNote, ...(customerReply?.trim() ? { customerReply: customerReply.trim() } : {}) })
 }

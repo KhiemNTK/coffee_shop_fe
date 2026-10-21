@@ -21,6 +21,7 @@ export function PrintingPage() {
   const canManageDevices = canReadDevices && can('/print-devices_manage')
   const canManageJobs = canReadJobs && can('/print-jobs_manage')
   const canReprint = can('/receipts_reprint')
+
   const tabs = [
     {
       id: 'DEVICES',
@@ -41,10 +42,12 @@ export function PrintingPage() {
       allowed: canReprint,
     },
   ].filter((tab) => tab.allowed)
+
   const [selectedTab, setSelectedTab] = useState(tabs[0]?.id)
   const activeTab =
     tabs.find((tab) => tab.id === selectedTab)?.id ?? tabs[0]?.id
   const [isCreateOpen, setIsCreateOpen] = useState(false)
+
   const options = useQuery({
     queryKey: ['print-devices', 'active-options'],
     queryFn: ({ signal }) => printingApi.getActiveDevices(signal),
@@ -53,22 +56,35 @@ export function PrintingPage() {
       ((activeTab === 'JOBS' && canManageJobs) ||
         (activeTab === 'REPRINT' && canReprint)),
   })
+
   const devices = canReadDevices
     ? (options.data ?? EMPTY_DEVICES)
     : EMPTY_DEVICES
+
   const refreshing =
     useIsFetching({
       queryKey: activeTab === 'DEVICES' ? ['print-devices'] : ['print-jobs'],
     }) > 0
 
   return (
-    <div className="mx-auto w-full max-w-7xl space-y-4 p-4 md:p-8">
-      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-4">
-        <h1 className="flex items-center gap-2 text-xl font-semibold">
-          <Printer className="h-5 w-5 shrink-0" />
-          Quản trị Thiết bị In & Lệnh in
-        </h1>
-        <div className="flex flex-wrap gap-2">
+    <div className="mx-auto w-full max-w-7xl space-y-6">
+      {/* Top Header */}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-3">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary shadow-xs">
+            <Printer className="h-6 w-6" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight text-foreground">
+              Quản trị Thiết bị In &amp; Lệnh in
+            </h1>
+            <p className="text-xs sm:text-sm text-muted-foreground">
+              Quản lý máy in, theo dõi trạng thái kết nối và hàng đợi lệnh in từ hệ thống POS
+            </p>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
           <Button
             variant="outline"
             size="sm"
@@ -84,10 +100,12 @@ export function PrintingPage() {
                 })
               }
             }}
+            className="gap-1.5 text-xs h-9"
           >
-            <RefreshCw className="h-4 w-4" />
+            <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? 'animate-spin' : ''}`} />
             Làm mới
           </Button>
+
           {canManageDevices && (
             <Button
               size="sm"
@@ -95,25 +113,34 @@ export function PrintingPage() {
                 setSelectedTab('DEVICES')
                 setIsCreateOpen(true)
               }}
+              className="gap-1.5 bg-[#08634e] hover:bg-[#074b3d] text-white text-xs h-9 font-semibold shadow-xs"
             >
-              <Plus className="h-4 w-4" />
+              <Plus className="h-3.5 w-3.5" />
               Thêm máy in
             </Button>
           )}
         </div>
-      </header>
-      <div className="flex flex-wrap gap-2 border-b border-border pb-2">
+      </div>
+
+      {/* Module Navigation Tabs */}
+      <div className="flex flex-wrap gap-2 border-b border-border/70 pb-2.5">
         {tabs.map(({ id, label, icon: Icon }) => (
           <Button
             key={id}
             variant={activeTab === id ? 'secondary' : 'ghost'}
             onClick={() => setSelectedTab(id)}
+            className={`rounded-xl px-3.5 py-1.5 text-xs font-semibold shadow-xs transition-all h-9 ${
+              activeTab === id
+                ? 'bg-[#062F29] text-white hover:bg-[#062F29] hover:text-white'
+                : 'text-muted-foreground hover:text-foreground hover:bg-muted/60'
+            }`}
           >
-            <Icon className="h-4 w-4" />
+            <Icon className="h-4 w-4 mr-1.5" />
             {label}
           </Button>
         ))}
       </div>
+
       {canReadDevices && activeTab !== 'DEVICES' && options.isError && (
         <p role="alert" className="text-sm text-destructive">
           {errorMessage(options.error)}{' '}
@@ -126,6 +153,7 @@ export function PrintingPage() {
           </Button>
         </p>
       )}
+
       {activeTab === 'DEVICES' && canReadDevices && (
         <PrintDevicesTab
           canManageDevices={canManageDevices}
@@ -133,14 +161,14 @@ export function PrintingPage() {
           setIsCreateOpen={setIsCreateOpen}
         />
       )}
+
       {activeTab === 'JOBS' && canReadJobs && (
         <PrintJobsTab canManageJobs={canManageJobs} devices={devices} />
       )}
+
       {activeTab === 'REPRINT' && canReprint && (
         <ReprintReceiptTab devices={devices} />
       )}
     </div>
   )
 }
-
-export default PrintingPage

@@ -268,7 +268,7 @@ export async function getCurrentShift(
 export async function openCashierShift(
   fundId: string,
   startingCash: string,
-  idempotencyKey?: string,
+  idempotencyKey: string,
 ): Promise<CashierShift> {
   return apiIdempotentMutate('/cashier-shifts/open', cashierShiftSchema, {
     fundId,
@@ -278,14 +278,16 @@ export async function openCashierShift(
 }
 
 export async function closeCashierShift(
+  expectedShiftId: string,
   reportedEndingCash: string,
-  closingNote?: string,
-  idempotencyKey?: string,
+  closingNote: string | undefined,
+  idempotencyKey: string,
 ): Promise<CashierShift> {
   return apiIdempotentMutate(
     '/cashier-shifts/current/close',
     cashierShiftSchema,
     {
+      expectedShiftId,
       reportedEndingCash,
       closingNote: closingNote?.trim() || undefined,
       idempotencyKey,
@@ -294,16 +296,18 @@ export async function closeCashierShift(
 }
 
 export async function addCashMovement(
+  expectedShiftId: string,
   type: 'INCOME' | 'EXPENSE',
   amount: string,
   description: string,
-  idempotencyKey?: string,
+  idempotencyKey: string,
 ) {
   return apiIdempotentMutate('/cashier-shifts/current/transactions', z.object({
     movement: z.object({ id: z.string().min(1), type: z.enum(['INCOME', 'EXPENSE']), amount: moneySchema }).nullable(),
     fundBalance: moneySchema,
     expenseRequest: cashExpenseRequestSchema.nullable(),
   }).refine(result => Boolean(result.movement) !== Boolean(result.expenseRequest)), {
+    expectedShiftId,
     type,
     amount,
     description,

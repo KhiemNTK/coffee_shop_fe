@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useOutletContext } from 'react-router-dom'
 import type { Session } from '../auth/session'
 import { PaymentGatewayPanel } from '../invoices/components/payment-gateway-panel'
+import { ShiftRequiredLink } from '../cashier-shifts/components/shift-required-link'
 import { AlertCircle, CheckCircle2, CreditCard, DollarSign, QrCode } from 'lucide-react'
 import { ApiError, errorMessage } from '../../shared/api/client'
 import { formatPrice, moneySchema } from '../menu/menu.api'
@@ -90,6 +91,7 @@ export function CheckoutModal({
   const [method, setMethod] = useState<'CASH' | 'CARD' | 'DIGITAL'>('CASH')
   const [tendered, setTendered] = useState(totalAmount)
   const [error, setError] = useState<string | null>(null)
+  const [shiftRequired, setShiftRequired] = useState(false)
   const [invoice, setInvoice] = useState<Invoice | null>(null)
 
   const canDigital = [
@@ -129,6 +131,7 @@ export function CheckoutModal({
     flight.current = true
     setSubmittedDirect(payload)
     setError(null)
+    setShiftRequired(false)
     setPending(true)
     try {
       const result = await checkoutInvoice(payload)
@@ -136,6 +139,7 @@ export function CheckoutModal({
       completed.current = true
       onCompleted(result)
     } catch (err) {
+      setShiftRequired(err instanceof ApiError && err.code === 'CASHIER_SHIFT_REQUIRED')
       setError(errorMessage(err))
       if (
         err instanceof ApiError &&
@@ -283,6 +287,8 @@ export function CheckoutModal({
               <span>{error}</span>
             </div>
           )}
+
+          {shiftRequired && <ShiftRequiredLink />}
 
           {billableItems.length > 0 && (
             <fieldset
