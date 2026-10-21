@@ -59,16 +59,17 @@
 
 .staff-workspace,
 body:has(.staff-workspace) > dialog {
-  --color-primary: #116149;
-  --color-primary-hover: #0c4937;
-  --color-background: #f5f7f6;
-  --color-foreground: #172b2a;
-  --color-muted: #edf1ef;
-  --color-muted-foreground: #5b6b72;
-  --color-secondary: #edf1ef;
-  --color-border: #e2e9e6;
+  --color-primary: #08634e;
+  --color-primary-hover: #074b3d;
+  --color-background: #f5f8f8;
+  --color-foreground: #101d38;
+  --color-card: #ffffff;
+  --color-muted: #f1f5f4;
+  --color-muted-foreground: #66768b;
+  --color-secondary: #f1f5f4;
+  --color-border: #e2eae8;
   --color-input: #c7d3ce;
-  --color-ring: #115d4a;
+  --color-ring: #22a589;
   color: var(--color-foreground);
 }
 
@@ -77,27 +78,28 @@ body:has(.staff-workspace) > dialog {
 }
 
 .staff-sidebar {
-  background: #07362f;
-  border-color: #22473f;
+  background: #062f29;
+  border-color: #0a433a;
 }
 
 .staff-sidebar nav a {
-  min-height: 44px;
-  color: #d3e5de;
+  min-height: 40px;
+  border-radius: 9px;
+  color: #f1f9f6;
 }
 
 .staff-sidebar nav a:hover {
-  background: #16483b;
+  background: #0e4b40;
   color: white;
 }
 
 .staff-sidebar nav a[aria-current='page'] {
-  background: #135e4e;
+  background: #0a6555;
   color: white;
 }
 
 .staff-sidebar .staff-sidebar-label {
-  color: #a6c2b8;
+  color: #a9c8bf;
 }
 
 .staff-workspace [data-badge='success'],

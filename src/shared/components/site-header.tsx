@@ -2,19 +2,9 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useLocation } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import {
-  CalendarDays,
-  Coffee,
-  Heart,
-  Menu,
-  Search,
-  ShoppingBag,
-  UserRound,
-  X,
-} from 'lucide-react'
+import { CalendarDays, Coffee, Heart, Menu, Search, ShoppingBag, UserRound, X } from 'lucide-react'
 import { getPublicStore } from '@/features/menu/menu.api'
-import { hasAuthSession } from '@/shared/api/client'
-import { useSession } from '@/features/auth/session'
+import { useCustomer } from '@/features/customers/customers.api'
 import { buttonVariants } from '@/shared/ui/button-variants'
 import { useCart } from '@/features/online-orders/cart'
 import { cn } from '@/shared/ui/utils'
@@ -31,8 +21,7 @@ export function SiteHeader({
   const { totalCount } = useCart()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
-  const session = useSession(hasAuthSession())
-  const employee = session.data?.employee
+  const customer = useCustomer()
 
   const store = useQuery({
     queryKey: ['public-store'],
@@ -51,14 +40,14 @@ export function SiteHeader({
     <header className="sticky top-0 z-40 border-b border-border/80 bg-card/95 backdrop-blur-md shadow-xs">
       <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 sm:px-6">
         {/* Left: Mobile Hamburger & Brand Logo */}
-        <div className="flex items-center gap-2">
+        <div className="flex min-w-0 items-center gap-2">
           <button
             type="button"
             onClick={() => setMobileMenuOpen((open) => !open)}
             aria-expanded={mobileMenuOpen}
             aria-controls="mobile-navigation-menu"
             aria-label={mobileMenuOpen ? 'Đóng menu điều hướng' : 'Mở menu điều hướng'}
-            className="md:hidden p-2 -ml-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors cursor-pointer"
+            className="lg:hidden p-2 -ml-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors cursor-pointer"
           >
             {mobileMenuOpen ? (
               <X className="h-5 w-5" aria-hidden="true" />
@@ -69,7 +58,7 @@ export function SiteHeader({
 
           <Link
             to="/"
-            className="min-w-0 flex items-center gap-2.5 text-lg font-bold text-primary group"
+            className="min-w-0 flex items-center gap-2 text-sm sm:text-lg font-bold text-primary group"
           >
             <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-xs group-hover:scale-105 transition-transform">
               <Coffee className="h-5 w-5" />
@@ -81,10 +70,7 @@ export function SiteHeader({
         </div>
 
         {/* Desktop Nav Links */}
-        <nav
-          className="hidden md:flex items-center gap-6"
-          aria-label={translate('menu.mainNav')}
-        >
+        <nav className="hidden lg:flex items-center gap-6" aria-label={translate('menu.mainNav')}>
           {navLinks.map((link) =>
             link.isRoute ? (
               <Link
@@ -117,7 +103,7 @@ export function SiteHeader({
             to="/wishlist"
             aria-label={translate('wishlist.title')}
             title={translate('wishlist.title')}
-            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:text-primary hover:bg-muted/60 transition-colors"
+            className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:text-primary hover:bg-muted/60 transition-colors"
           >
             <Heart className="h-4.5 w-4.5" aria-hidden="true" />
           </Link>
@@ -178,31 +164,18 @@ export function SiteHeader({
             </span>
           </Link>
 
-          {/* Staff Login / Profile */}
-          {employee ? (
-            <Link
-              to="/staff"
-              className={cn(
-                buttonVariants({ variant: 'outline', size: 'sm' }),
-                'gap-1.5 font-semibold text-primary border-primary/30 hover:bg-primary/10 rounded-full h-8 sm:h-9 px-2.5 sm:px-3.5',
-              )}
-              title={employee.fullName}
-            >
-              <UserRound className="h-4 w-4 text-primary" />
-              <span className="hidden xl:inline font-semibold">
-                {employee.fullName}
-              </span>
-            </Link>
-          ) : (
-            <Link
-              to="/sign-in"
-              className="p-2 text-muted-foreground hover:text-foreground rounded-lg hover:bg-muted/60 transition-colors"
-              title="Đăng nhập nhân viên"
-              aria-label="Đăng nhập nhân viên"
-            >
-              <UserRound className="h-5 w-5" />
-            </Link>
-          )}
+          <Link
+            to={customer.data ? '/account' : '/customer/sign-in'}
+            state={customer.data ? undefined : { returnTo: location.pathname + location.search }}
+            aria-label={translate(customer.data ? 'customer.account' : 'wishlist.customerSignIn')}
+            title={translate(customer.data ? 'customer.account' : 'wishlist.customerSignIn')}
+            className="inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center gap-2 rounded-md px-2 text-primary hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+          >
+            <UserRound className="h-5 w-5" aria-hidden="true" />
+            <span className="hidden xl:inline text-sm font-semibold">
+              {translate(customer.data ? 'customer.account' : 'auth.signIn')}
+            </span>
+          </Link>
         </div>
       </div>
 
@@ -210,7 +183,7 @@ export function SiteHeader({
       {mobileMenuOpen && (
         <div
           id="mobile-navigation-menu"
-          className="md:hidden border-t border-border bg-card/98 px-4 py-4 backdrop-blur-lg shadow-lg animate-in slide-in-from-top-2 duration-200"
+          className="lg:hidden border-t border-border bg-card/98 px-4 py-4 backdrop-blur-lg shadow-lg animate-in slide-in-from-top-2 duration-200"
         >
           <nav className="flex flex-col space-y-1">
             {navLinks.map((link) =>
@@ -241,6 +214,20 @@ export function SiteHeader({
             )}
 
             <div className="pt-3 border-t border-border/80 mt-2 flex flex-col gap-2">
+              <Link
+                to={customer.data ? '/account' : '/customer/sign-in'}
+                onClick={() => setMobileMenuOpen(false)}
+                className="px-3 py-3 text-sm font-semibold text-primary"
+              >
+                {translate(customer.data ? 'customer.account' : 'wishlist.customerSignIn')}
+              </Link>
+              <Link
+                to="/staff"
+                onClick={() => setMobileMenuOpen(false)}
+                className="px-3 py-3 text-sm text-muted-foreground"
+              >
+                {translate('customer.staffPortal')}
+              </Link>
               <Link
                 to="/reservations"
                 onClick={() => setMobileMenuOpen(false)}

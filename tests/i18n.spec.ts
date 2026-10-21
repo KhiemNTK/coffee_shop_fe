@@ -14,10 +14,10 @@ const future = '2099-01-01T00:00:00Z'
 
 test.beforeEach(async ({ page }) => {
   await page.route('**/api/v1/**', (route) =>
-    route.fulfill({ status: 503, json: { message: 'Unmocked API' } })
+    route.fulfill({ status: 503, json: { message: 'Unmocked API' } }),
   )
   await page.route('**/api/v1/online-orders/availability', (route) =>
-    route.fulfill({ json: envelope(onlineAvailability) })
+    route.fulfill({ json: envelope(onlineAvailability) }),
   )
   await page.route('**/api/v1/menu/public/store', (route) =>
     route.fulfill({
@@ -26,10 +26,10 @@ test.beforeEach(async ({ page }) => {
         address: '3 Phố Nhổn, Từ Liêm, Hà Nội',
         phone: '0973336850',
       }),
-    })
+    }),
   )
   await page.route('**/api/v1/menu/public/categories', (route) =>
-    route.fulfill({ json: envelope([{ id: categoryId, name: 'Cà phê' }]) })
+    route.fulfill({ json: envelope([{ id: categoryId, name: 'Cà phê' }]) }),
   )
   await page.route('**/api/v1/menu/public/items?*', (route) =>
     route.fulfill({
@@ -47,7 +47,7 @@ test.beforeEach(async ({ page }) => {
         totalPages: 1,
         currentPage: 1,
       }),
-    })
+    }),
   )
 })
 
@@ -88,13 +88,13 @@ test('English is lazy, persists on reload, sends language headers and never tran
   })
   await page.goto('/')
   await expect(
-    page.getByRole('heading', { name: 'Thực đơn đồ uống & Bánh', exact: true })
+    page.getByRole('heading', { name: 'Thực đơn đồ uống & Bánh', exact: true }),
   ).toBeVisible()
   expect(englishRequests).toHaveLength(0)
   await page.getByRole('combobox', { name: 'Ngôn ngữ', exact: true }).selectOption('en')
   await expect(page.locator('html')).toHaveAttribute('lang', 'en')
   await expect(
-    page.getByRole('heading', { name: 'Drinks & Bakery Menu', exact: true })
+    page.getByRole('heading', { name: 'Drinks & Bakery Menu', exact: true }),
   ).toBeVisible()
   await expect(page.getByRole('article')).toContainText('Thực đơn')
   await expect(page.getByRole('article')).toContainText('30,000.25 ₫')
@@ -132,20 +132,23 @@ test('unsupported preferences and blocked storage cannot break startup or switch
   await page.getByRole('combobox', { name: 'Ngôn ngữ', exact: true }).selectOption('en')
   await expect(page.locator('html')).toHaveAttribute('lang', 'en')
   await expect(
-    page.getByRole('heading', { name: 'Drinks & Bakery Menu', exact: true })
+    page.getByRole('heading', { name: 'Drinks & Bakery Menu', exact: true }),
   ).toBeVisible()
 })
 
 test('switching languages never resubmits an uncertain order and keeps the same idempotency payload', async ({
   page,
 }) => {
+  await page.route('**/api/v1/customers/me', (route) =>
+    route.fulfill({ status: 401, json: { message: 'Guest' } }),
+  )
   await page.route(
     'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit',
     (route) =>
       route.fulfill({
         contentType: 'application/javascript',
         body: `let count = 0; window.turnstile = { render(element, options) { const id = 'captcha-' + (++count); options.callback(id); return id }, remove() {} };`,
-      })
+      }),
   )
   await page.route('**/api/v1/online-orders/requests/reorder-template', (route) =>
     route.fulfill({
@@ -168,7 +171,7 @@ test('switching languages never resubmits an uncertain order and keeps the same 
           ],
         },
       }),
-    })
+    }),
   )
   const bodies: Record<string, unknown>[] = []
   const languages: string[] = []
@@ -186,7 +189,7 @@ test('switching languages never resubmits an uncertain order and keeps the same 
     return bodies.length === 1 ? route.abort() : route.fulfill({ json: envelope(created) })
   })
   await page.route('**/api/v1/online-orders/requests/status', (route) =>
-    route.fulfill({ json: envelope({ ...created, isPaid: false, orderItems: [] }) })
+    route.fulfill({ json: envelope({ ...created, isPaid: false, orderItems: [] }) }),
   )
   await page.goto('/reorder#requestId=old-order&key=' + 'b'.repeat(64))
   await page.getByRole('button', { name: 'Kiểm tra đơn và giá hiện tại', exact: true }).click()
@@ -194,7 +197,7 @@ test('switching languages never resubmits an uncertain order and keeps the same 
   await page.getByLabel('Điện thoại', { exact: true }).fill('0901234567')
   await page.getByRole('button', { name: 'Đặt lại · Trả khi nhận', exact: true }).click()
   await expect(
-    page.getByRole('button', { name: 'Kiểm tra lại đơn đã gửi', exact: true })
+    page.getByRole('button', { name: 'Kiểm tra lại đơn đã gửi', exact: true }),
   ).toBeEnabled()
   await page.getByRole('combobox', { name: 'Ngôn ngữ', exact: true }).selectOption('en')
   await expect(page.getByLabel('Pickup name', { exact: true })).toHaveValue('Khách kiểm thử')

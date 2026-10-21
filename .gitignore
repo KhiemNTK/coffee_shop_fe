@@ -31,3 +31,4 @@ test-results/
 .runtime/
 .agents/
 docs/*
+!docs/customer-account.md
