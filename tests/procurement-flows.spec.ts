@@ -2,7 +2,7 @@ import { expect, test, type Page } from '@playwright/test'
 import { defaultMockAdminAuth, defaultMockAdminEmployee, envelope } from './helpers.js'
 
 const supplier = { id: 'supplier-fixture', code: 'SUP', name: 'Fixture supplier' }
-const item = { id: 'item-fixture', name: 'Fixture beans', stock: '1.2345', averageUnitCost: '20000',
+const item = { id: 'item-fixture', name: 'Fixture beans', stock: '1.2345', reservedStock: '0', averageUnitCost: '20000',
   categoryId: 'category-fixture', unitId: 'unit-fixture', unit: { id: 'unit-fixture', name: 'kg' } }
 const receipt = { id: 'receipt-fixture', receiptNumber: 'PR-FIXTURE', supplierId: supplier.id,
   supplier, status: 'DRAFT', totalAmount: '115000', receivedAt: '2026-10-04T01:00:00.000Z', note: 'Old note',

@@ -21,6 +21,7 @@ export const inventoryItemSchema = z.object({
   id: z.string(),
   name: z.string(),
   stock: quantitySchema,
+  reservedStock: quantitySchema,
   reorderPoint: quantitySchema.nullable().optional(),
   averageUnitCost: moneySchema.nullable().optional(),
   categoryId: z.string(),

@@ -12,6 +12,8 @@ import {
 import { formatPrice } from '../../menu/menu.api'
 import { errorMessage } from '../../../shared/api/client'
 import { Button, Dialog, Input } from '../../../shared/ui'
+import { formatQuantity, quantityDifference, quantitySchema } from '../quantity'
+import { useTranslation } from 'react-i18next'
 
 // ============================================================================
 // MODAL: IMPORT INVENTORY
@@ -57,14 +59,14 @@ export function ImportDialog({
   }
 
   return (
-    <Dialog open onClose={onClose} maxWidth="sm">
+    <Dialog open onClose={onClose} maxWidth="sm" showCloseButton={false}>
       <form onSubmit={handleSubmit} className="p-5 space-y-4">
         <div className="flex items-center justify-between border-b border-border pb-3">
           <div className="flex items-center gap-2">
             <ArrowDownToLine className="h-5 w-5 text-emerald-700" />
             <h3 className="font-bold text-base text-foreground">Nhập kho nguyên liệu</h3>
           </div>
-          <Button variant="ghost" size="sm" onClick={onClose} className="h-7 w-7 p-0 rounded-full">
+          <Button type="button" aria-label="Đóng" variant="ghost" size="sm" onClick={onClose} className="h-7 w-7 p-0 rounded-full">
             <X className="h-4 w-4" />
           </Button>
         </div>
@@ -119,7 +121,7 @@ export function ImportDialog({
         </div>
 
         {error && (
-          <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-lg text-xs text-destructive">
+          <div role="alert" className="p-3 bg-destructive/10 border border-destructive/20 rounded-lg text-xs text-destructive">
             {error}
           </div>
         )}
@@ -150,6 +152,8 @@ export function ExportDialog({
   onClose: () => void
   onSuccess: () => void
 }) {
+  const { t } = useTranslation()
+  const available = quantityDifference(item.stock, item.reservedStock)
   const [quantity, setQuantity] = useState('1')
   const [note, setNote] = useState('Xuất dùng pha chế quầy Barista')
   const [error, setError] = useState<string | null>(null)
@@ -167,26 +171,27 @@ export function ExportDialog({
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
-    if (Number(quantity) <= 0) {
+    const parsed = quantitySchema.safeParse(quantity.trim())
+    if (!parsed.success || parsed.data.startsWith('-') || quantityDifference(parsed.data, '0') === '0.0000') {
       setError('Số lượng xuất phải lớn hơn 0.')
       return
     }
-    if (Number(quantity) > Number(item.stock)) {
-      setError(`Số lượng xuất không thể lớn hơn tồn kho hiện tại (${item.stock}).`)
+    if (quantityDifference(available, parsed.data).startsWith('-')) {
+      setError(t('inventory.exportExceedsAvailable', { quantity: formatQuantity(available) }))
       return
     }
     mutation.mutate()
   }
 
   return (
-    <Dialog open onClose={onClose} maxWidth="sm">
+    <Dialog open onClose={onClose} maxWidth="sm" showCloseButton={false}>
       <form onSubmit={handleSubmit} className="p-5 space-y-4">
         <div className="flex items-center justify-between border-b border-border pb-3">
           <div className="flex items-center gap-2">
             <ArrowUpFromLine className="h-5 w-5 text-amber-700" />
             <h3 className="font-bold text-base text-foreground">Xuất kho / Báo hao hụt</h3>
           </div>
-          <Button variant="ghost" size="sm" onClick={onClose} className="h-7 w-7 p-0 rounded-full">
+          <Button type="button" aria-label="Đóng" variant="ghost" size="sm" onClick={onClose} className="h-7 w-7 p-0 rounded-full">
             <X className="h-4 w-4" />
           </Button>
         </div>
@@ -194,7 +199,7 @@ export function ExportDialog({
         <div className="p-3 bg-stone-50 border border-stone-200 rounded-lg text-xs space-y-1">
           <p className="font-semibold text-foreground">Mặt hàng: {item.name}</p>
           <p className="text-muted-foreground">
-            Tồn khả dụng: {Number(item.stock).toLocaleString('vi-VN')} {item.unit?.name}
+            {t('inventory.availableStock')}: {formatQuantity(available)} {item.unit?.name}
           </p>
         </div>
 
@@ -224,7 +229,7 @@ export function ExportDialog({
         </div>
 
         {error && (
-          <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-lg text-xs text-destructive">
+          <div role="alert" className="p-3 bg-destructive/10 border border-destructive/20 rounded-lg text-xs text-destructive">
             {error}
           </div>
         )}
@@ -296,11 +301,11 @@ export function CreateItemDialog({
   }
 
   return (
-    <Dialog open onClose={onClose} maxWidth="sm">
+    <Dialog open onClose={onClose} maxWidth="sm" showCloseButton={false}>
       <form onSubmit={handleSubmit} className="p-5 space-y-4">
         <div className="flex items-center justify-between border-b border-border pb-3">
           <h3 className="font-bold text-base text-foreground">Thêm nguyên vật liệu mới</h3>
-          <Button variant="ghost" size="sm" onClick={onClose} className="h-7 w-7 p-0 rounded-full">
+          <Button type="button" aria-label="Đóng" variant="ghost" size="sm" onClick={onClose} className="h-7 w-7 p-0 rounded-full">
             <X className="h-4 w-4" />
           </Button>
         </div>
@@ -452,11 +457,11 @@ export function EditItemDialog({
   }
 
   return (
-    <Dialog open onClose={onClose} maxWidth="sm">
+    <Dialog open onClose={onClose} maxWidth="sm" showCloseButton={false}>
       <form onSubmit={handleSubmit} className="p-5 space-y-4">
         <div className="flex items-center justify-between border-b border-border pb-3">
           <h3 className="font-bold text-base text-foreground">Chỉnh sửa nguyên vật liệu</h3>
-          <Button variant="ghost" size="sm" onClick={onClose} className="h-7 w-7 p-0 rounded-full">
+          <Button type="button" aria-label="Đóng" variant="ghost" size="sm" onClick={onClose} className="h-7 w-7 p-0 rounded-full">
             <X className="h-4 w-4" />
           </Button>
         </div>

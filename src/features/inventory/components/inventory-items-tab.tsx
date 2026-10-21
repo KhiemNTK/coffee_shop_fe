@@ -9,6 +9,7 @@ import { formatPrice } from '../../menu/menu.api'
 import { formatQuantity, quantityDifference } from '../quantity'
 import { errorMessage } from '../../../shared/api/client'
 import { AdminTable, Badge, Button, Input } from '../../../shared/ui'
+import { useTranslation } from 'react-i18next'
 
 interface InventoryItemsTabProps {
   keyword: string
@@ -65,6 +66,7 @@ export function InventoryItemsTab({
   canUpdate,
   canDelete,
 }: InventoryItemsTabProps) {
+  const { t } = useTranslation()
   return (
     <div className="space-y-4">
       <section aria-label="Bộ lọc tồn kho" className="admin-toolbar">
@@ -128,7 +130,7 @@ export function InventoryItemsTab({
             }}
             className="h-4 w-4 accent-primary"
           />
-          Chỉ hiển thị hàng sắp hết
+          {t('inventory.physicalLowFilter')}
         </label>
       </section>
       {isError ? (
@@ -153,22 +155,25 @@ export function InventoryItemsTab({
                 <th>Tên nguyên liệu</th>
                 <th>Nhóm kho</th>
                 <th>Đơn vị</th>
-                <th className="text-right">Tồn kho hiện tại</th>
+                <th className="text-right">{t('inventory.physicalStock')}</th>
+                <th className="text-right">{t('inventory.reservedStock')}</th>
+                <th className="text-right">{t('inventory.availableStock')}</th>
                 <th className="text-right">Ngưỡng tối thiểu</th>
                 <th className="text-right">Giá vốn BQ</th>
-                <th>Tình trạng</th>
+                <th>{t('inventory.physicalStatus')}</th>
                 <th className="text-right">Thao tác</th>
               </tr>
             </thead>
             <tbody>
               {!data.list.length ? (
                 <tr>
-                  <td colSpan={8} className="text-center text-muted-foreground">
+                  <td colSpan={10} className="text-center text-muted-foreground">
                     Không tìm thấy nguyên vật liệu nào.
                   </td>
                 </tr>
               ) : (
                 data.list.map((item) => {
+                  const available = quantityDifference(item.stock, item.reservedStock)
                   const hasThreshold =
                     item.reorderPoint != null &&
                     quantityDifference(item.reorderPoint, '0') !== '0.0000'
@@ -187,6 +192,13 @@ export function InventoryItemsTab({
                       </td>
                       <td className="whitespace-nowrap text-right font-semibold tabular-nums">
                         {formatQuantity(item.stock)} {item.unit?.name}
+                      </td>
+                      <td className="whitespace-nowrap text-right tabular-nums">
+                        {formatQuantity(item.reservedStock)} {item.unit?.name}
+                      </td>
+                      <td className="whitespace-nowrap text-right font-semibold tabular-nums">
+                        {formatQuantity(available)} {item.unit?.name}
+                        {available === '0.0000' && <span className="block text-xs text-destructive">{t('inventory.fullyCommitted')}</span>}
                       </td>
                       <td className="text-right text-muted-foreground">
                         {item.reorderPoint != null ? formatQuantity(item.reorderPoint) : '—'}
