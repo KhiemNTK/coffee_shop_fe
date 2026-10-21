@@ -39,7 +39,9 @@ export function KitchenTicketCard({
     remainingMs > 0 &&
     remainingMs <= dueSoonWindowSeconds * 1000
   const minutes = Math.max(1, Math.ceil(Math.abs(remainingMs) / 60_000))
-  const timeLabel = open
+  const timeLabel = ticket.isScheduled
+    ? translate('ops.kitchen.startsAt', { time: formatStoreDateTime(ticket.availableAt ?? ticket.createdAt) })
+    : open
     ? minutes >= 120
       ? formatStoreDateTime(ticket.dueAt)
       : translate(overdue ? 'ops.kitchen.late' : 'ops.kitchen.remaining', { minutes })
@@ -119,7 +121,7 @@ export function KitchenTicketCard({
               <Button
                 type="button"
                 onClick={() => onAdvanceItemStatus(item)}
-                disabled={isUpdatingStatus}
+                disabled={isUpdatingStatus || ticket.isScheduled}
                 className="min-h-11 w-full text-sm"
               >
                 Bắt đầu làm
@@ -129,7 +131,7 @@ export function KitchenTicketCard({
               <Button
                 type="button"
                 onClick={() => onAdvanceItemStatus(item)}
-                disabled={isUpdatingStatus}
+                disabled={isUpdatingStatus || ticket.isScheduled}
                 className="min-h-11 w-full text-sm"
               >
                 Xong món

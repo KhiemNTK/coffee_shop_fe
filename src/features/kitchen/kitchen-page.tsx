@@ -35,6 +35,8 @@ export default function KitchenPage() {
   const [params, setParams] = useSearchParams()
   const selectedStationId = z.uuid().safeParse(params.get('stationId')).data ?? ''
   const includeCompleted = params.get('includeCompleted') === 'true'
+  const includeScheduled = params.get('includeScheduled') === 'true'
+  const [displayIncludeScheduled, setDisplayIncludeScheduled] = useOptimistic(includeScheduled)
   const [displayIncludeCompleted, setDisplayIncludeCompleted] = useOptimistic(includeCompleted)
   const page =
     z.coerce
@@ -97,10 +99,10 @@ export default function KitchenPage() {
   const ticketsQuery = useQuery({
     queryKey: [
       ...kitchenKeys.tickets(employee.id),
-      { stationId: selectedStationId, includeCompleted, page },
+      { stationId: selectedStationId, includeCompleted, includeScheduled, page },
     ],
     queryFn: ({ signal }) =>
-      getKitchenTickets(selectedStationId || undefined, includeCompleted, signal, page),
+      getKitchenTickets({ stationId: selectedStationId || undefined, includeCompleted, includeScheduled, page }, signal),
     enabled: canReadTickets && !management,
     refetchInterval: sseStatus !== 'connected' ? 6_000 : 60_000,
   })
@@ -142,6 +144,7 @@ export default function KitchenPage() {
   function advanceItemStatus(item: KitchenTicketItem) {
     if (flight.current || reviewRequired || ticketsQuery.isFetching || !ticketsQuery.isSuccess)
       return
+    if (ticketsQuery.data?.list.some(ticket => ticket.isScheduled && ticket.items.some(line => line.id === item.id))) return
     if (!canUpdateStatus) {
       setActionError('Bạn không có quyền cập nhật trạng thái món (/orders_items_update-status).')
       return
@@ -289,6 +292,11 @@ export default function KitchenPage() {
               setFilters({ stationId: id || null, page: null })
             }}
             includeCompleted={displayIncludeCompleted}
+            includeScheduled={displayIncludeScheduled}
+            onToggleIncludeScheduled={(value) => startTransition(() => {
+              setDisplayIncludeScheduled(value)
+              setFilters({ includeScheduled: value ? 'true' : null, page: null })
+            })}
             onToggleIncludeCompleted={(value) => {
               startTransition(() => {
                 setDisplayIncludeCompleted(value)

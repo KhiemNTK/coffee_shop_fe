@@ -66,14 +66,14 @@ export function KitchenTicketsGrid({
       key: 'waiting',
       label: translate('ops.kitchen.waiting'),
       icon: Clock,
-      tickets: tickets.filter((ticket) => ticket.state === 'PENDING'),
+      tickets: tickets.filter((ticket) => !ticket.isScheduled && ticket.state === 'PENDING'),
       color: 'bg-muted/60',
     },
     {
       key: 'cooking',
       label: translate('ops.kitchen.cooking'),
       icon: Flame,
-      tickets: tickets.filter((ticket) => ticket.state === 'IN_PROGRESS'),
+      tickets: tickets.filter((ticket) => !ticket.isScheduled && ticket.state === 'IN_PROGRESS'),
       color: 'bg-sky-50/70',
     },
     {
@@ -82,16 +82,21 @@ export function KitchenTicketsGrid({
       icon: CheckCircle2,
       tickets: tickets.filter(
         (ticket) =>
-          ticket.state === 'COMPLETED' && ticket.items.some((item) => item.serveStatus === 'READY'),
+          !ticket.isScheduled &&
+          ticket.state === 'COMPLETED' &&
+          ticket.items.some((item) => item.serveStatus === 'READY'),
       ),
       color: 'bg-emerald-50/60',
     },
   ]
   const finished = tickets.filter(
     (ticket) =>
-      ticket.state === 'CANCELLED' ||
-      (ticket.state === 'COMPLETED' && !ticket.items.some((item) => item.serveStatus === 'READY')),
+      !ticket.isScheduled &&
+      (ticket.state === 'CANCELLED' ||
+        (ticket.state === 'COMPLETED' &&
+          !ticket.items.some((item) => item.serveStatus === 'READY'))),
   )
+  const scheduled = tickets.filter((ticket) => ticket.isScheduled)
   const card = (ticket: KitchenTicket) => (
     <KitchenTicketCard
       key={ticket.id}
@@ -104,6 +109,17 @@ export function KitchenTicketsGrid({
   )
   return (
     <div className="operations-board space-y-5">
+      {scheduled.length > 0 && (
+        <section
+          aria-label={translate('ops.kitchen.scheduled')}
+          className="space-y-3 border-b border-border pb-4"
+        >
+          <h2 className="text-sm font-semibold">
+            {translate('ops.kitchen.scheduled')} ({scheduled.length})
+          </h2>
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">{scheduled.map(card)}</div>
+        </section>
+      )}
       <div className="operations-lanes">
         {lanes.map(({ key, label, icon: Icon, tickets: list, color }) => (
           <section key={key} aria-label={label} className={`min-w-0 space-y-3 p-3 ${color}`}>

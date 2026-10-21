@@ -127,14 +127,18 @@ export async function getKitchenWorkload(
 }
 
 export async function getKitchenTickets(
-  stationId?: string,
-  includeCompleted = false,
+  { stationId, includeCompleted = false, includeScheduled = false, page = 1 }: {
+    stationId?: string
+    includeCompleted?: boolean
+    includeScheduled?: boolean
+    page?: number
+  } = {},
   signal?: AbortSignal,
-  page = 1,
 ) {
   const params = new URLSearchParams({
     itemPerPage: '100',
     includeCompleted: includeCompleted ? 'true' : 'false',
+    includeScheduled: includeScheduled ? 'true' : 'false',
     page: String(page),
   })
   if (stationId) params.set('stationId', stationId)

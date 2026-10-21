@@ -9,6 +9,8 @@ interface KitchenStationsBarProps {
   onSelectStation: (id: string) => void
   includeCompleted: boolean
   onToggleIncludeCompleted: (val: boolean) => void
+  includeScheduled: boolean
+  onToggleIncludeScheduled: (val: boolean) => void
 }
 
 export function KitchenStationsBar({
@@ -17,6 +19,8 @@ export function KitchenStationsBar({
   onSelectStation,
   includeCompleted,
   onToggleIncludeCompleted,
+  includeScheduled,
+  onToggleIncludeScheduled,
 }: KitchenStationsBarProps) {
   const { t: translate } = useTranslation()
   return (
@@ -61,15 +65,25 @@ export function KitchenStationsBar({
           ))}
         </div>
 
-        <label className="flex shrink-0 items-center gap-2 whitespace-nowrap text-xs font-medium text-foreground cursor-pointer select-none">
-          <input
-            type="checkbox"
-            checked={includeCompleted}
-            onChange={(e) => onToggleIncludeCompleted(e.target.checked)}
-            className="rounded border-border text-primary focus:ring-primary"
-          />
-          {translate('ops.kitchen.showFinished')}
-        </label>
+        <div className="flex flex-wrap gap-3">
+          <label className="flex min-h-11 items-center gap-2 text-xs font-medium cursor-pointer">
+            <input
+              type="checkbox"
+              checked={includeScheduled}
+              onChange={(event) => onToggleIncludeScheduled(event.target.checked)}
+            />
+            {translate('ops.kitchen.showScheduled')}
+          </label>
+          <label className="flex shrink-0 items-center gap-2 whitespace-nowrap text-xs font-medium text-foreground cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={includeCompleted}
+              onChange={(e) => onToggleIncludeCompleted(e.target.checked)}
+              className="rounded border-border text-primary focus:ring-primary"
+            />
+            {translate('ops.kitchen.showFinished')}
+          </label>
+        </div>
       </div>
     </section>
   )
