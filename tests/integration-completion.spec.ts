@@ -281,6 +281,30 @@ test('an uncertain promoted checkout freezes its quote and retries the same inte
   expect(writes[1]).toEqual(writes[0])
 })
 
+for (const canOpen of [true, false]) {
+  test(`a missing cashier shift offers recovery only with opening permissions (${canOpen})`, async ({ page }) => {
+    await pos(page)
+    await staff(page, [
+      '/orders_sessions_read', '/invoices_create',
+      ...(canOpen ? ['/cashier-shifts_current', '/cashier-shifts_open', '/funds_read'] : []),
+    ])
+    await page.reload()
+    let writes = 0
+    await page.route('**/api/v1/invoices/checkout', route => {
+      writes++
+      return route.fulfill({ status: 409, json: { code: 'CASHIER_SHIFT_REQUIRED' } })
+    })
+    await page.getByRole('button', { name: /^Thanh toán \(/ }).click()
+    const dialog = page.getByRole('dialog')
+    await dialog.getByRole('button', { name: 'Xác nhận thanh toán tiền mặt' }).click()
+    await expect(dialog.getByRole('alert')).toContainText('Bạn chưa có ca thu ngân đang mở')
+    const link = dialog.getByRole('link', { name: 'Mở ca ngay', exact: true })
+    if (canOpen) await expect(link).toHaveAttribute('href', '/staff/shifts?tab=current')
+    else await expect(link).toHaveCount(0)
+    expect(writes).toBe(1)
+  })
+}
+
 test('a failed quote cannot enable partial payment', async ({ page }) => {
   await pos(page)
   await page.route('**/api/v1/invoices/quote', (route) =>

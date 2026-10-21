@@ -3,7 +3,7 @@ import { defaultMockAdminAuth, defaultMockAdminEmployee, envelope } from './help
 
 const menu = { id: '30000000-0000-4000-8000-000000000001', name: 'Fixture drink', price: '35000', isAvailable: true }
 const unit = { id: '40000000-0000-4000-8000-000000000001', name: 'kg' }
-const bean = { id: '50000000-0000-4000-8000-000000000001', name: 'Fixture beans', stock: '1.2345', unit, categoryId: 'category', unitId: unit.id }
+const bean = { id: '50000000-0000-4000-8000-000000000001', name: 'Fixture beans', stock: '1.2345', reservedStock: '0', unit, categoryId: 'category', unitId: unit.id }
 const milk = { ...bean, id: '50000000-0000-4000-8000-000000000002', name: 'Fixture milk' }
 const recipe = { id: menu.id, name: menu.name, ingredients: [{ inventoryItemId: bean.id, quantity: '0.1234', inventoryItem: bean }] }
 const options = { id: menu.id, name: menu.name, optionGroups: [{ name: 'Topping', minSelected: 0, maxSelected: 1,

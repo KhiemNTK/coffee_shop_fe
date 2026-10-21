@@ -79,6 +79,7 @@ async function fixture(page: Page, state: 'data' | 'empty' | 'error' = 'data') {
     id,
     name: 'Hạt cà phê kiểm thử',
     stock: '1.2345',
+    reservedStock: '0',
     reorderPoint: '2.0000',
     averageUnitCost: '320000.25',
     categoryId: id,

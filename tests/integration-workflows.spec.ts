@@ -15,7 +15,7 @@ async function staff(page: Page, permissions: string[]) {
 async function inventory(page: Page) {
   await page.route('**/api/v1/inventory/**', route => {
     const path = new URL(route.request().url()).pathname
-    return route.fulfill({ json: envelope(paged(path.endsWith('/items') ? [{ id: itemId, name: 'Cà phê hạt', stock: '10.1234', categoryId: id, unitId: id, unit: { id, name: 'kg' } }] : [])) })
+    return route.fulfill({ json: envelope(paged(path.endsWith('/items') ? [{ id: itemId, name: 'Cà phê hạt', stock: '10.1234', reservedStock: '0', categoryId: id, unitId: id, unit: { id, name: 'kg' } }] : [])) })
   })
 }
 

@@ -518,9 +518,50 @@ test.describe('Cash & Shifts Management Feature (Slice 1)', () => {
       await expect.poll(() => bodies.length).toBe(2)
       expect(bodies[1]).toEqual(bodies[0])
       expect(bodies[0]?.idempotencyKey).toBeTruthy()
+      if (kind !== 'open') expect(bodies[0]?.expectedShiftId).toBe(mockOpenShift.id)
       await expect(recovery).toHaveCount(0)
     })
   }
+
+  test('legacy cash commands without a shift target stay blocked and are not discarded', async ({ page }) => {
+    const key = `coffee-shop:pending:private:intent:${employee.id}:cashier-shift.command`
+    await page.addInitScript(({ key }) => sessionStorage.setItem(key, JSON.stringify({
+      payload: { kind: 'CLOSE', reportedEndingCash: '1450000', closingNote: '' },
+      createdAt: Date.now(), idempotencyKey: crypto.randomUUID(), uncertain: true,
+    })), { key })
+    let writes = 0
+    await page.route('**/api/v1/cashier-shifts/current/close', route => { writes++; return route.abort() })
+    await page.goto('/staff/shifts')
+    const recovery = page.getByRole('region', { name: 'Phục hồi giao dịch ca' })
+    await expect(recovery).toContainText('Yêu cầu cũ thiếu mã ca')
+    await expect(recovery.getByRole('button', { name: 'Kiểm tra lại cùng yêu cầu' })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: 'Xác nhận mở ca thu ngân' })).toHaveCount(0)
+    expect(await page.evaluate(key => sessionStorage.getItem(key), key)).not.toBeNull()
+    expect(writes).toBe(0)
+  })
+
+  test('an uncertain movement keeps its original shift target after a new shift opens', async ({ page }) => {
+    const bodies: Record<string, unknown>[] = []
+    await page.route('**/api/v1/cashier-shifts/current/transactions', route => {
+      bodies.push(route.request().postDataJSON())
+      return bodies.length === 1 ? route.abort() : route.fulfill({ status: 409, json: { code: 'CASHIER_SHIFT_CHANGED' } })
+    })
+    await page.goto('/staff/shifts')
+    await page.getByRole('button', { name: 'Thêm giao dịch' }).click()
+    await page.getByPlaceholder('Ví dụ: 100000').fill('50000')
+    await page.getByPlaceholder('Ví dụ: Mua đá lạnh khẩn cấp...').fill('Original shift movement')
+    await page.getByRole('button', { name: 'Lưu giao dịch' }).click()
+    const recovery = page.getByRole('region', { name: 'Phục hồi giao dịch ca' })
+    await expect(recovery.getByRole('status')).toContainText('Chưa xác nhận được')
+    await page.route('**/api/v1/cashier-shifts/current', route => route.fulfill({ json: envelope({ ...mockOpenShift, id: 'new-shift-id' }) }))
+    await page.reload()
+    await recovery.getByRole('button', { name: 'Kiểm tra lại cùng yêu cầu' }).click()
+    await expect.poll(() => bodies.length).toBe(2)
+    expect(bodies[1]).toEqual(bodies[0])
+    expect(bodies[1]?.expectedShiftId).toBe(mockOpenShift.id)
+    await expect(recovery).toContainText('Ca thu ngân đã thay đổi')
+    await expect(page.getByPlaceholder('Ví dụ: 100000')).toHaveCount(0)
+  })
 
   test('failed current-shift reads never expose a fresh opening command', async ({ page }) => {
     await page.route('**/api/v1/cashier-shifts/current', route => route.fulfill({ status: 503, json: { message: 'Unavailable' } }))

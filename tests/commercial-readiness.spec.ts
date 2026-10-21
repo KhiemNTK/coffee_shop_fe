@@ -95,7 +95,7 @@ test('retains tracked orders when ordering again and exports a private pickup re
 
 test('inventory editor treats measurement unit as immutable', async ({ page }) => {
   await staff(page, ['/inventory_read', '/inventory_update'])
-  const item = { id, name: 'Coffee beans', stock: '1000', categoryId: otherId, unitId: id, unit: { id, name: 'g' }, category: { id: otherId, name: 'Beans' } }
+  const item = { id, name: 'Coffee beans', stock: '1000', reservedStock: '0', categoryId: otherId, unitId: id, unit: { id, name: 'g' }, category: { id: otherId, name: 'Beans' } }
   await page.route('**/api/v1/inventory/items?*', route => route.fulfill({ json: envelope(paged([item])) }))
   await page.route('**/api/v1/inventory/reorder-alerts', route => route.fulfill({ json: envelope(paged([])) }))
   await page.route('**/api/v1/inventory/categories?*', route => route.fulfill({ json: envelope(paged([item.category])) }))
