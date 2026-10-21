@@ -6,6 +6,7 @@ import { collectOnlineOrder, trackOnlineOrder, type FulfillmentOrder } from '../
 import { decimalAmount, minorAmount } from '../cart'
 import { formatPrice } from '../../../shared/lib/format'
 import { ApiError, errorMessage } from '../../../shared/api/client'
+import { ShiftRequiredLink } from '../../cashier-shifts/components/shift-required-link'
 import {
   Button,
   Dialog,
@@ -271,6 +272,7 @@ export function CollectOrderModal({
               {error}
             </p>
           )}
+          {mutation.error instanceof ApiError && mutation.error.code === 'CASHIER_SHIFT_REQUIRED' && <ShiftRequiredLink />}
           {submitted && !mutation.isPending && (
             <>
               <p className="text-sm">

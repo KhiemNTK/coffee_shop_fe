@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next'
 import { useEffect, useRef, useState } from 'react'
-import { useQuery, useMutation } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { Link } from 'react-router-dom'
 import {
   AlertCircle,
   ArrowLeft,
@@ -16,18 +17,23 @@ import {
 import { formatPrice, type MenuItem } from '../../menu/menu.api'
 import {
   createOnlineOrder,
+  findPendingOnlineOrderKey,
   getPickupSlots,
   getOnlineAvailability,
+  quoteOnlineOrder,
+  type OnlineOrderQuote,
   type CreateOnlineOrderPayload,
 } from '../online-orders.api'
 import { getOnlineRecommendations } from '../../recommendations/recommendations.api'
 import { Turnstile } from '../../auth/turnstile'
 import { ApiError, errorMessage } from '../../../shared/api/client'
-import { findPendingOperationKey } from '../../../shared/api/idempotency'
+import { customerKey, useCustomer } from '../../customers/customers.api'
 import { Button, Dialog, Input, cn } from '../../../shared/ui'
 import { ItemCustomizerModal } from './item-customizer-modal'
+import { BasketQuotePreview } from './basket-quote-preview'
 import { cartSubtotal, type CartItem } from '../cart'
 import { formatLineAmount } from '../../../shared/lib/format'
+import { minorAmount } from '../../../shared/lib/money'
 import { displayLocale } from '../../../shared/i18n/index.js'
 import { formatStoreDateTime } from '../../../shared/lib/store-time.js'
 import type { OrderAccess } from '../order-access-storage'
@@ -50,13 +56,15 @@ export function CartCheckoutDrawer({
   onOrderCreated: (order: OrderAccess) => void
 }) {
   const { t: translate } = useTranslation()
+  const customer = useCustomer()
+  const client = useQueryClient()
 
   // Form fields
   const [pickupName, setPickupName] = useState('')
   const [phoneNumber, setPhoneNumber] = useState('')
   const [isScheduled, setIsScheduled] = useState(false)
   const [todayStr] = useState(() =>
-    new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Ho_Chi_Minh' })
+    new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Ho_Chi_Minh' }),
   )
   const [pickupDate, setPickupDate] = useState(todayStr)
   const [selectedSlotTime, setSelectedSlotTime] = useState<string>('')
@@ -71,11 +79,21 @@ export function CartCheckoutDrawer({
   const [extras, setExtras] = useState<CartItem[]>([])
   const [customizingItem, setCustomizingItem] = useState<MenuItem | null>(null)
   const [submittedPayload, setSubmittedPayload] = useState<CreateOnlineOrderPayload | null>(null)
+  const [quote, setQuote] = useState<{ basketKey: string; data: OnlineOrderQuote } | null>(null)
+  const [checkingQuote, setCheckingQuote] = useState(false)
   const flight = useRef(false)
   const uncertain = useRef(false)
   const errorRef = useRef<HTMLDivElement>(null)
   const checkoutCart = [...cart, ...extras]
-  const subtotal = cartSubtotal(checkoutCart)
+  const items = checkoutCart.map((item) => ({
+    menuItemId: item.menuItem.id,
+    quantity: item.quantity,
+    note: item.note || undefined,
+    optionIds: item.selectedOptionIds.length ? item.selectedOptionIds : undefined,
+  }))
+  const basketKey = JSON.stringify(items)
+  const activeQuote = quote?.basketKey === basketKey ? quote.data : null
+  const subtotal = activeQuote?.subtotal ?? cartSubtotal(checkoutCart)
   const locked = submittedPayload !== null
   const availability = useQuery({
     queryKey: ['online-availability'],
@@ -101,11 +119,7 @@ export function CartCheckoutDrawer({
 
   const reviewMutation = useMutation({
     mutationFn: async (payload: CreateOnlineOrderPayload) => {
-      const pendingKey = await findPendingOperationKey(
-        '/online-orders/requests',
-        { ...payload },
-        false
-      )
+      const pendingKey = await findPendingOnlineOrderKey(payload)
       const clientRequestId = pendingKey ?? crypto.randomUUID()
       const menuItemIds = [...new Set(payload.items.map((item) => item.menuItemId))]
       let recommendations: MenuItem[] = []
@@ -118,7 +132,11 @@ export function CartCheckoutDrawer({
           warning = translate('takeaway.recommendationsUnavailable')
         }
       }
-      return { payload: { ...payload, clientRequestId }, recommendations, warning }
+      return {
+        payload: { ...payload, clientRequestId },
+        recommendations,
+        warning,
+      }
     },
     onSuccess: setReview,
     onError: (error) => setFormError(errorMessage(error)),
@@ -136,14 +154,24 @@ export function CartCheckoutDrawer({
 
   const submitMutation = useMutation({
     mutationFn: (payload: CreateOnlineOrderPayload) => createOnlineOrder(payload),
-    onSuccess: (data) => {
+    onSuccess: (data, payload) => {
+      if (payload.expectedCustomerId)
+        void client.invalidateQueries({
+          queryKey: ['customer', payload.expectedCustomerId, 'orders'],
+        })
       onOrderCreated({
+        customerId: payload.expectedCustomerId,
         requestId: data.requestId,
         accessToken: data.accessToken,
         accessExpiresAt: data.accessExpiresAt,
       })
     },
     onError: (err) => {
+      if (
+        err instanceof ApiError &&
+        (err.status === 401 || err.code === 'CUSTOMER_SESSION_CHANGED')
+      )
+        void client.invalidateQueries({ queryKey: customerKey })
       setFormError(errorMessage(err))
       if (
         !uncertain.current &&
@@ -167,6 +195,10 @@ export function CartCheckoutDrawer({
     e.preventDefault()
     if (flight.current) return
     setFormError(null)
+    if (customer.isPending || customer.isError) {
+      setFormError(translate('customer.checkSession'))
+      return
+    }
 
     if (review) {
       if (turnstileSiteKey && !turnstileToken) return
@@ -174,20 +206,15 @@ export function CartCheckoutDrawer({
       const payload = submittedPayload ?? {
         ...review.payload,
         maxSubtotal: subtotal,
-        items: checkoutCart.map((item) => ({
-          menuItemId: item.menuItem.id,
-          quantity: item.quantity,
-          note: item.note || undefined,
-          optionIds: item.selectedOptionIds.length ? item.selectedOptionIds : undefined,
-        })),
+        items,
+      }
+      if ((payload.expectedCustomerId ?? null) !== (customer.data?.id ?? null)) {
+        setFormError(translate('wishlist.accountChanged'))
+        return
       }
       flight.current = true
       try {
-        const pendingKey = await findPendingOperationKey(
-          '/online-orders/requests',
-          { ...payload },
-          false
-        )
+        const pendingKey = await findPendingOnlineOrderKey(payload)
         uncertain.current ||= Boolean(pendingKey)
         if (pendingKey && pendingKey !== payload.clientRequestId) {
           setSubmittedPayload({ ...payload, clientRequestId: pendingKey })
@@ -195,10 +222,36 @@ export function CartCheckoutDrawer({
           flight.current = false
           return
         }
+        // An uncertain write must replay its original body, even if stock or prices changed.
+        if (!uncertain.current) {
+          setCheckingQuote(true)
+          const currentQuote = await quoteOnlineOrder(payload.items)
+          if (
+            currentQuote.items.length !== payload.items.length ||
+            currentQuote.items.some((line, index) =>
+              line.menuItemId !== payload.items[index]?.menuItemId ||
+              line.quantity !== payload.items[index]?.quantity)
+          ) throw new ApiError(502, 'CLIENT_RESPONSE_INVALID')
+          if (!currentQuote.canFulfill) {
+            setFormError(translate('error.insufficientStock'))
+            flight.current = false
+            return
+          }
+          setQuote({ basketKey, data: currentQuote })
+          const pricesChanged = currentQuote.items.some((line, index) =>
+            minorAmount(line.unitPrice) !== minorAmount(activeQuote?.items[index]?.unitPrice ?? checkoutCart[index]!.calculatedUnitPrice))
+          if (pricesChanged || minorAmount(currentQuote.subtotal) !== minorAmount(payload.maxSubtotal!)) {
+            setFormError(translate('takeaway.priceChanged'))
+            flight.current = false
+            return
+          }
+        }
       } catch (error) {
         setFormError(errorMessage(error))
         flight.current = false
         return
+      } finally {
+        setCheckingQuote(false)
       }
       if (!uncertain.current && !intakeReady) {
         setFormError(translate('takeaway.intakePaused'))
@@ -206,7 +259,10 @@ export function CartCheckoutDrawer({
         return
       }
       setSubmittedPayload(payload)
-      submitMutation.mutate({ ...payload, turnstileToken: turnstileToken || undefined })
+      submitMutation.mutate({
+        ...payload,
+        turnstileToken: turnstileToken || undefined,
+      })
       return
     }
 
@@ -238,6 +294,7 @@ export function CartCheckoutDrawer({
     }
 
     const payload: CreateOnlineOrderPayload = {
+      ...(customer.data ? { expectedCustomerId: customer.data.id } : {}),
       pickupName: cleanName,
       phoneNumber: cleanPhone,
       pickupAt: isScheduled ? selectedSlotTime : undefined,
@@ -281,7 +338,7 @@ export function CartCheckoutDrawer({
             variant="ghost"
             size="sm"
             aria-label={translate('takeaway.closeCart')}
-            disabled={submitMutation.isPending || reviewMutation.isPending || locked}
+            disabled={submitMutation.isPending || reviewMutation.isPending || checkingQuote || locked}
             onClick={closeDrawer}
             className="h-11 w-11 p-0 rounded-full"
           >
@@ -292,9 +349,42 @@ export function CartCheckoutDrawer({
         {/* Scrollable Content */}
         <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
           <div className="p-4 sm:p-5 space-y-6 flex-1 min-h-0 overflow-y-auto">
+            <section
+              className="space-y-2 border-b border-border pb-4 text-sm"
+              aria-label={translate('customer.account')}
+            >
+              {customer.isPending ? (
+                <p role="status">{translate('common.loading')}</p>
+              ) : customer.isError ? (
+                <>
+                  <p role="alert">{translate('customer.checkSession')}</p>
+                  <Button type="button" variant="outline" onClick={() => void customer.refetch()}>
+                    {translate('common.retry')}
+                  </Button>
+                </>
+              ) : customer.data ? (
+                <p className="break-words">
+                  {translate('customer.checkoutAccount')}{' '}
+                  <span className="break-all font-medium">{customer.data.email}</span>
+                </p>
+              ) : (
+                <>
+                  <p className="text-muted-foreground">{translate('customer.guestCheckout')}</p>
+                  {!review && (
+                    <Link
+                      to="/customer/sign-in"
+                      state={{ returnTo: '/cart' }}
+                      className="inline-flex min-h-11 items-center font-medium text-primary underline"
+                    >
+                      {translate('wishlist.customerSignIn')}
+                    </Link>
+                  )}
+                </>
+              )}
+            </section>
             {/* Cart Items List */}
             <div className="space-y-3">
-              {checkoutCart.map((item) => (
+              {checkoutCart.map((item, index) => (
                 <div
                   key={item.id}
                   className="bg-stone-50 border border-stone-200 rounded-xl p-3.5 space-y-2.5"
@@ -308,7 +398,7 @@ export function CartCheckoutDrawer({
                         {item.menuItem.name}
                       </h4>
                       <p className="text-xs font-semibold text-brand-700 mt-0.5 tabular-nums">
-                        {formatPrice(String(item.calculatedUnitPrice))}
+                        {formatPrice(activeQuote?.items[index]?.unitPrice ?? item.calculatedUnitPrice)}
                       </p>
                       {item.selectedOptionIds.length > 0 && (
                         <p className="break-words text-xs text-muted-foreground line-clamp-2">
@@ -380,12 +470,14 @@ export function CartCheckoutDrawer({
                     )}
 
                     <span className="text-sm font-bold text-brand-800 tabular-nums shrink-0">
-                      {formatLineAmount(item.calculatedUnitPrice, item.quantity)}
+                      {formatLineAmount(activeQuote?.items[index]?.unitPrice ?? item.calculatedUnitPrice, item.quantity)}
                     </span>
                   </div>
                 </div>
               ))}
             </div>
+
+            {!locked && <BasketQuotePreview items={items} />}
 
             {/* Customer form */}
             {!review && (
@@ -456,6 +548,7 @@ export function CartCheckoutDrawer({
                 {availability.data && !availability.data.acceptingOrders && (
                   <p role="status" className="text-sm">
                     {translate('takeaway.intakePaused')}
+                    {availability.data.reason && <span className="block break-words">{availability.data.reason}</span>}
                   </p>
                 )}
                 {availability.data?.acceptingOrders && !availability.data.acceptingAsap && (
@@ -549,7 +642,7 @@ export function CartCheckoutDrawer({
                                   timeZone: 'Asia/Ho_Chi_Minh',
                                   hour: '2-digit',
                                   minute: '2-digit',
-                                }
+                                },
                               )
                               const isSelected = selectedSlotTime === slot.pickupAt
                               const isFull = slot.remaining <= 0
@@ -566,7 +659,7 @@ export function CartCheckoutDrawer({
                                       ? 'bg-brand-800 text-white border-brand-800 shadow-xs'
                                       : isFull
                                         ? 'bg-stone-100 text-stone-400 border-stone-200 cursor-not-allowed'
-                                        : 'bg-white text-foreground border-stone-200 hover:border-brand-500'
+                                        : 'bg-white text-foreground border-stone-200 hover:border-brand-500',
                                   )}
                                 >
                                   <span>{timeStr}</span>
@@ -629,13 +722,13 @@ export function CartCheckoutDrawer({
                 )}
                 {!locked &&
                   review.recommendations.some(
-                    (item) => !checkoutCart.some((line) => line.menuItem.id === item.id)
+                    (item) => !checkoutCart.some((line) => line.menuItem.id === item.id),
                   ) && (
                     <section aria-label={translate('takeaway.addOn')} className="space-y-2">
                       <h4 className="text-sm font-semibold">{translate('takeaway.addOn')}</h4>
                       {review.recommendations
                         .filter(
-                          (item) => !checkoutCart.some((line) => line.menuItem.id === item.id)
+                          (item) => !checkoutCart.some((line) => line.menuItem.id === item.id),
                         )
                         .map((item) => (
                           <div
@@ -653,6 +746,7 @@ export function CartCheckoutDrawer({
                               aria-label={`${translate('common.add')} ${item.name}`}
                               disabled={
                                 submitMutation.isPending ||
+                                checkingQuote ||
                                 checkoutCart.length >= 20 ||
                                 checkoutCart.reduce((sum, line) => sum + line.quantity, 0) >= 50
                               }
@@ -673,7 +767,7 @@ export function CartCheckoutDrawer({
                         type="button"
                         variant="ghost"
                         size="sm"
-                        disabled={submitMutation.isPending}
+                        disabled={submitMutation.isPending || checkingQuote}
                         onClick={() =>
                           setExtras((previous) => previous.filter((line) => line.id !== item.id))
                         }
@@ -688,7 +782,7 @@ export function CartCheckoutDrawer({
                   <Button
                     type="button"
                     variant="outline"
-                    disabled={submitMutation.isPending}
+                    disabled={submitMutation.isPending || checkingQuote}
                     onClick={() => {
                       onAppendItems(extras)
                       setReview(null)
@@ -748,14 +842,17 @@ export function CartCheckoutDrawer({
               size="lg"
               className="w-full font-bold"
               disabled={
+                customer.isPending ||
+                customer.isError ||
                 submitMutation.isPending ||
+                checkingQuote ||
                 reviewMutation.isPending ||
                 (!locked && !intakeReady) ||
                 cart.length === 0 ||
                 Boolean(review && turnstileSiteKey && !turnstileToken) ||
                 (import.meta.env.PROD && !turnstileSiteKey)
               }
-              isLoading={submitMutation.isPending || reviewMutation.isPending}
+              isLoading={submitMutation.isPending || reviewMutation.isPending || checkingQuote}
             >
               <ArrowRight size={16} aria-hidden="true" />
               {review

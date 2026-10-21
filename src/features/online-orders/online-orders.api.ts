@@ -1,8 +1,9 @@
 import { z } from 'zod'
-import { apiGet, apiMutate } from '../../shared/api/client'
-import { apiIdempotentMutate } from '../../shared/api/idempotency'
+import { apiGet, apiMutate, ApiError } from '../../shared/api/client'
+import { apiIdempotentMutate, findPendingOperationKey } from '../../shared/api/idempotency'
 import { moneySchema } from '../menu/menu.api'
 import { selectedOptionsSchema } from '../../shared/api/order-options'
+import { publicFeedbackSchema } from './feedback'
 
 export const onlineOrderKeys = {
   all: (employeeId: string) => ['private', employeeId, 'online-orders'] as const,
@@ -19,6 +20,39 @@ export const onlineAvailabilitySchema = z.object({
 })
 export function getOnlineAvailability(signal?: AbortSignal) {
   return apiGet('/online-orders/availability', onlineAvailabilitySchema, signal)
+}
+
+const intakeStatusSchema = z.object({
+  acceptingOrders: z.boolean(),
+  pausedUntil: z.iso.datetime({ offset: true }).nullable(),
+  reason: z.string().nullable(),
+  version: z.number().int().nonnegative(),
+})
+export function getOnlineIntake(signal?: AbortSignal) {
+  return apiGet('/online-orders/intake', intakeStatusSchema, signal, true)
+}
+export function updateOnlineIntake(payload: {
+  expectedVersion: number
+  pausedUntil: string | null
+  reason: string | null
+}) {
+  return apiMutate('/online-orders/intake', 'PUT', intakeStatusSchema, payload)
+}
+
+const onlineQuoteSchema = z.object({
+  canFulfill: z.boolean(),
+  reason: z.string().nullable(),
+  subtotal: moneySchema,
+  items: z.array(z.object({
+    menuItemId: z.uuid(),
+    quantity: z.number().int().positive(),
+    unitPrice: moneySchema,
+    selectedOptions: selectedOptionsSchema,
+  })).min(1).max(20),
+})
+export type OnlineOrderQuote = z.infer<typeof onlineQuoteSchema>
+export function quoteOnlineOrder(items: PublicOrderItemPayload[], signal?: AbortSignal) {
+  return apiMutate('/online-orders/quote', 'POST', onlineQuoteSchema, { items }, signal, false)
 }
 
 // --- SCHEMAS ---
@@ -85,6 +119,7 @@ export const TrackOrderResponseSchema = z.object({
     .optional(),
   isPaid: z.boolean(),
   orderItems: z.array(TrackOrderItemSchema),
+  feedback: z.array(publicFeedbackSchema.extend({ invoiceId: z.uuid() })).default([]),
   telegram: z.object({ enabled: z.boolean(), subscribed: z.boolean() }).optional(),
 })
 
@@ -186,6 +221,7 @@ export interface PublicOrderItemPayload {
 }
 
 export interface CreateOnlineOrderPayload {
+  expectedCustomerId?: string
   clientRequestId?: string
   pickupName: string
   phoneNumber: string
@@ -202,16 +238,35 @@ export function getPickupSlots(date: string, signal?: AbortSignal) {
     `/online-orders/pickup-slots?date=${encodeURIComponent(date)}`,
     PickupSlotsResponseSchema,
     signal ?? new AbortController().signal,
-    false // public endpoint
+    false, // public endpoint
   )
 }
 
 export function createOnlineOrder(payload: CreateOnlineOrderPayload, signal?: AbortSignal) {
   return apiIdempotentMutate(
-    '/online-orders/requests',
+    payload.expectedCustomerId ? '/customers/orders' : '/online-orders/requests',
     CreateOrderResponseSchema,
     { ...payload },
-    { keyField: 'clientRequestId', authenticated: false, signal }
+    { keyField: 'clientRequestId', authenticated: false, signal },
+  )
+}
+
+export async function findPendingOnlineOrderKey(payload: CreateOnlineOrderPayload) {
+  const { expectedCustomerId, ...guestPayload } = payload
+  if (
+    expectedCustomerId &&
+    (await findPendingOperationKey('/online-orders/requests', guestPayload, false))
+  )
+    throw new ApiError(
+      409,
+      'CLIENT_PENDING_OPERATION',
+      undefined,
+      'Có đơn khách vãng lai chưa được xác nhận. Kiểm tra đơn đã gửi trước khi tạo đơn bằng tài khoản.',
+    )
+  return findPendingOperationKey(
+    expectedCustomerId ? '/customers/orders' : '/online-orders/requests',
+    { ...payload },
+    false,
   )
 }
 
@@ -222,12 +277,13 @@ export const reorderTemplateSchema = z.object({
       quantity: z.number().int().positive(),
       note: z.string().optional(),
       optionIds: z.array(z.string()),
-    })
+    }),
   ),
   quote: z.object({
     previousSubtotal: moneySchema,
     currentSubtotal: moneySchema.nullable(),
     canSubmit: z.boolean(),
+    stockAvailable: z.boolean().optional(),
     lines: z.array(
       z.object({
         lineNumber: z.number().int(),
@@ -237,7 +293,7 @@ export const reorderTemplateSchema = z.object({
         currentUnitPrice: moneySchema.nullable(),
         available: z.boolean(),
         reason: z.string().nullable(),
-      })
+      }),
     ),
   }),
 })
@@ -248,17 +304,21 @@ export function getReorderTemplate(requestId: string, reorderToken: string) {
     reorderTemplateSchema,
     { requestId, reorderToken },
     undefined,
-    false
+    false,
   )
 }
 export function issueReorderKey(requestId: string, accessToken: string) {
   return apiMutate(
     '/online-orders/requests/reorder-key',
     'POST',
-    z.object({ requestId: z.string(), reorderToken: z.string(), expiresAt: z.string() }),
+    z.object({
+      requestId: z.string(),
+      reorderToken: z.string(),
+      expiresAt: z.string(),
+    }),
     { requestId, accessToken },
     undefined,
-    false
+    false,
   )
 }
 export function revokeReorderKey(requestId: string, reorderToken: string) {
@@ -268,7 +328,7 @@ export function revokeReorderKey(requestId: string, reorderToken: string) {
     z.object({ revoked: z.literal(true) }),
     { requestId, reorderToken },
     undefined,
-    false
+    false,
   )
 }
 
@@ -279,7 +339,7 @@ export function trackOnlineOrder(requestId: string, accessToken: string, signal?
     TrackOrderResponseSchema,
     { requestId, accessToken },
     signal,
-    false // public endpoint
+    false, // public endpoint
   )
 }
 
@@ -290,7 +350,7 @@ export function cancelOnlineOrder(requestId: string, accessToken: string, signal
     CancelOrderResponseSchema,
     { requestId, accessToken },
     signal,
-    false // public endpoint
+    false, // public endpoint
   )
 }
 
@@ -301,7 +361,7 @@ export function getTelegramLink(requestId: string, accessToken: string, signal?:
     TelegramLinkResponseSchema,
     { requestId, accessToken },
     signal,
-    false // public endpoint
+    false, // public endpoint
   )
 }
 
@@ -309,7 +369,7 @@ export function getTelegramLink(requestId: string, accessToken: string, signal?:
 
 export function getPendingOnlineOrders(
   query: { page?: number; itemPerPage?: number } = {},
-  signal?: AbortSignal
+  signal?: AbortSignal,
 ) {
   const params = new URLSearchParams()
   if (query.page) params.set('page', String(query.page))
@@ -319,13 +379,13 @@ export function getPendingOnlineOrders(
     `/online-orders/requests${qs}`,
     PendingOrdersPageSchema,
     signal ?? new AbortController().signal,
-    true
+    true,
   )
 }
 
 export function getFulfillmentOnlineOrders(
   query: { page?: number; itemPerPage?: number; overdueOnly?: boolean } = {},
-  signal?: AbortSignal
+  signal?: AbortSignal,
 ) {
   const params = new URLSearchParams()
   if (query.page) params.set('page', String(query.page))
@@ -336,7 +396,7 @@ export function getFulfillmentOnlineOrders(
     `/online-orders/requests/fulfillment${qs}`,
     FulfillmentOrdersPageSchema,
     signal ?? new AbortController().signal,
-    true
+    true,
   )
 }
 
@@ -349,7 +409,7 @@ export function acceptOnlineOrder(id: string) {
       status: z.string(),
       orderSessionId: z.string(),
     }),
-    {}
+    {},
   )
 }
 
@@ -361,7 +421,7 @@ export function rejectOnlineOrder(id: string, reason: string) {
       requestId: z.string(),
       status: z.string(),
     }),
-    { reason }
+    { reason },
   )
 }
 
@@ -371,12 +431,12 @@ export function collectOnlineOrder(
     accessToken: string
     amountTendered: string
     idempotencyKey?: string
-  }
+  },
 ) {
   return apiIdempotentMutate(
     `/online-orders/requests/${encodeURIComponent(id)}/collect`,
     CollectOrderResponseSchema,
-    { ...payload }
+    { ...payload },
   )
 }
 
@@ -389,7 +449,7 @@ export function cancelAcceptedOnlineOrder(id: string, reason: string) {
       status: z.string(),
       noShowAt: z.string().nullable().optional(),
     }),
-    { reason }
+    { reason },
   )
 }
 
@@ -402,6 +462,6 @@ export function markOnlineOrderNoShow(id: string) {
       status: z.string(),
       noShowAt: z.string(),
     }),
-    {}
+    {},
   )
 }

@@ -6,6 +6,7 @@ import { RefreshCw, Send } from 'lucide-react'
 import { Button, Textarea } from '../../shared/ui'
 import { errorMessage } from '../../shared/api/client'
 import { getPickupStatus, parsePickupLink, submitPickupFeedback } from './pickup.api'
+import { FeedbackResponse } from './components/feedback-response'
 import { formatStoreDateTime } from '../../shared/lib/store-time.js'
 
 const labels = {
@@ -36,6 +37,7 @@ export default function PickupPage() {
   const feedback = useMutation({
     mutationFn: () => submitPickupFeedback(credential!, rating, comment),
     gcTime: 0,
+    onSuccess: () => { void status.refetch() },
   })
   return (
     <main className="mx-auto min-h-dvh max-w-2xl space-y-6 px-4 py-8">
@@ -83,7 +85,8 @@ export default function PickupPage() {
               </p>
             </section>
           )}
-          {status.data?.status === 'COLLECTED' && !status.isError && (
+          {status.data?.feedback && !status.isError && <FeedbackResponse feedback={status.data.feedback} />}
+          {status.data?.status === 'COLLECTED' && !status.isError && !status.data.feedback && (
             <section className="space-y-3 border-t border-border pt-5">
               <h2 className="text-lg font-semibold">{translate('takeaway.feedbackHeading')}</h2>
               {feedback.isSuccess ? (

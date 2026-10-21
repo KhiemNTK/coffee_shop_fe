@@ -36,6 +36,9 @@ const created = {
 }
 
 test.beforeEach(async ({ context }) => {
+  await context.route('**/api/v1/customers/me', (route) =>
+    route.fulfill({ status: 401, json: { message: 'Guest' } }),
+  )
   await context.route(
     'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit',
     (route) =>
@@ -47,16 +50,24 @@ test.beforeEach(async ({ context }) => {
         const id = 'fixture-' + (++attempt); options.callback(id); return id;
       }, remove() {}
     };`,
-      })
+      }),
   )
 })
 
 async function openCheckout(page: Page, availability = onlineAvailability) {
+  await page.route('**/api/v1/online-orders/quote', (route) => {
+    const { items } = route.request().postDataJSON() as { items: { menuItemId: string; quantity: number }[] }
+    const lines = items.map(line => ({ ...line, unitPrice: line.menuItemId === anchor.id ? '35000.10' : '15000.75', selectedOptions: [] }))
+    const total = lines.reduce((sum, line) => sum + BigInt(line.unitPrice.replace('.', '')) * BigInt(line.quantity), 0n)
+    return route.fulfill({ json: envelope({ canFulfill: true, reason: null,
+      subtotal: `${total / 100n}.${String(total % 100n).padStart(2, '0')}`, items: lines,
+    }) })
+  })
   await page.route('**/api/v1/online-orders/availability', (route) =>
-    route.fulfill({ json: envelope(availability) })
+    route.fulfill({ json: envelope(availability) }),
   )
   await page.route('**/api/v1/menu/public/categories', (route) =>
-    route.fulfill({ json: envelope([category]) })
+    route.fulfill({ json: envelope([category]) }),
   )
   await page.route('**/api/v1/menu/public/items?*', (route) =>
     route.fulfill({
@@ -66,7 +77,7 @@ async function openCheckout(page: Page, availability = onlineAvailability) {
         totalPages: 1,
         totalItems: 1,
       }),
-    })
+    }),
   )
   await page.route('**/api/v1/online-orders/requests/status', (route) =>
     route.fulfill({
@@ -75,7 +86,7 @@ async function openCheckout(page: Page, availability = onlineAvailability) {
         isPaid: false,
         orderItems: [],
       }),
-    })
+    }),
   )
   await page.goto('/order')
   await page.getByRole('button', { name: 'Chọn món', exact: true }).click()
@@ -107,7 +118,7 @@ test('online offer options, exact price and checkout share one request identity'
   await page.getByRole('button', { name: 'Thêm Cake fixture', exact: true }).click()
   await expect(page.getByRole('button', { name: 'Large', exact: false })).toHaveAttribute(
     'aria-pressed',
-    'true'
+    'true',
   )
   await page.getByRole('button', { name: 'Thêm vào giỏ', exact: true }).click()
   await expect(page.getByText('50.000,85', { exact: false })).toBeVisible()
@@ -118,8 +129,10 @@ test('online offer options, exact price and checkout share one request identity'
   expect(submitBox).not.toBeNull()
   expect(submitBox!.y + submitBox!.height).toBeLessThanOrEqual(page.viewportSize()!.height)
   await page.screenshot({ path: info.outputPath('online-recommendation-checkout.png') })
+  const quotedRequest = page.waitForRequest(request => new URL(request.url()).pathname.endsWith('/online-orders/quote'))
   await page.getByRole('button', { name: 'Gửi đơn mang đi', exact: true }).click()
   await expect.poll(() => orders.length).toBe(1)
+  expect((await quotedRequest).postDataJSON().items).toEqual(orders[0]!.items)
   expect(offers).toHaveLength(1)
   expect(orders[0]!.clientRequestId).toBe(offers[0]!.clientRequestId)
   expect(offers[0]!.menuItemIds).toEqual([anchor.id])
@@ -196,6 +209,7 @@ test('uncertain response freezes checkout and explicitly retries the identical p
   await expect(page.getByRole('button', { name: 'Đóng giỏ hàng', exact: true })).toBeDisabled()
   await page.keyboard.press('Escape')
   await expect(page.getByRole('dialog')).toBeVisible()
+  await page.route('**/api/v1/online-orders/quote', () => { throw new Error('An uncertain retry must not re-quote') })
   await page.getByRole('button', { name: 'Gửi lại đơn', exact: true }).click()
   await expect.poll(() => orders.length).toBe(2)
   expect({ ...orders[1], turnstileToken: orders[0]!.turnstileToken }).toEqual(orders[0])
@@ -203,10 +217,97 @@ test('uncertain response freezes checkout and explicitly retries the identical p
   expect(offers).toBe(1)
 })
 
+test('final basket quote blocks an out-of-stock order before a write', async ({ page }) => {
+  let orders = 0
+  await page.route('**/api/v1/recommendations/online', route => route.fulfill({ json: envelope({ variant: 'CONTROL', recommendations: [] }) }))
+  await page.route('**/api/v1/online-orders/requests', route => { orders++; return route.fulfill({ json: envelope(created) }) })
+  await openCheckout(page)
+  await page.route('**/api/v1/online-orders/quote', route => route.fulfill({ json: envelope({
+    canFulfill: false, reason: 'INVENTORY_INSUFFICIENT_STOCK', subtotal: '35000.10',
+    items: [{ menuItemId: anchor.id, quantity: 1, unitPrice: '35000.10', selectedOptions: [] }],
+  }) }))
+  await page.getByRole('button', { name: 'Xem lại đơn', exact: true }).click()
+  await page.getByRole('button', { name: 'Gửi đơn mang đi', exact: true }).click()
+  await expect(page.getByRole('alert')).toContainText('nguyên liệu')
+  await expect(page.getByRole('button', { name: 'Chỉnh sửa đơn', exact: true })).toBeEnabled()
+  expect(orders).toBe(0)
+})
+
+test('a changed quote updates line prices and needs explicit confirmation before ordering', async ({ page }) => {
+  const orders: Record<string, unknown>[] = []
+  await page.route('**/api/v1/recommendations/online', route => route.fulfill({ json: envelope({ variant: 'CONTROL', recommendations: [] }) }))
+  await page.route('**/api/v1/online-orders/requests', route => { orders.push(route.request().postDataJSON()); return route.fulfill({ json: envelope(created) }) })
+  await openCheckout(page)
+  await page.route('**/api/v1/online-orders/quote', route => route.fulfill({ json: envelope({
+    canFulfill: true, reason: null, subtotal: '40000.00',
+    items: [{ menuItemId: anchor.id, quantity: 1, unitPrice: '40000.00', selectedOptions: [] }],
+  }) }))
+  await page.getByRole('button', { name: 'Xem lại đơn', exact: true }).click()
+  const submit = page.getByRole('button', { name: 'Gửi đơn mang đi', exact: true })
+  await submit.click()
+  await expect(page.getByRole('alert')).toContainText('Giá món đã thay đổi')
+  expect(orders).toHaveLength(0)
+  await expect(page.getByRole('dialog').getByText('40.000', { exact: false }).first()).toBeVisible()
+  await submit.click()
+  await expect.poll(() => orders.length).toBe(1)
+  expect(orders[0]?.maxSubtotal).toBe('40000.00')
+})
+
+test('basket preview coalesces quantity changes and ignores contact edits', async ({ page }, info) => {
+  await openCheckout(page)
+  const quotes: { items: { menuItemId: string; quantity: number }[] }[] = []
+  await page.route('**/api/v1/online-orders/quote', route => {
+    const body = route.request().postDataJSON()
+    quotes.push(body)
+    return route.fulfill({ json: envelope({ canFulfill: false, reason: 'INVENTORY_INSUFFICIENT_STOCK', subtotal: '140000.40',
+      items: [{ menuItemId: anchor.id, quantity: body.items[0].quantity, unitPrice: '35000.10', selectedOptions: [] }],
+    }) })
+  })
+  const increase = page.getByRole('button', { name: /^Tăng số lượng/ })
+  await increase.click()
+  await increase.click()
+  await increase.click()
+  await expect(page.getByText('Giỏ hàng hiện chưa đủ nguyên liệu.', { exact: false })).toBeVisible()
+  expect(quotes).toHaveLength(1)
+  expect(quotes[0]?.items).toEqual([{ menuItemId: anchor.id, quantity: 4 }])
+  await page.getByRole('textbox', { name: 'Tên người nhận' }).fill('Updated recipient')
+  await page.getByRole('textbox', { name: 'Số điện thoại' }).fill('0909999999')
+  // Cross the debounce boundary to prove contact edits schedule no further quote.
+  await page.waitForTimeout(900)
+  expect(quotes).toHaveLength(1)
+  expect(JSON.stringify(quotes)).not.toContain('Updated recipient')
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+  await page.screenshot({ path: info.outputPath('basket-stock-preview.png') })
+})
+
+test('an older basket preview cannot overwrite the current stock result', async ({ page }) => {
+  await openCheckout(page)
+  let release: (() => void) | undefined
+  let released = false
+  await page.route('**/api/v1/online-orders/quote', async route => {
+    const { quantity } = route.request().postDataJSON().items[0]
+    if (quantity === 2) await new Promise<void>(resolve => { release = resolve })
+    await route.fulfill({ json: envelope({ canFulfill: quantity === 2,
+      reason: quantity === 2 ? null : 'INVENTORY_INSUFFICIENT_STOCK', subtotal: '35000.10',
+      items: [{ menuItemId: anchor.id, quantity, unitPrice: '35000.10', selectedOptions: [] }],
+    }) }).catch(() => {})
+    if (quantity === 2) released = true
+  })
+  const increase = page.getByRole('button', { name: /^Tăng số lượng/ })
+  await increase.click()
+  await expect.poll(() => Boolean(release)).toBe(true)
+  await increase.click()
+  const unavailable = page.getByText('Giỏ hàng hiện chưa đủ nguyên liệu.', { exact: false })
+  await expect(unavailable).toBeVisible()
+  release!()
+  await expect.poll(() => released).toBe(true)
+  await expect(unavailable).toBeVisible()
+})
+
 test('a rejected retry cannot unlock an already uncertain online checkout', async ({ page }) => {
   const bodies: Record<string, unknown>[] = []
   await page.route('**/api/v1/recommendations/online', (route) =>
-    route.fulfill({ json: envelope({ variant: 'CONTROL', recommendations: [] }) })
+    route.fulfill({ json: envelope({ variant: 'CONTROL', recommendations: [] }) }),
   )
   await page.route('**/api/v1/online-orders/requests', (route) => {
     bodies.push(route.request().postDataJSON())
@@ -265,8 +366,8 @@ test('supplied public key survives reload without storing contact details', asyn
   ])
   expect(
     await page.evaluate(() =>
-      Object.keys(sessionStorage).filter((key) => key.startsWith('coffee-shop:pending:'))
-    )
+      Object.keys(sessionStorage).filter((key) => key.startsWith('coffee-shop:pending:')),
+    ),
   ).toEqual([])
 })
 
@@ -290,7 +391,7 @@ test('returning to edit keeps recommended items and starts a new basket assignme
   await page.getByRole('button', { name: 'Chỉnh sửa đơn', exact: true }).click()
   await expect(page.getByRole('heading', { name: 'Cake fixture', exact: true })).toBeVisible()
   await expect(page.getByRole('textbox', { name: 'Tên người nhận' })).toHaveValue(
-    'Customer fixture'
+    'Customer fixture',
   )
   await page.getByRole('button', { name: 'Xem lại đơn', exact: true }).click()
   await expect.poll(() => offers.length).toBe(2)
@@ -301,7 +402,7 @@ test('returning to edit keeps recommended items and starts a new basket assignme
 test('takeaway catalog exposes pages beyond the first twelve items', async ({ page }) => {
   const pages: string[] = []
   await page.route('**/api/v1/menu/public/categories', (route) =>
-    route.fulfill({ json: envelope([category]) })
+    route.fulfill({ json: envelope([category]) }),
   )
   await page.route('**/api/v1/menu/public/items?*', (route) => {
     const pageNumber = new URL(route.request().url()).searchParams.get('page')!
@@ -336,16 +437,16 @@ test('tracking storage failure does not turn a successful order into a failed ch
     }
   })
   await page.route('**/api/v1/recommendations/online', (route) =>
-    route.fulfill({ json: envelope({ variant: 'CONTROL', recommendations: [] }) })
+    route.fulfill({ json: envelope({ variant: 'CONTROL', recommendations: [] }) }),
   )
   await page.route('**/api/v1/online-orders/requests', (route) =>
-    route.fulfill({ json: envelope(created) })
+    route.fulfill({ json: envelope(created) }),
   )
   await openCheckout(page)
   await page.getByRole('button', { name: 'Xem lại đơn', exact: true }).click()
   await page.getByRole('button', { name: 'Gửi đơn mang đi', exact: true }).click()
   await expect(
-    page.getByRole('alert').filter({ hasText: 'Đơn đã gửi nhưng chưa lưu được' })
+    page.getByRole('alert').filter({ hasText: 'Đơn đã gửi nhưng chưa lưu được' }),
   ).toBeVisible()
   await expect(page.getByRole('dialog')).toHaveCount(0)
 })

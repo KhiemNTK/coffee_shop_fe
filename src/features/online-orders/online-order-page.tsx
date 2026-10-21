@@ -2,7 +2,7 @@ import { useTranslation } from 'react-i18next'
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { getPublicStore } from '../menu/menu.api'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Coffee, Package } from 'lucide-react'
 import { Badge, Button } from '../../shared/ui'
 import { TakeawayMenuView } from './components/takeaway-menu-view'
@@ -12,6 +12,7 @@ import { rememberOrder, storedOrders, type OrderAccess } from './order-access-st
 
 export default function OnlineOrderPage() {
   const { t: translate } = useTranslation()
+  const navigate = useNavigate()
   const store = useQuery({
     queryKey: ['public-store'],
     queryFn: ({ signal }) => getPublicStore(signal),
@@ -26,6 +27,10 @@ export default function OnlineOrderPage() {
   )
 
   function handleOrderCreated(order: OrderAccess) {
+    if (order.customerId) {
+      navigate(`/account/orders/${order.requestId}`)
+      return
+    }
     setActiveOrder(order)
     setOrders((previous) =>
       [order, ...previous.filter((value) => value.requestId !== order.requestId)].slice(0, 10),
@@ -75,6 +80,12 @@ export default function OnlineOrderPage() {
           </div>
 
           <div className="flex items-center gap-2.5">
+            <Link
+              to="/account"
+              className="inline-flex min-h-11 items-center text-sm font-semibold text-primary"
+            >
+              {translate('customer.account')}
+            </Link>
             {view === 'menu' && (
               <Button
                 type="button"

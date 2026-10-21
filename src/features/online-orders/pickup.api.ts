@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { apiMutate } from '../../shared/api/client'
+import { publicFeedbackSchema } from './feedback'
 
 export const pickupCredentialSchema = z.object({
   invoiceId: z.uuid(), code: z.string().regex(/^[A-Za-z0-9_-]{43}$/),
@@ -8,6 +9,7 @@ const issuedCodeSchema = pickupCredentialSchema.extend({ expiresAt: z.iso.dateti
 const statusSchema = z.object({
   invoiceId: z.uuid(), status: z.enum(['PREPARING', 'PARTIALLY_READY', 'READY', 'COLLECTED']),
   expiresAt: z.iso.datetime({ offset: true }),
+  feedback: publicFeedbackSchema.nullable().optional(),
   items: z.array(z.object({ id: z.uuid(), name: z.string(), quantity: z.number().int().positive(),
     serveStatus: z.enum(['PENDING', 'COOKING', 'READY', 'SERVED', 'CANCELLED']) })),
 })

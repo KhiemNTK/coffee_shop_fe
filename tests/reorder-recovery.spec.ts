@@ -13,10 +13,13 @@ const created = {
 
 test.beforeEach(async ({ page }) => {
   await page.route('**/api/v1/**', (route) =>
-    route.fulfill({ status: 503, json: { message: 'Unmocked API' } })
+    route.fulfill({ status: 503, json: { message: 'Unmocked API' } }),
+  )
+  await page.route('**/api/v1/customers/me', (route) =>
+    route.fulfill({ status: 401, json: { message: 'Guest' } }),
   )
   await page.route('**/api/v1/online-orders/availability', (route) =>
-    route.fulfill({ json: envelope(onlineAvailability) })
+    route.fulfill({ json: envelope(onlineAvailability) }),
   )
   await page.route(
     'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit',
@@ -26,7 +29,7 @@ test.beforeEach(async ({ page }) => {
         body: `let attempt = 0; window.turnstile = {
       render(element, options) { const id = 'captcha-' + (++attempt); options.callback(id); return id }, remove() {}
     };`,
-      })
+      }),
   )
   await page.route('**/api/v1/online-orders/requests/reorder-template', (route) =>
     route.fulfill({
@@ -49,10 +52,10 @@ test.beforeEach(async ({ page }) => {
           ],
         },
       }),
-    })
+    }),
   )
   await page.route('**/api/v1/online-orders/requests/status', (route) =>
-    route.fulfill({ json: envelope({ ...created, isPaid: false, orderItems: [] }) })
+    route.fulfill({ json: envelope({ ...created, isPaid: false, orderItems: [] }) }),
   )
 })
 
@@ -80,7 +83,7 @@ test('unknown reorder and a rejected retry retain the same request and freeze ed
   await expect(retry).toBeEnabled()
   await expect(page.getByLabel('Điện thoại', { exact: true })).toBeDisabled()
   await expect(
-    page.getByRole('button', { name: 'Thu hồi khóa đặt lại', exact: true })
+    page.getByRole('button', { name: 'Thu hồi khóa đặt lại', exact: true }),
   ).toBeDisabled()
   await retry.click()
   await expect(page.getByRole('alert')).toContainText('Yêu cầu bị từ chối')
@@ -107,7 +110,7 @@ test('rapid repeated form submission creates only one request', async ({ page })
   })
   await openReorder(page)
   await expect(
-    page.getByRole('button', { name: 'Đặt lại · Trả khi nhận', exact: true })
+    page.getByRole('button', { name: 'Đặt lại · Trả khi nhận', exact: true }),
   ).toBeEnabled()
   await page.getByLabel('Điện thoại', { exact: true }).evaluate((input) => {
     const form = (input as HTMLInputElement).form!
@@ -122,7 +125,7 @@ test('a definitive first rejection releases the form without leaving a pending k
   page,
 }) => {
   await page.route('**/api/v1/online-orders/requests', (route) =>
-    route.fulfill({ status: 400, json: { message: 'Invalid order' } })
+    route.fulfill({ status: 400, json: { message: 'Invalid order' } }),
   )
   await openReorder(page)
   await page.getByRole('button', { name: 'Đặt lại · Trả khi nhận', exact: true }).click()
@@ -130,8 +133,8 @@ test('a definitive first rejection releases the form without leaving a pending k
   await expect(page.getByLabel('Điện thoại', { exact: true })).toBeEnabled()
   expect(
     await page.evaluate(() =>
-      Object.keys(sessionStorage).filter((key) => key.startsWith('coffee-shop:pending:'))
-    )
+      Object.keys(sessionStorage).filter((key) => key.startsWith('coffee-shop:pending:')),
+    ),
   ).toEqual([])
 })
 
@@ -156,7 +159,7 @@ test('tracking storage failure still displays the created order without a second
   await expect(page.getByRole('alert').filter({ hasText: 'Đơn đã được gửi' })).toBeVisible()
   await expect(page.getByText('Chờ duyệt', { exact: true })).toBeVisible()
   await expect(
-    page.getByRole('button', { name: 'Đặt lại · Trả khi nhận', exact: true })
+    page.getByRole('button', { name: 'Đặt lại · Trả khi nhận', exact: true }),
   ).toHaveCount(0)
   expect(writes).toBe(1)
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)

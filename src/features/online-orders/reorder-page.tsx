@@ -1,16 +1,19 @@
 import { useTranslation } from 'react-i18next'
-import { useRef, useState } from 'react'
-import { useMutation, useQuery } from '@tanstack/react-query'
-import { Link, useNavigate } from 'react-router-dom'
+import { useEffect, useRef, useState } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import {
   getReorderTemplate,
   createOnlineOrder,
+  findPendingOnlineOrderKey,
   revokeReorderKey,
   getOnlineAvailability,
   type CreateOnlineOrderPayload,
 } from './online-orders.api'
 import { ApiError, errorMessage } from '../../shared/api/client'
-import { findPendingOperationKey } from '../../shared/api/idempotency'
+import { customerKey, useCustomer } from '../customers/customers.api'
+import { getCustomerReorderTemplate } from '../customers/customer-orders.api'
+import { CustomerSignIn } from '../customers/customer-sign-in'
 import { OrderTrackingView } from './components/order-tracking-view'
 import { rememberOrder } from './order-access-storage'
 import { formatPrice } from '../../shared/lib/format'
@@ -20,6 +23,26 @@ import { Turnstile } from '../auth/turnstile'
 
 export default function ReorderPage() {
   const { t: translate } = useTranslation()
+  const customer = useCustomer()
+  const client = useQueryClient()
+  const { orderId } = useParams()
+  const customerId = !customer.isError ? (customer.data?.id ?? '') : ''
+  const customerTemplate = useQuery({
+    queryKey: ['customer', customerId, 'reorder', orderId],
+    queryFn: ({ signal }) => getCustomerReorderTemplate(customerId, orderId!, signal),
+    enabled: Boolean(customerId && orderId),
+    retry: false,
+    staleTime: 0,
+    gcTime: 60000,
+  })
+  useEffect(() => {
+    const error = customerTemplate.error
+    if (
+      error instanceof ApiError &&
+      (error.status === 401 || error.code === 'CUSTOMER_SESSION_CHANGED')
+    )
+      void client.invalidateQueries({ queryKey: customerKey })
+  }, [client, customerTemplate.error])
   const initial = new URLSearchParams(window.location.hash.slice(1))
   const [requestId, setRequestId] = useState(() => initial.get('requestId') ?? '')
   const [reorderToken, setReorderToken] = useState(() => initial.get('key') ?? '')
@@ -34,6 +57,9 @@ export default function ReorderPage() {
   const template = useMutation({
     mutationFn: () => getReorderTemplate(requestId.trim(), reorderToken.trim()),
   })
+  const templateData = orderId ? customerTemplate.data : template.data
+  const templatePending = orderId ? customerTemplate.isFetching : template.isPending
+  const templateError = orderId ? customerTemplate.error : template.error
   const revoke = useMutation({
     mutationFn: () => revokeReorderKey(requestId.trim(), reorderToken.trim()),
     onSuccess: () => {
@@ -44,7 +70,15 @@ export default function ReorderPage() {
   })
   const order = useMutation({
     mutationFn: (payload: CreateOnlineOrderPayload) => createOnlineOrder(payload),
-    onSuccess: (result) => {
+    onSuccess: (result, payload) => {
+      if (payload.expectedCustomerId)
+        void client.invalidateQueries({
+          queryKey: ['customer', payload.expectedCustomerId, 'orders'],
+        })
+      if (payload.expectedCustomerId) {
+        navigate(`/account/orders/${result.requestId}`)
+        return
+      }
       try {
         rememberOrder({
           requestId: result.requestId,
@@ -58,6 +92,11 @@ export default function ReorderPage() {
       navigate('/order')
     },
     onError: (error) => {
+      if (
+        error instanceof ApiError &&
+        (error.status === 401 || error.code === 'CUSTOMER_SESSION_CHANGED')
+      )
+        void client.invalidateQueries({ queryKey: customerKey })
       if (
         !uncertain.current &&
         error instanceof ApiError &&
@@ -92,25 +131,26 @@ export default function ReorderPage() {
   async function submit(values: FormData) {
     if (
       flight.current ||
+      customer.isPending ||
+      customer.isError ||
       unavailable ||
-      !template.data?.quote.canSubmit ||
+      !templateData?.quote.canSubmit ||
       (authConfig.turnstileSiteKey && !captcha)
     )
       return
     flight.current = true
     setFormError(null)
     const payload = submitted ?? {
+      ...(customer.data ? { expectedCustomerId: customer.data.id } : {}),
       pickupName: String(values.get('name')).trim(),
       phoneNumber: String(values.get('phone')).trim(),
-      items: template.data.items,
-      maxSubtotal: template.data.quote.currentSubtotal!,
+      items: templateData.items,
+      maxSubtotal: templateData.quote.currentSubtotal!,
     }
     try {
-      const pendingKey = await findPendingOperationKey(
-        '/online-orders/requests',
-        { ...payload },
-        false
-      )
+      if ((payload.expectedCustomerId ?? null) !== (customer.data?.id ?? null))
+        throw new ApiError(409, 'CUSTOMER_SESSION_CHANGED')
+      const pendingKey = await findPendingOnlineOrderKey(payload)
       uncertain.current ||= Boolean(pendingKey)
       if (!uncertain.current && !intakeReady) {
         setFormError(translate('takeaway.intakePaused'))
@@ -122,12 +162,21 @@ export default function ReorderPage() {
         clientRequestId: pendingKey ?? payload.clientRequestId ?? crypto.randomUUID(),
       }
       setSubmitted(intent)
-      order.mutate({ ...intent, ...(captcha ? { turnstileToken: captcha } : {}) })
+      order.mutate({
+        ...intent,
+        ...(captcha ? { turnstileToken: captcha } : {}),
+      })
     } catch (error) {
       setFormError(errorMessage(error))
       flight.current = false
     }
   }
+  if (orderId && !customerId && !customer.isError)
+    return (
+      <main className="mx-auto max-w-xl px-4 py-8">
+        <CustomerSignIn returnTo={`/account/orders/${orderId}/reorder`} />
+      </main>
+    )
   if (storageWarning && order.data)
     return (
       <main className="mx-auto max-w-3xl space-y-4 px-4 py-8">
@@ -141,48 +190,74 @@ export default function ReorderPage() {
         Coffee Shop
       </Link>
       <h1 className="text-2xl font-bold">{translate('takeaway.reorderHeading')}</h1>
-      <form
-        className="space-y-3"
-        onSubmit={(event) => {
-          event.preventDefault()
-          if (!flight.current && !locked && !template.isPending && !revoke.isPending)
-            template.mutate()
-        }}
-      >
-        <label className="block text-sm">
-          {translate('takeaway.orderCode')}
-          <Input
-            value={requestId}
-            required
-            disabled={locked || template.isPending || revoke.isPending}
-            onChange={(event) => {
-              setRequestId(event.target.value)
-              template.reset()
-            }}
-          />
-        </label>
-        <label className="block text-sm">
-          {translate('takeaway.reorderKey')}
-          <Input
-            value={reorderToken}
-            required
-            type="password"
-            autoComplete="off"
-            pattern="[0-9a-f]{64}"
-            disabled={locked || template.isPending || revoke.isPending}
-            onChange={(event) => {
-              setReorderToken(event.target.value)
-              template.reset()
-            }}
-          />
-        </label>
-        <Button type="submit" isLoading={template.isPending} disabled={locked || revoke.isPending}>
-          {translate('takeaway.checkCurrentPrices')}
+      {orderId ? (
+        <Link
+          to={`/account/orders/${orderId}`}
+          className="inline-flex min-h-11 items-center text-sm text-primary underline"
+        >
+          {translate('customer.orderDetail')}
+        </Link>
+      ) : (
+        <form
+          className="space-y-3"
+          onSubmit={(event) => {
+            event.preventDefault()
+            if (!flight.current && !locked && !templatePending && !revoke.isPending)
+              template.mutate()
+          }}
+        >
+          <label className="block text-sm">
+            {translate('takeaway.orderCode')}
+            <Input
+              value={requestId}
+              required
+              disabled={locked || templatePending || revoke.isPending}
+              onChange={(event) => {
+                setRequestId(event.target.value)
+                template.reset()
+              }}
+            />
+          </label>
+          <label className="block text-sm">
+            {translate('takeaway.reorderKey')}
+            <Input
+              value={reorderToken}
+              required
+              type="password"
+              autoComplete="off"
+              pattern="[0-9a-f]{64}"
+              disabled={locked || templatePending || revoke.isPending}
+              onChange={(event) => {
+                setReorderToken(event.target.value)
+                template.reset()
+              }}
+            />
+          </label>
+          <Button type="submit" isLoading={templatePending} disabled={locked || revoke.isPending}>
+            {translate('takeaway.checkCurrentPrices')}
+          </Button>
+        </form>
+      )}
+      {(customer.isPending || (orderId && customerTemplate.isPending)) && (
+        <p role="status">{translate('common.loading')}</p>
+      )}
+      {customer.isError && (
+        <>
+          <p role="alert">{errorMessage(customer.error)}</p>
+          <Button onClick={() => void customer.refetch()}>{translate('common.retry')}</Button>
+        </>
+      )}
+      {orderId && customerTemplate.isError && (
+        <Button
+          disabled={customerTemplate.isFetching}
+          onClick={() => void customerTemplate.refetch()}
+        >
+          {translate('common.retry')}
         </Button>
-      </form>
-      {(template.error || order.error || revoke.error) && (
+      )}
+      {(templateError || order.error || revoke.error) && (
         <p role="alert" className="text-sm text-destructive">
-          {errorMessage(template.error || order.error || revoke.error)}
+          {errorMessage(templateError || order.error || revoke.error)}
         </p>
       )}
       {formError && (
@@ -193,13 +268,18 @@ export default function ReorderPage() {
       {submitted && !order.isPending && (
         <p role="status">{translate('takeaway.reorderUncertain')}</p>
       )}
-      {template.data && (
+      {templateData && (
         <section className="space-y-4 border-t border-border pt-4">
+          {templateData.quote.stockAvailable === false && (
+            <p role="status" className="text-sm text-destructive">
+              {translate('error.insufficientStock')}
+            </p>
+          )}
           <ul className="space-y-2">
-            {template.data.quote.lines.map((line, index) => (
+            {templateData.quote.lines.map((line, index) => (
               <li key={line.lineNumber} className="border-b border-border py-2 text-sm">
                 <p>
-                  {line.currentName ?? line.previousName} × {template.data?.items[index]?.quantity}
+                  {line.currentName ?? line.previousName} × {templateData?.items[index]?.quantity}
                 </p>
                 <p>
                   {line.available
@@ -214,7 +294,7 @@ export default function ReorderPage() {
               </li>
             ))}
           </ul>
-          {template.data.quote.canSubmit ? (
+          {templateData.quote.canSubmit ? (
             <form
               className="space-y-3"
               onSubmit={(event) => {
@@ -224,7 +304,7 @@ export default function ReorderPage() {
             >
               <p className="font-semibold">
                 {translate('takeaway.currentTotal')}{' '}
-                {formatPrice(template.data.quote.currentSubtotal)}
+                {formatPrice(templateData.quote.currentSubtotal)}
               </p>
               <label className="block text-sm">
                 {translate('common.recipient')}
@@ -287,9 +367,11 @@ export default function ReorderPage() {
                 type="submit"
                 isLoading={order.isPending}
                 disabled={
+                  customer.isPending ||
+                  customer.isError ||
                   unavailable ||
                   (!locked && !intakeReady) ||
-                  template.isPending ||
+                  templatePending ||
                   revoke.isPending ||
                   Boolean(authConfig.turnstileSiteKey && !captcha)
                 }
@@ -304,17 +386,19 @@ export default function ReorderPage() {
               {translate('takeaway.chooseOther')}
             </Link>
           )}
-          <Button
-            variant="outline"
-            isLoading={revoke.isPending}
-            disabled={locked || template.isPending}
-            onClick={() => {
-              if (!flight.current && window.confirm(translate('takeaway.revokeReorderInfo')))
-                revoke.mutate()
-            }}
-          >
-            {translate('takeaway.revokeReorder')}
-          </Button>
+          {!orderId && (
+            <Button
+              variant="outline"
+              isLoading={revoke.isPending}
+              disabled={locked || templatePending}
+              onClick={() => {
+                if (!flight.current && window.confirm(translate('takeaway.revokeReorderInfo')))
+                  revoke.mutate()
+              }}
+            >
+              {translate('takeaway.revokeReorder')}
+            </Button>
+          )}
         </section>
       )}
     </main>

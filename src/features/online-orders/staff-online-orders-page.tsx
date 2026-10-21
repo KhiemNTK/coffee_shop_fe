@@ -23,6 +23,7 @@ import { StaffPendingOrdersTab } from './components/staff-pending-orders-tab'
 import { PickupCollectionPanel } from './components/pickup-panels'
 import { StaffFulfillmentOrdersTab } from './components/staff-fulfillment-orders-tab'
 import { CollectOrderModal, OrderReviewDialog } from './components/staff-order-modals'
+import { IntakeControl } from './components/intake-control'
 
 type ReviewAction =
   | { kind: 'accept' | 'no-show'; id: string }
@@ -170,6 +171,7 @@ export default function StaffOnlineOrdersPage() {
           {translate('common.refresh')}
         </Button>
       } />
+      {permissions.includes('/online-orders_manage-intake') && <IntakeControl employeeId={employee.id} />}
       {permissions.includes('/orders_items_handoff') && <PickupCollectionPanel />}
       {notice && (
         <p role="status" className="flex items-center gap-2 text-sm text-emerald-700">

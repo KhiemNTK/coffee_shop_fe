@@ -7,7 +7,7 @@ import { errorMessage } from '../../../shared/api/client'
 import { Badge, Button, Card, CardContent } from '../../../shared/ui'
 import { ItemCustomizerModal } from './item-customizer-modal'
 import { CartCheckoutDrawer } from './cart-checkout-drawer'
-import { cartSubtotal, type CartItem } from '../cart'
+import { useCart, type CartItem } from '../cart'
 import { Pagination } from '../../../shared/ui/pagination'
 import type { OrderAccess } from '../order-access-storage'
 
@@ -20,7 +20,15 @@ export function TakeawayMenuView({
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>('')
   const [page, setPage] = useState(1)
   const [customizingItem, setCustomizingItem] = useState<MenuItem | null>(null)
-  const [cart, setCart] = useState<CartItem[]>([])
+  const {
+    items: cart,
+    subtotal: cartTotalAmount,
+    totalCount: totalItemCount,
+    addItem,
+    updateQuantity,
+    removeItem: removeCartItem,
+    clearCart,
+  } = useCart()
   const [isCartOpen, setIsCartOpen] = useState(false)
 
   // Fetch menu & categories
@@ -34,49 +42,10 @@ export function TakeawayMenuView({
     queryFn: ({ signal }) => getMenu({ categoryId: selectedCategoryId, page, keyword: '' }, signal),
   })
 
-  const cartTotalAmount = cartSubtotal(cart)
-  const totalItemCount = cart.reduce((sum, item) => sum + item.quantity, 0)
-
   function addToCart(newItem: CartItem) {
-    setCart((prev) => {
-      const matchIndex = prev.findIndex(
-        (it) =>
-          it.menuItem.id === newItem.menuItem.id &&
-          it.note === newItem.note &&
-          it.selectedOptionIds.slice().sort().join(',') ===
-            newItem.selectedOptionIds.slice().sort().join(','),
-      )
-      if (matchIndex >= 0) {
-        const next = [...prev]
-        const existing = next[matchIndex]
-        if (existing) {
-          next[matchIndex] = {
-            ...existing,
-            quantity: Math.min(20, existing.quantity + newItem.quantity),
-          }
-          return next
-        }
-      }
-      return [...prev, newItem]
-    })
+    addItem(newItem)
     setCustomizingItem(null)
     setIsCartOpen(true)
-  }
-
-  function updateQuantity(id: string, delta: number) {
-    setCart((prev) =>
-      prev
-        .map((item) => {
-          if (item.id !== id) return item
-          const newQty = item.quantity + delta
-          return newQty > 0 ? { ...item, quantity: Math.min(20, newQty) } : null
-        })
-        .filter((item): item is CartItem => item !== null),
-    )
-  }
-
-  function removeCartItem(id: string) {
-    setCart((prev) => prev.filter((item) => item.id !== id))
   }
 
   return (
@@ -271,8 +240,9 @@ export function TakeawayMenuView({
           onClose={() => setIsCartOpen(false)}
           onUpdateQuantity={updateQuantity}
           onRemoveItem={removeCartItem}
-          onAppendItems={(items) => setCart((previous) => [...previous, ...items])}
+          onAppendItems={(items) => items.forEach(addItem)}
           onOrderCreated={(order) => {
+            clearCart()
             setIsCartOpen(false)
             onOrderCreated(order)
           }}
