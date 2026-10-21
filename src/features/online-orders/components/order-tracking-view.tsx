@@ -1,4 +1,5 @@
 import { useTranslation } from 'react-i18next'
+import { FeedbackResponse } from './feedback-response'
 import { useRef, useState } from 'react'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import { ReorderLink } from './reorder-link'
@@ -296,6 +297,7 @@ export function OrderTrackingView({
       )}
 
       {order && <ReorderLink requestId={orderAuth.requestId} accessToken={orderAuth.accessToken} />}
+      {order?.feedback.map(feedback => <FeedbackResponse key={feedback.id} feedback={feedback} />)}
       {order && (
         <section
           aria-label={translate('takeaway.receipt')}
