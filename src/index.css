@@ -59,8 +59,8 @@
 
 .staff-workspace,
 body:has(.staff-workspace) > dialog {
-  --color-primary: #08634e;
-  --color-primary-hover: #074b3d;
+  --color-primary: #116149;
+  --color-primary-hover: #0c4937;
   --color-background: #f5f8f8;
   --color-foreground: #101d38;
   --color-card: #ffffff;

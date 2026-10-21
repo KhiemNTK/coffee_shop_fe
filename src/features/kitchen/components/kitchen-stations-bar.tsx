@@ -65,12 +65,13 @@ export function KitchenStationsBar({
           ))}
         </div>
 
-        <div className="flex flex-wrap gap-3">
-          <label className="flex min-h-11 items-center gap-2 text-xs font-medium cursor-pointer">
+        <div className="flex flex-wrap items-center gap-3">
+          <label className="flex shrink-0 items-center gap-2 whitespace-nowrap text-xs font-medium text-foreground cursor-pointer select-none">
             <input
               type="checkbox"
               checked={includeScheduled}
               onChange={(event) => onToggleIncludeScheduled(event.target.checked)}
+              className="rounded border-border text-primary focus:ring-primary"
             />
             {translate('ops.kitchen.showScheduled')}
           </label>
