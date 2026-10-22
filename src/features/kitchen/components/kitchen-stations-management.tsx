@@ -11,14 +11,14 @@ import {
   type KitchenStation,
   type StationInput,
 } from '../kitchen.api'
-import { printingApi } from '../../printing/printing.api'
+import { printingApi, printingKeys } from '../../printing/printing.api'
 import { Button, Dialog, Input } from '../../../shared/ui'
 import { Pagination } from '../../../shared/ui/pagination'
 import { errorMessage } from '../../../shared/api/client'
 
 export function KitchenStationsManagement() {
-  const { employee, authorization } = useOutletContext<Session>()
-  const canManage = authorization.permissionKeys.includes(
+  const { employee, access } = useOutletContext<Session>()
+  const canManage = access.has(
     '/kitchen-stations_manage',
   )
   const [page, setPage] = useState(1)
@@ -161,12 +161,12 @@ function StationForm({
   onClose: () => void
   onSaved: () => void
 }) {
-  const { employee, authorization } = useOutletContext<Session>()
+  const { employee, access } = useOutletContext<Session>()
   const devices = useQuery({
-    queryKey: ['private', employee.id, 'kitchen-print-options'],
+    queryKey: [...printingKeys.devices(employee.id), 'kitchen-options'],
     queryFn: ({ signal }) =>
       printingApi.getDevices({ type: 'KITCHEN', itemPerPage: 100 }, signal),
-    enabled: authorization.permissionKeys.includes('/print-devices_read'),
+    enabled: access.has('/print-devices_read'),
   })
   const mutation = useMutation({
     mutationFn: (data: StationInput) => saveStation(station?.id, data),

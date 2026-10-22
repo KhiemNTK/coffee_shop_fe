@@ -27,6 +27,37 @@ async function track(page: Page, overrides: Record<string, unknown> = {}) {
   await page.goto('/order')
 }
 
+test('Telegram guest link opens lookup without restoring or sending credentials from the URL', async ({ page }, info) => {
+  let lookups = 0
+  await page.route('**/api/v1/online-orders/requests/status', (route) => {
+    lookups++
+    return route.fulfill({ json: envelope(order) })
+  })
+  await page.goto('/order?view=lookup')
+  await expect(page.getByRole('heading', { name: 'Tra cứu đơn mang đi' })).toBeVisible()
+  const idInput = page.getByLabel('Mã đơn hàng', { exact: true })
+  const tokenInput = page.getByLabel('Mã xác thực', { exact: true })
+  await expect(idInput).toBeEmpty()
+  await expect(tokenInput).toBeEmpty()
+  await expect(tokenInput).toHaveAttribute('type', 'password')
+  expect(lookups).toBe(0)
+  await page.screenshot({ path: info.outputPath('telegram-lookup.png'), fullPage: true })
+  await idInput.fill(orderAuth.requestId)
+  await tokenInput.fill(orderAuth.accessToken)
+  await page.getByRole('button', { name: 'Tra cứu ngay' }).click()
+  await expect(page.getByRole('button', { name: 'Nhận cập nhật qua Telegram' })).toBeVisible()
+  expect(lookups).toBeGreaterThan(0)
+  expect(page.url()).not.toContain(orderAuth.accessToken)
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+})
+
+test('explicit lookup takes precedence over a locally saved order', async ({ page }) => {
+  await page.addInitScript((value) => sessionStorage.setItem('coffee_shop_takeaway_order', JSON.stringify(value)), orderAuth)
+  await page.goto('/order?view=lookup')
+  await expect(page.getByRole('heading', { name: 'Tra cứu đơn mang đi' })).toBeVisible()
+  await expect(page.getByLabel('Mã xác thực', { exact: true })).toBeEmpty()
+})
+
 test('Telegram link is user-opened, private and issued only once per click', async ({
   page,
 }, info) => {

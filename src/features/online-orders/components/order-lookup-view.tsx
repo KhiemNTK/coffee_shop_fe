@@ -59,7 +59,7 @@ export function OrderLookupView({ onFound, onBack }: OrderLookupViewProps) {
         variant="ghost"
         size="sm"
         onClick={onBack}
-        className="mb-4 text-stone-600 gap-1.5 -ml-2"
+        className="mb-4 text-muted-foreground gap-1.5 -ml-2"
       >
         <ArrowLeft className="h-4 w-4" />
         {translate('common.back')}
@@ -67,7 +67,7 @@ export function OrderLookupView({ onFound, onBack }: OrderLookupViewProps) {
 
       <Card className="shadow-sm">
         <CardHeader>
-          <CardTitle className="text-xl text-brand-900">
+          <CardTitle className="text-xl text-foreground">
             {translate('takeaway.lookupHeading')}
           </CardTitle>
           <CardDescription>{translate('takeaway.lookupDescription')}</CardDescription>
@@ -75,10 +75,11 @@ export function OrderLookupView({ onFound, onBack }: OrderLookupViewProps) {
         <CardContent>
           <form onSubmit={handleLookup} className="space-y-4">
             <div>
-              <label className="block text-xs font-semibold text-foreground mb-1.5">
+              <label htmlFor="lookup-order-id" className="block text-xs font-semibold text-foreground mb-1.5">
                 {translate('takeaway.orderId')}
               </label>
               <Input
+                id="lookup-order-id"
                 type="text"
                 required
                 placeholder="VD: a1b2c3d4-..."
@@ -88,11 +89,13 @@ export function OrderLookupView({ onFound, onBack }: OrderLookupViewProps) {
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-foreground mb-1.5">
+              <label htmlFor="lookup-access-code" className="block text-xs font-semibold text-foreground mb-1.5">
                 {translate('takeaway.accessCode')}
               </label>
               <Input
-                type="text"
+                id="lookup-access-code"
+                type="password"
+                autoComplete="off"
                 required
                 placeholder={translate('takeaway.accessExample')}
                 value={accessToken}

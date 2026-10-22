@@ -42,7 +42,7 @@ export function TelegramOrderLink({
 
   if (subscribed)
     return (
-      <p role="status" className="flex items-center gap-2 text-sm text-emerald-700">
+      <p role="status" className="flex items-center gap-2 text-sm text-emerald-700 dark:text-emerald-400">
         <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden="true" />
         {translate('takeaway.telegramConnected')}
       </p>

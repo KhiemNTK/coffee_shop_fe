@@ -1,4 +1,5 @@
 import { useTranslation } from 'react-i18next'
+import { formatDateTime } from '@/shared/lib/format'
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useOutletContext } from 'react-router-dom'
@@ -22,11 +23,11 @@ import {
 
 export function PickupCodePanel({ invoiceId }: { invoiceId: string }) {
   const { t: translate } = useTranslation()
-  const { authorization } = useOutletContext<Session>()
+  const { access } = useOutletContext<Session>()
   const [issued, setIssued] = useState<(PickupCredential & { expiresAt: string }) | null>(null)
   const [copied, setCopied] = useState(false)
   const [copyError, setCopyError] = useState(false)
-  const canChange = authorization.permissionKeys.includes('/invoices_update')
+  const canChange = access.has('/invoices_update')
   const mutation = useMutation({
     gcTime: 0,
     mutationFn: async (action: 'issue' | 'rotate' | 'revoke') => {
@@ -69,7 +70,7 @@ export function PickupCodePanel({ invoiceId }: { invoiceId: string }) {
         <>
           <PaymentQr value={pickupLink(issued)} label={translate('takeaway.pickupQr')} />
           <p className="text-sm">
-            {translate('takeaway.expires')} {new Date(issued.expiresAt).toLocaleString('vi-VN')}
+            {translate('takeaway.expires')} {formatDateTime(issued.expiresAt, { seconds: true })}
           </p>
           <div className="flex flex-wrap gap-2">
             <Button

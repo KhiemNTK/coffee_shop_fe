@@ -1,28 +1,32 @@
 import { useEffect, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { posKeys } from '../pos/pos.keys'
-import { kitchenKeys } from './kitchen.api'
-import { playKitchenChime } from '../../shared/lib/sound'
+import { kitchenKeys, kitchenRealtimeEventSchema } from './kitchen.api'
+import { playNotificationChime } from '../../shared/lib/sound'
 
 export type KitchenConnectionStatus = 'connected' | 'connecting' | 'disconnected'
 
 export function useKitchenSse(
   employeeId: string,
   enabled = true,
-  options?: { soundEnabled?: boolean }
+  options?: { soundEnabled?: boolean; stationId?: string },
 ) {
   const queryClient = useQueryClient()
   const soundEnabled = options?.soundEnabled ?? false
-  const soundEnabledRef = useRef(soundEnabled)
+  const stationId = options?.stationId ?? ''
+  const settingsRef = useRef({ soundEnabled, stationId })
   useEffect(() => {
-    soundEnabledRef.current = soundEnabled
-  }, [soundEnabled])
+    settingsRef.current = { soundEnabled, stationId }
+  }, [soundEnabled, stationId])
 
-  const [status, setStatus] = useState<KitchenConnectionStatus>(() =>
-    enabled ? 'connecting' : 'disconnected'
-  )
-  const [lastRefreshedAt, setLastRefreshedAt] = useState<string | null>(null)
-  const reconnectTimeoutRef = useRef<number | null>(null)
+  const [connectionState, setConnectionState] = useState({
+    employeeId,
+    enabled,
+    status: 'connecting' as KitchenConnectionStatus,
+  })
+  if (connectionState.employeeId !== employeeId || connectionState.enabled !== enabled) {
+    setConnectionState({ employeeId, enabled, status: 'connecting' })
+  }
 
   useEffect(() => {
     if (!enabled) return
@@ -30,6 +34,16 @@ export function useKitchenSse(
     let source: EventSource | null = null
     let active = true
     let refreshTimeout: number | undefined
+    let reconnectTimeout: number | undefined
+    let heartbeatTimeout: number | undefined
+    let pendingChime = false
+    let batchStationId = ''
+    // shortcut: dedupe the latest 200 new-ticket events per mounted KDS session, not across reloads.
+    const seenEvents = new Set<string>()
+
+    function setStatus(status: KitchenConnectionStatus) {
+      setConnectionState({ employeeId, enabled, status })
+    }
 
     function refresh() {
       void queryClient.invalidateQueries({ queryKey: kitchenKeys.tickets(employeeId) })
@@ -45,42 +59,91 @@ export function useKitchenSse(
       })
     }
 
+    function disconnect(connection: EventSource) {
+      if (!active || source !== connection) return
+      source = null
+      window.clearTimeout(heartbeatTimeout)
+      window.clearTimeout(refreshTimeout)
+      refreshTimeout = undefined
+      pendingChime = false
+      connection.close()
+      setStatus('disconnected')
+      refresh()
+      if (reconnectTimeout === undefined) {
+        reconnectTimeout = window.setTimeout(() => {
+          reconnectTimeout = undefined
+          connect()
+        }, 5_000)
+      }
+    }
+
+    function watchHeartbeat(connection: EventSource) {
+      window.clearTimeout(heartbeatTimeout)
+      heartbeatTimeout = window.setTimeout(() => disconnect(connection), 45_000)
+    }
+
     function connect() {
       if (!active) return
-      setStatus('connecting')
-
-      source = new EventSource('/api/v1/kitchen/events', {
+      const connection = new EventSource('/api/v1/kitchen/events', {
         withCredentials: true,
       })
+      source = connection
+      watchHeartbeat(connection)
 
-      source.onopen = () => {
-        if (!active) return
+      connection.onopen = () => {
+        if (!active || source !== connection) return
         setStatus('connected')
+        watchHeartbeat(connection)
         refresh()
       }
 
-      source.addEventListener('kitchen.refresh', () => {
-        if (!active || refreshTimeout !== undefined) return
+      connection.addEventListener('kitchen.refresh', (message) => {
+        if (!active || source !== connection) return
+        watchHeartbeat(connection)
+        if (refreshTimeout === undefined) batchStationId = settingsRef.current.stationId
+        try {
+          const event = kitchenRealtimeEventSchema.parse(
+            JSON.parse((message as MessageEvent<string>).data),
+          )
+          if (event.eventName === 'order.items.added' && !seenEvents.has(event.eventId)) {
+            seenEvents.add(event.eventId)
+            if (seenEvents.size > 200) seenEvents.delete(seenEvents.values().next().value!)
+            // shortcut: scheduled releases stay visual; add a durable release event if timed audio is needed.
+            pendingChime ||=
+              settingsRef.current.soundEnabled &&
+              (event.newTickets?.some(
+                (ticket) =>
+                  (!settingsRef.current.stationId ||
+                    ticket.stationId === settingsRef.current.stationId) &&
+                  Date.parse(ticket.availableAt) <= Date.now(),
+              ) ??
+                false)
+          }
+        } catch {
+          // Legacy or malformed events may refresh data, but never trigger a guessed alert.
+        }
+        if (refreshTimeout !== undefined) return
         refreshTimeout = window.setTimeout(() => {
           refreshTimeout = undefined
           if (!active) return
-          setLastRefreshedAt(new Date().toLocaleTimeString('vi-VN'))
-          if (soundEnabledRef.current) playKitchenChime()
+          if (
+            pendingChime &&
+            settingsRef.current.soundEnabled &&
+            batchStationId === settingsRef.current.stationId
+          )
+            playNotificationChime()
+          pendingChime = false
           refresh()
         }, 250)
       })
 
-      source.addEventListener('heartbeat', () => {
-        if (!active) return
+      connection.addEventListener('heartbeat', () => {
+        if (!active || source !== connection) return
+        watchHeartbeat(connection)
         setStatus('connected')
       })
 
-      source.onerror = () => {
-        if (!active) return
-        setStatus('disconnected')
-        source?.close()
-        reconnectTimeoutRef.current = window.setTimeout(connect, 5_000)
-      }
+      connection.onerror = () => disconnect(connection)
     }
 
     connect()
@@ -88,15 +151,13 @@ export function useKitchenSse(
     return () => {
       active = false
       window.clearTimeout(refreshTimeout)
-      if (reconnectTimeoutRef.current) {
-        window.clearTimeout(reconnectTimeoutRef.current)
-      }
+      window.clearTimeout(reconnectTimeout)
+      window.clearTimeout(heartbeatTimeout)
       source?.close()
     }
   }, [employeeId, enabled, queryClient])
 
   return {
-    status: enabled ? status : ('disconnected' as const),
-    lastRefreshedAt: enabled ? lastRefreshedAt : null,
+    status: enabled ? connectionState.status : ('disconnected' as const),
   }
 }

@@ -24,6 +24,7 @@ import { PickupCollectionPanel } from './components/pickup-panels'
 import { StaffFulfillmentOrdersTab } from './components/staff-fulfillment-orders-tab'
 import { CollectOrderModal, OrderReviewDialog } from './components/staff-order-modals'
 import { IntakeControl } from './components/intake-control'
+import { WorkflowPermissions } from '@/shared/auth/workflow-permissions'
 
 type ReviewAction =
   | { kind: 'accept' | 'no-show'; id: string }
@@ -32,13 +33,12 @@ type ReviewTarget = { kind: 'reject' | 'cancel' | 'no-show'; id: string; name: s
 
 export default function StaffOnlineOrdersPage() {
   const { t: translate } = useTranslation()
-  const { employee, authorization } = useOutletContext<Session>()
+  const { employee, access } = useOutletContext<Session>()
   const client = useQueryClient()
-  const permissions = authorization.permissionKeys
-  const canRead = permissions.includes('/online-orders_read')
-  const canReview = permissions.includes('/online-orders_review')
-  const canCollect =
-    permissions.includes('/invoices_create') && permissions.includes('/orders_items_handoff')
+
+  const canRead = access.has('/online-orders_read')
+  const canReview = access.has('/online-orders_review')
+  const canCollect = access.hasAll(...WorkflowPermissions.collectOnlineOrder)
   const [params, setParams] = useSearchParams()
   const activeTab = params.get('tab') === 'fulfillment' ? 'fulfillment' : 'pending'
   const overdueOnly = params.get('overdueOnly') === 'true'
@@ -171,8 +171,8 @@ export default function StaffOnlineOrdersPage() {
           {translate('common.refresh')}
         </Button>
       } />
-      {permissions.includes('/online-orders_manage-intake') && <IntakeControl employeeId={employee.id} />}
-      {permissions.includes('/orders_items_handoff') && <PickupCollectionPanel />}
+      {access.has('/online-orders_manage-intake') && <IntakeControl employeeId={employee.id} />}
+      {access.has('/orders_items_handoff') && <PickupCollectionPanel />}
       {notice && (
         <p role="status" className="flex items-center gap-2 text-sm text-emerald-700">
           <CheckCircle2 size={18} aria-hidden="true" />

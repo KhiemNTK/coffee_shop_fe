@@ -2,7 +2,7 @@ import { useTranslation } from 'react-i18next'
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { getPublicStore } from '../menu/menu.api'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, Coffee, Package } from 'lucide-react'
 import { Badge, Button } from '../../shared/ui'
 import { TakeawayMenuView } from './components/takeaway-menu-view'
@@ -13,6 +13,7 @@ import { rememberOrder, storedOrders, type OrderAccess } from './order-access-st
 export default function OnlineOrderPage() {
   const { t: translate } = useTranslation()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const store = useQuery({
     queryKey: ['public-store'],
     queryFn: ({ signal }) => getPublicStore(signal),
@@ -23,7 +24,7 @@ export default function OnlineOrderPage() {
 
   // Tab: 'menu' | 'track' | 'lookup'
   const [view, setView] = useState<'menu' | 'track' | 'lookup'>(() =>
-    activeOrder ? 'track' : 'menu',
+    searchParams.get('view') === 'lookup' ? 'lookup' : activeOrder ? 'track' : 'menu',
   )
 
   function handleOrderCreated(order: OrderAccess) {

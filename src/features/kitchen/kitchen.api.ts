@@ -10,6 +10,22 @@ export const kitchenKeys = {
   stations: (employeeId: string) => ['private', employeeId, 'kitchen', 'stations'] as const,
 }
 
+export const kitchenRealtimeEventSchema = z.object({
+  eventId: z.uuid(),
+  eventName: z.string().min(1).max(100),
+  occurredAt: z.iso.datetime({ offset: true }),
+  newTickets: z
+    .array(
+      z.object({
+        stationId: z.uuid(),
+        availableAt: z.iso.datetime({ offset: true }),
+      }),
+    )
+    .max(100)
+    .optional()
+    .catch(undefined),
+})
+
 export const kitchenStationSchema = z.object({
   id: z.uuid(),
   code: z.string(),
@@ -99,9 +115,7 @@ export type KitchenTicket = z.infer<typeof kitchenTicketSchema>
 export type KitchenTicketItem = z.infer<typeof kitchenTicketItemSchema>
 export type KitchenWorkload = z.infer<typeof kitchenWorkloadSchema>
 
-export async function getKitchenStations(
-  signal: AbortSignal,
-): Promise<KitchenStation[]> {
+export async function getKitchenStations(signal: AbortSignal): Promise<KitchenStation[]> {
   const stations: KitchenStation[] = []
   let page = 1
   let total = 0
@@ -120,14 +134,17 @@ export async function getKitchenStations(
   return stations
 }
 
-export async function getKitchenWorkload(
-  signal: AbortSignal,
-): Promise<KitchenWorkload> {
+export async function getKitchenWorkload(signal: AbortSignal): Promise<KitchenWorkload> {
   return apiGet('/kitchen/workload', kitchenWorkloadSchema, signal, true)
 }
 
 export async function getKitchenTickets(
-  { stationId, includeCompleted = false, includeScheduled = false, page = 1 }: {
+  {
+    stationId,
+    includeCompleted = false,
+    includeScheduled = false,
+    page = 1,
+  }: {
     stationId?: string
     includeCompleted?: boolean
     includeScheduled?: boolean
@@ -191,9 +208,5 @@ export function saveStation(id: string | undefined, input: StationInput) {
   )
 }
 export function deleteStation(id: string) {
-  return apiMutate(
-    `/kitchen/stations/${id}`,
-    'DELETE',
-    z.object({ success: z.boolean() }),
-  )
+  return apiMutate(`/kitchen/stations/${id}`, 'DELETE', z.object({ success: z.boolean() }))
 }

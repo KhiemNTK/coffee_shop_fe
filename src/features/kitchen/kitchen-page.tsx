@@ -15,6 +15,7 @@ import {
   type KitchenTicketItem,
 } from './kitchen.api'
 import { useKitchenSse } from './use-kitchen-sse'
+import { enableNotificationSound } from '../../shared/lib/sound'
 import { Button } from '../../shared/ui/button'
 import { Badge } from '../../shared/ui/badge'
 import { KitchenWorkloadKpis } from './components/kitchen-workload-kpis'
@@ -25,12 +26,12 @@ import { KitchenStationsManagement } from './components/kitchen-stations-managem
 import { OperationsHeader } from '../../shared/ui'
 
 export default function KitchenPage() {
-  const { t: translate } = useTranslation()
-  const { authorization, employee } = useOutletContext<Session>()
+  const { t: translate, i18n } = useTranslation()
+  const { employee, access } = useOutletContext<Session>()
   const queryClient = useQueryClient()
-  const canReadTickets = authorization.permissionKeys.includes('/kitchen-tickets_read')
-  const canReadStations = authorization.permissionKeys.includes('/kitchen-stations_read')
-  const canUpdateStatus = authorization.permissionKeys.includes('/orders_items_update-status')
+  const canReadTickets = access.has('/kitchen-tickets_read')
+  const canReadStations = access.has('/kitchen-stations_read')
+  const canUpdateStatus = access.has('/orders_items_update-status')
 
   const [params, setParams] = useSearchParams()
   const selectedStationId = z.uuid().safeParse(params.get('stationId')).data ?? ''
@@ -76,11 +77,10 @@ export default function KitchenPage() {
   })
 
   // Real-time SSE connection
-  const { status: sseStatus, lastRefreshedAt } = useKitchenSse(
-    employee.id,
-    canReadTickets && !management,
-    { soundEnabled },
-  )
+  const { status: sseStatus } = useKitchenSse(employee.id, canReadTickets && !management, {
+    soundEnabled,
+    stationId: selectedStationId,
+  })
 
   // Queries
   const stationsQuery = useQuery({
@@ -102,10 +102,16 @@ export default function KitchenPage() {
       { stationId: selectedStationId, includeCompleted, includeScheduled, page },
     ],
     queryFn: ({ signal }) =>
-      getKitchenTickets({ stationId: selectedStationId || undefined, includeCompleted, includeScheduled, page }, signal),
+      getKitchenTickets(
+        { stationId: selectedStationId || undefined, includeCompleted, includeScheduled, page },
+        signal,
+      ),
     enabled: canReadTickets && !management,
     refetchInterval: sseStatus !== 'connected' ? 6_000 : 60_000,
   })
+  const lastRefreshedAt = ticketsQuery.dataUpdatedAt
+    ? new Date(ticketsQuery.dataUpdatedAt).toLocaleTimeString(i18n.resolvedLanguage)
+    : null
 
   const statusMutation = useMutation({
     retry: false,
@@ -144,7 +150,12 @@ export default function KitchenPage() {
   function advanceItemStatus(item: KitchenTicketItem) {
     if (flight.current || reviewRequired || ticketsQuery.isFetching || !ticketsQuery.isSuccess)
       return
-    if (ticketsQuery.data?.list.some(ticket => ticket.isScheduled && ticket.items.some(line => line.id === item.id))) return
+    if (
+      ticketsQuery.data?.list.some(
+        (ticket) => ticket.isScheduled && ticket.items.some((line) => line.id === item.id),
+      )
+    )
+      return
     if (!canUpdateStatus) {
       setActionError('Bạn không có quyền cập nhật trạng thái món (/orders_items_update-status).')
       return
@@ -173,17 +184,25 @@ export default function KitchenPage() {
         }
         actions={
           <>
-            <Badge
-              variant={sseStatus === 'connected' ? 'success' : 'warning'}
-              className="rounded-md"
-            >
-              <Radio size={13} aria-hidden="true" />
-              {!canReadTickets
-                ? 'Không có quyền xem vé bếp'
-                : translate(
-                    sseStatus === 'connected' ? 'ops.kitchen.live' : 'ops.kitchen.reconnecting',
-                  )}
-            </Badge>
+            {!management && (
+              <Badge
+                role="status"
+                aria-atomic="true"
+                variant={sseStatus === 'connected' ? 'success' : 'warning'}
+                className="rounded-md"
+              >
+                <Radio size={13} aria-hidden="true" />
+                {!canReadTickets
+                  ? translate('ops.kitchen.noAccess')
+                  : translate(
+                      sseStatus === 'connected'
+                        ? 'ops.kitchen.live'
+                        : sseStatus === 'connecting'
+                          ? 'ops.kitchen.connecting'
+                          : 'ops.kitchen.polling',
+                    )}
+              </Badge>
+            )}
             <Button
               type="button"
               variant="outline"
@@ -194,6 +213,7 @@ export default function KitchenPage() {
               aria-label={translate(soundEnabled ? 'ops.kitchen.soundOff' : 'ops.kitchen.soundOn')}
               onClick={() => {
                 const next = !soundEnabled
+                if (next) void enableNotificationSound()
                 setSoundEnabled(next)
                 try {
                   localStorage.setItem('coffee_kds_sound', String(next))
@@ -293,10 +313,12 @@ export default function KitchenPage() {
             }}
             includeCompleted={displayIncludeCompleted}
             includeScheduled={displayIncludeScheduled}
-            onToggleIncludeScheduled={(value) => startTransition(() => {
-              setDisplayIncludeScheduled(value)
-              setFilters({ includeScheduled: value ? 'true' : null, page: null })
-            })}
+            onToggleIncludeScheduled={(value) =>
+              startTransition(() => {
+                setDisplayIncludeScheduled(value)
+                setFilters({ includeScheduled: value ? 'true' : null, page: null })
+              })
+            }
             onToggleIncludeCompleted={(value) => {
               startTransition(() => {
                 setDisplayIncludeCompleted(value)
