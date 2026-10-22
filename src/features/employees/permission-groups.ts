@@ -1,4 +1,12 @@
 import type { Permission } from './employees.api'
+import { getPermissionLabel } from '../../shared/auth/permission-label'
+import { currentLanguage } from '../../shared/i18n'
+
+export function permissionLabel(permission: Pick<Permission, 'key' | 'name' | 'isSystemPermission'>) {
+  return permission.isSystemPermission
+    ? getPermissionLabel(permission.key, currentLanguage(), permission.name)
+    : permission.name
+}
 
 const groups: Record<string, string> = {
   permissions: 'Nhân sự & phân quyền',
@@ -36,6 +44,8 @@ const groups: Record<string, string> = {
 }
 
 const sensitive = new Set([
+  '/invoices_pay',
+  '/invoices_void',
   '/roles_permissions_update',
   '/employees_roles_update',
   '/employees_update',

@@ -34,9 +34,8 @@ export interface AssignRolesModalProps {
   }
   assignmentReady: boolean
   roleAssignError: string | null
-  setRoleAssignError: (err: string | null) => void
   roleReviewRequired: boolean
-  setRoleReviewRequired: (req: boolean) => void
+  onReconcile: () => Promise<void>
   isPending: boolean
   onSubmit: (roleIds: string[]) => void
 }
@@ -51,9 +50,8 @@ export function AssignRolesModal({
   assignment,
   assignmentReady,
   roleAssignError,
-  setRoleAssignError,
   roleReviewRequired,
-  setRoleReviewRequired,
+  onReconcile,
   isPending,
   onSubmit,
 }: AssignRolesModalProps) {
@@ -107,7 +105,7 @@ export function AssignRolesModal({
           </DialogHeader>
 
           {roleAssignError && (
-            <div className="mt-4 flex items-start gap-2 rounded-xl border border-destructive/20 bg-destructive/5 p-3 text-xs text-destructive">
+            <div role="alert" className="mt-4 flex items-start gap-2 rounded-xl border border-destructive/20 bg-destructive/5 p-3 text-xs text-destructive">
               <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
               <span>{roleAssignError}</span>
             </div>
@@ -139,14 +137,7 @@ export function AssignRolesModal({
             <Button
               variant="outline"
               disabled={assignment.isFetching}
-              onClick={async () => {
-                const current = await assignment.refetch()
-                if ((current as { isSuccess?: boolean }).isSuccess) {
-                  setSelectedRoleIds([])
-                  setRoleReviewRequired(false)
-                  setRoleAssignError(null)
-                }
-              }}
+              onClick={() => void onReconcile()}
             >
               <RefreshCw size={16} /> Đối chiếu vai trò
             </Button>

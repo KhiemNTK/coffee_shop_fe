@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
+import { getPermissionLabel } from '../../shared/auth/permission-label'
 import { useOutletContext } from 'react-router-dom'
 import {
   Banknote,
@@ -128,7 +129,8 @@ function getInitials(name: string): string {
 }
 
 export default function StaffAccount() {
-  const { t: translate } = useTranslation()
+  const { t: translate, i18n } = useTranslation()
+  const language = i18n.resolvedLanguage === 'en' ? 'en' : 'vi'
   const { employee, authorization } = useOutletContext<Session>()
   const totalPermissions = authorization.permissionKeys.length
 
@@ -150,8 +152,8 @@ export default function StaffAccount() {
     const keys = authorization.permissionKeys
     if (!searchQuery.trim()) return keys
     const q = searchQuery.toLowerCase().trim()
-    return keys.filter((k) => k.toLowerCase().includes(q))
-  }, [authorization.permissionKeys, searchQuery])
+    return keys.filter((k) => `${k} ${getPermissionLabel(k, language)}`.toLowerCase().includes(q))
+  }, [authorization.permissionKeys, searchQuery, language])
 
   // Group permission keys by category
   const groupedPermissions = useMemo(() => {
@@ -476,9 +478,9 @@ export default function StaffAccount() {
                     {filteredKeys.map((key) => (
                       <span
                         key={key}
-                        className="font-mono text-xs px-2.5 py-1 rounded-lg bg-muted/60 border border-border/70 text-foreground hover:bg-muted transition-colors break-all"
+                        className="text-xs px-2.5 py-1 rounded-lg bg-muted/60 border border-border/70 text-foreground hover:bg-muted transition-colors break-words"
                       >
-                        {key}
+                        {getPermissionLabel(key, language)}
                       </span>
                     ))}
                   </div>
@@ -540,9 +542,9 @@ export default function StaffAccount() {
                               {group.keys.map((key) => (
                                 <span
                                   key={key}
-                                  className="font-mono text-[11px] px-2 py-1 rounded-md bg-muted/50 border border-border/60 text-foreground/90 hover:bg-muted transition-colors break-all"
+                                  className="text-[11px] px-2 py-1 rounded-md bg-muted/50 border border-border/60 text-foreground/90 hover:bg-muted transition-colors break-words"
                                 >
-                                  {key}
+                                  {getPermissionLabel(key, language)}
                                 </span>
                               ))}
                             </div>

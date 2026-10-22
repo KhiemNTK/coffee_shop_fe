@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { z } from 'zod'
 import { apiGet, ApiError, sessionEvents } from '../../shared/api/client'
+import type { PermissionAccess } from '../../shared/auth/permissions'
 
 const employeeSchema = z.object({
   id: z.uuid(),
@@ -19,6 +20,7 @@ const permissionsSchema = z.object({
 
 export const sessionKey = ['private', 'session'] as const
 export type Session = {
+  access: PermissionAccess
   employee: z.infer<typeof employeeSchema>
   authorization: z.infer<typeof permissionsSchema>
 }

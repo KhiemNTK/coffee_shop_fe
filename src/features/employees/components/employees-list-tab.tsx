@@ -1,6 +1,6 @@
-import { useState, useMemo, useDeferredValue } from 'react'
+import { useState, useMemo, useDeferredValue, useRef } from 'react'
 import { useOutletContext } from 'react-router-dom'
-import type { Session } from '../../auth/session'
+import { sessionKey, type Session } from '../../auth/session'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Users, Search, Edit2, Trash2, Mail, Phone, ShieldCheck } from 'lucide-react'
 import {
@@ -89,6 +89,7 @@ export function EmployeesListTab({
   // Modals state: Employee Role Assignment
   const [roleAssignEmployee, setRoleAssignEmployee] = useState<EmployeeListItem | null>(null)
   const [selectedRoleIds, setSelectedRoleIds] = useState<string[] | null>(null)
+  const roleBaseline = useRef<string[] | null>(null)
   const [roleAssignError, setRoleAssignError] = useState<string | null>(null)
   const [roleReviewRequired, setRoleReviewRequired] = useState(false)
   const assignment = useQuery({
@@ -181,8 +182,8 @@ export function EmployeesListTab({
 
   const replaceRolesMutation = useMutation({
     retry: false,
-    mutationFn: ({ id, roleIds }: { id: string; roleIds: string[] }) =>
-      replaceEmployeeRoles(id, roleIds),
+    mutationFn: ({ id, roleIds, expectedRoleIds }: { id: string; roleIds: string[]; expectedRoleIds: string[] }) =>
+      replaceEmployeeRoles(id, roleIds, expectedRoleIds),
     onSuccess: () => {
       invalidateEmployeeQueries()
       onToast('Đã cập nhật phân quyền vai trò cho nhân viên')
@@ -193,6 +194,7 @@ export function EmployeesListTab({
     onError: (err) => {
       setRoleAssignError(errorMessage(err))
       setRoleReviewRequired(true)
+      void queryClient.invalidateQueries({ queryKey: sessionKey })
     },
   })
 
@@ -211,6 +213,7 @@ export function EmployeesListTab({
     setRoleAssignEmployee(emp)
     setRoleAssignError(null)
     setRoleReviewRequired(false)
+    roleBaseline.current = null
     setSelectedRoleIds(null)
     void queryClient.invalidateQueries({
       queryKey: ['private', employee.id, 'employee-role-assignment', emp.id],
@@ -460,19 +463,29 @@ export function EmployeesListTab({
         roles={roles}
         rolesLoaded={rolesLoaded}
         roleIds={roleIds}
-        setSelectedRoleIds={setSelectedRoleIds}
+        setSelectedRoleIds={(ids) => {
+          roleBaseline.current ??= assignment.data?.employeeRoles.map((entry) => entry.role.id) ?? []
+          setSelectedRoleIds(ids)
+        }}
         assignment={assignment}
         assignmentReady={assignmentReady}
         roleAssignError={roleAssignError}
-        setRoleAssignError={setRoleAssignError}
         roleReviewRequired={roleReviewRequired}
-        setRoleReviewRequired={setRoleReviewRequired}
+        onReconcile={async () => {
+          const current = await assignment.refetch()
+          if (!current.isSuccess) return
+          roleBaseline.current = null
+          setSelectedRoleIds(null)
+          setRoleReviewRequired(false)
+          setRoleAssignError(null)
+        }}
         isPending={replaceRolesMutation.isPending}
         onSubmit={(ids) => {
           if (!roleAssignEmployee) return
           replaceRolesMutation.mutate({
             id: roleAssignEmployee.id,
             roleIds: ids,
+            expectedRoleIds: roleBaseline.current ?? assignment.data?.employeeRoles.map((entry) => entry.role.id) ?? [],
           })
         }}
       />

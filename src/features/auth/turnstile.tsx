@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next'
 import { useEffect, useRef, useState } from 'react'
 import { ShieldCheck, RefreshCw, AlertCircle } from 'lucide-react'
+import { useTheme } from '../../shared/theme'
 
 type TurnstileApi = {
   render: (
@@ -70,6 +71,7 @@ export function Turnstile({
   size?: 'compact' | 'normal' | 'flexible'
 }) {
   const { t: translate, i18n } = useTranslation()
+  const { resolvedTheme } = useTheme()
   const container = useRef<HTMLDivElement>(null)
   const [failed, setFailed] = useState(false)
   const [attempt, setAttempt] = useState(0)
@@ -93,7 +95,7 @@ export function Turnstile({
           sitekey: siteKey,
           action,
           size,
-          theme: 'light',
+          theme: resolvedTheme,
           language: i18n.resolvedLanguage,
           callback: (token) => {
             if (!cancelled) {
@@ -113,7 +115,7 @@ export function Turnstile({
       cancelled = true
       if (widget !== undefined) api?.remove(widget)
     }
-  }, [siteKey, onToken, attempt, action, size, i18n.resolvedLanguage])
+  }, [siteKey, onToken, attempt, action, size, i18n.resolvedLanguage, resolvedTheme])
 
   return (
     <div className="verification space-y-2">

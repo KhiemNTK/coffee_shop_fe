@@ -37,6 +37,7 @@ export type PaginatedPositions = z.infer<typeof paginatedPositionsSchema>
 // ==========================================
 
 export const permissionSchema = z.object({
+  isSystemPermission: z.boolean().default(false),
   id: z.string(),
   name: z.string(),
   key: z.string(),
@@ -268,12 +269,13 @@ export async function getEmployeeRoles(
 export async function replaceEmployeeRoles(
   id: string,
   roleIds: string[],
+  expectedRoleIds?: string[],
 ): Promise<ActionMessageResponse> {
   return apiMutate(
     `/employees/${id}/roles`,
     'PUT',
     actionMessageResponseSchema,
-    { roleIds },
+    { roleIds, expectedRoleIds },
   )
 }
 
@@ -360,6 +362,7 @@ export async function getRolePermissions(
 export async function replaceRolePermissions(
   id: string,
   permissionIds: string[],
+  expectedPermissionIds?: string[],
 ): Promise<ActionMessageResponse> {
   return apiMutate(
     `/roles/${id}/permissions`,
@@ -367,6 +370,7 @@ export async function replaceRolePermissions(
     actionMessageResponseSchema,
     {
       permissionIds,
+      expectedPermissionIds,
     },
   )
 }

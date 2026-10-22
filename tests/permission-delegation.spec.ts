@@ -40,6 +40,88 @@ const paged = (list: readonly unknown[]) => ({
   totalItems: list.length,
 })
 
+test('permission conflicts preserve the original baseline and require an explicit review', async ({ page }, info) => {
+  await staff(page)
+  const writes: Array<{ permissionIds: string[]; expectedPermissionIds: string[] }> = []
+  const refreshed = { ...detail, rolePermissions: [{ permission: permissions[0] }, { permission: permissions[2] }] }
+  await page.route('**/api/v1/roles/*/permissions', (route) => {
+    if (route.request().method() === 'PUT') {
+      writes.push(route.request().postDataJSON())
+      return writes.length === 1
+        ? route.fulfill({ status: 409, json: { code: 'AUTHORIZATION_CHANGED', message: 'Changed on another terminal' } })
+        : route.fulfill({ json: envelope({ success: true }) })
+    }
+    return route.fulfill({ json: envelope(writes.length ? refreshed : detail) })
+  })
+  await page.goto('/staff/employees')
+  await page.getByRole('button', { name: /Vai trò & Quyền hạn/ }).click()
+  await page.getByRole('button', { name: 'Phân quyền', exact: true }).click()
+  const dialog = page.getByRole('dialog')
+  await dialog.getByRole('checkbox', { name: /Xem tồn kho/ }).check()
+  await dialog.getByRole('button', { name: 'Lưu danh sách quyền' }).click()
+  await expect(dialog.getByRole('alert')).toHaveText('Phân quyền đã thay đổi. Tải lại và đối chiếu trước khi lưu.')
+  await expect(dialog.getByRole('button', { name: 'Lưu danh sách quyền' })).toBeDisabled()
+  expect(writes).toEqual([{ permissionIds: ['menu', 'inventory'], expectedPermissionIds: ['menu'] }])
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+  await page.screenshot({ path: info.outputPath('permission-conflict.png') })
+  await dialog.getByRole('button', { name: 'Đối chiếu quyền' }).click()
+  await expect(dialog.getByRole('checkbox', { name: /Hoàn tiền/ })).toBeChecked()
+  await expect(dialog.getByRole('checkbox', { name: /Xem tồn kho/ })).not.toBeChecked()
+  await dialog.getByRole('button', { name: 'Lưu danh sách quyền' }).click()
+  await expect(page.getByText('Đã cập nhật danh sách quyền cho vai trò')).toBeVisible()
+  expect(writes[1]).toEqual({ permissionIds: ['menu', 'refund'], expectedPermissionIds: ['menu', 'refund'] })
+})
+
+test('role reconciliation keeps the server assignments instead of clearing every role', async ({ page }) => {
+  await staff(page)
+  const writes: Array<{ roleIds: string[]; expectedRoleIds: string[] }> = []
+  await page.route('**/api/v1/employees/*/roles', (route) => {
+    if (route.request().method() === 'PUT') {
+      writes.push(route.request().postDataJSON())
+      return writes.length === 1
+        ? route.fulfill({ status: 409, json: { code: 'AUTHORIZATION_CHANGED' } })
+        : route.fulfill({ json: envelope({ success: true }) })
+    }
+    return route.fulfill({ json: envelope({
+      ...assignment,
+      assignableRoleIds: roles.map((role) => role.id),
+      employeeRoles: writes.length ? roles.map((role) => ({ role })) : assignment.employeeRoles,
+    }) })
+  })
+  await page.goto('/staff/employees')
+  await page.getByTitle('Phân quyền vai trò').click()
+  const dialog = page.getByRole('dialog')
+  await dialog.getByRole('checkbox', { name: /OWNER/ }).check()
+  page.once('dialog', (confirmation) => confirmation.accept())
+  await dialog.getByRole('button', { name: 'Lưu vai trò', exact: true }).click()
+  await expect(dialog.getByRole('alert')).toContainText('Phân quyền đã thay đổi')
+  await expect(dialog.getByRole('button', { name: 'Lưu vai trò', exact: true })).toBeDisabled()
+  expect(writes).toEqual([{ roleIds: [roleId, 'owner-role'], expectedRoleIds: [roleId] }])
+  await dialog.getByRole('button', { name: 'Đối chiếu vai trò' }).click()
+  await expect(dialog.getByRole('checkbox', { name: /OWNER/ })).toBeChecked()
+  await expect(dialog.getByRole('checkbox', { name: /Trưởng ca/ })).toBeChecked()
+  await dialog.getByRole('button', { name: 'Lưu vai trò', exact: true }).click()
+  await expect(page.getByText('Đã cập nhật phân quyền vai trò cho nhân viên')).toBeVisible()
+  expect(writes[1]).toEqual({ roleIds: ['owner-role', roleId], expectedRoleIds: ['owner-role', roleId] })
+})
+
+test('permission workflow shows business labels and hides technical keys by default', async ({ page }, info) => {
+  await staff(page)
+  const permission = { ...permissions[0], name: 'Menu Read', isSystemPermission: true }
+  await page.route('**/api/v1/permissions?*', (route) => route.fulfill({ json: envelope(paged([permission])) }))
+  await page.route('**/api/v1/roles/*/permissions', (route) => route.fulfill({ json: envelope({ ...detail, rolePermissions: [{ permission }] }) }))
+  await page.goto('/staff/employees')
+  await page.getByRole('button', { name: /Vai trò & Quyền hạn/ }).click()
+  await page.getByRole('button', { name: 'Phân quyền', exact: true }).click()
+  const dialog = page.getByRole('dialog')
+  await expect(dialog.getByRole('checkbox', { name: 'Xem quản lý thực đơn', exact: true })).toBeChecked()
+  await expect(dialog.getByText('/menu_read', { exact: true })).toHaveCount(0)
+  await dialog.getByRole('checkbox', { name: 'Hiển thị mã quyền kỹ thuật' }).check()
+  await expect(dialog.getByText('/menu_read', { exact: true })).toBeVisible()
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+  await page.screenshot({ path: info.outputPath('permission-labels.png') })
+})
+
 async function staff(page: Page) {
   const keys = [
     '/employees_read',

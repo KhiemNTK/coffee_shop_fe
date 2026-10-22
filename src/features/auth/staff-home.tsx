@@ -95,8 +95,8 @@ function WorkSection({
 
 export default function StaffHome() {
   const { t: translate } = useTranslation()
-  const { employee, authorization } = useOutletContext<Session>()
-  const can = (key: string) => authorization.permissionKeys.includes(key)
+  const { employee, authorization, access } = useOutletContext<Session>()
+  const can = access.has
   const destinations = visibleStaffDestinations(authorization.permissionKeys)
 
   const shift = useQuery({

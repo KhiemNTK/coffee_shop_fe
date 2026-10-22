@@ -1,3 +1,4 @@
+import { createPermissionAccess, type PermissionKey } from '../../shared/auth/permissions'
 import {
   Activity,
   BarChart3,
@@ -141,15 +142,14 @@ export const staffDestinations = [
       '/receipts_reprint',
     ],
   },
-] as const
+] as const satisfies readonly { path: string; label: string; icon: unknown; permissions: readonly PermissionKey[] }[]
 
 export type StaffDestination = (typeof staffDestinations)[number]['path']
 
 export function visibleStaffDestinations(permissionKeys: readonly string[]) {
+  const access = createPermissionAccess(permissionKeys)
   return staffDestinations.filter((destination) =>
-    destination.permissions.some((permission) =>
-      permissionKeys.includes(permission),
-    ),
+    access.hasAny(...destination.permissions),
   )
 }
 

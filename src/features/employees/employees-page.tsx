@@ -9,31 +9,29 @@ import { EmployeesListTab } from './components/employees-list-tab'
 import { PositionsTab } from './components/positions-tab'
 import { RolesTab } from './components/roles-tab'
 import { errorMessage } from '../../shared/api/client'
+import { WorkflowPermissions } from '@/shared/auth/workflow-permissions'
 
 export function EmployeesPage() {
   const client = useQueryClient()
-  const { authorization } = useOutletContext<Session>()
-  const permissions = authorization.permissionKeys
+  const { access } = useOutletContext<Session>()
+
 
   // Permissions check
-  const canReadEmployees = permissions.includes('/employees_read')
-  const canCreateEmployee = permissions.includes('/employees_create')
-  const canUpdateEmployee = permissions.includes('/employees_update')
-  const canDeleteEmployee = permissions.includes('/employees_delete')
-  const canManageEmployeeRoles =
-    permissions.includes('/employees_roles_read') &&
-    permissions.includes('/employees_roles_update') &&
-    permissions.includes('/roles_read')
+  const canReadEmployees = access.has('/employees_read')
+  const canCreateEmployee = access.has('/employees_create')
+  const canUpdateEmployee = access.has('/employees_update')
+  const canDeleteEmployee = access.has('/employees_delete')
+  const canManageEmployeeRoles = access.hasAll(...WorkflowPermissions.manageEmployeeRoles)
 
-  const canReadPositions = permissions.includes('/positions_read')
-  const canCreatePosition = permissions.includes('/positions_create')
-  const canUpdatePosition = permissions.includes('/positions_update')
-  const canDeletePosition = permissions.includes('/positions_delete')
+  const canReadPositions = access.has('/positions_read')
+  const canCreatePosition = access.has('/positions_create')
+  const canUpdatePosition = access.has('/positions_update')
+  const canDeletePosition = access.has('/positions_delete')
 
-  const canReadRoles = permissions.includes('/roles_read')
+  const canReadRoles = access.has('/roles_read')
   const canManageRolePermissions =
-    permissions.includes('/roles_permissions_read') &&
-    permissions.includes('/roles_permissions_update')
+    access.has('/roles_permissions_read') &&
+    access.has('/roles_permissions_update')
 
   // Active Tab
   const [activeTab, setActiveTab] = useState<'employees' | 'positions' | 'roles'>(

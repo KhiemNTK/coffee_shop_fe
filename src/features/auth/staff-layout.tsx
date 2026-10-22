@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next'
-import { useRef, useState } from 'react'
-import { Link, Navigate, NavLink, Outlet, useNavigate, useOutletContext } from 'react-router-dom'
+import { useMemo, useRef, useState } from 'react'
+import { Link, Navigate, NavLink, Outlet, useLocation, useNavigate, useOutletContext } from 'react-router-dom'
+import { AppErrorBoundary } from '../../app/error-boundary'
 import {
   Bell,
   ChevronDown,
@@ -23,20 +24,22 @@ import { clearPrivatePendingOperations } from '../../shared/api/idempotency'
 import { Button } from '../../shared/ui/button'
 import { buttonVariants } from '../../shared/ui/button-variants'
 import { cn } from '../../shared/ui/utils'
+import { ThemeToggle } from '../../shared/theme'
+import { createPermissionAccess, type PermissionKey } from '../../shared/auth/permissions'
 
 export function PermissionGate({
   permission,
   anyOf,
 }: {
-  permission?: string
-  anyOf?: readonly string[]
+  permission?: PermissionKey
+  anyOf?: readonly PermissionKey[]
 }) {
   const { t: translate } = useTranslation()
   const session = useOutletContext<Session>()
   const hasPermission = permission
-    ? session.authorization.permissionKeys.includes(permission)
+    ? session.access.has(permission)
     : anyOf
-      ? anyOf.some((key) => session.authorization.permissionKeys.includes(key))
+      ? session.access.hasAny(...anyOf)
       : true
 
   return hasPermission ? (
@@ -56,12 +59,21 @@ export function PermissionGate({
 
 export function StaffLayout() {
   const { t: translate } = useTranslation()
+  const location = useLocation()
   const navigate = useNavigate()
   const [leaving, setLeaving] = useState(false)
   const [logoutError, setLogoutError] = useState<unknown>()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const session = useSession(!leaving)
+  const access = useMemo(
+    () => createPermissionAccess(session.data?.authorization.permissionKeys ?? []),
+    [session.data?.authorization.permissionKeys],
+  )
+  const outletContext = useMemo(
+    () => session.data ? { ...session.data, access } satisfies Session : undefined,
+    [session.data, access],
+  )
   const submitting = useRef(false)
 
   async function logout() {
@@ -194,6 +206,8 @@ export function StaffLayout() {
             <span>Chi nhánh trung tâm</span>
             <ChevronDown className="h-3 w-3 text-muted-foreground shrink-0" />
           </div>
+
+          <ThemeToggle />
 
           <div className="hidden sm:inline-flex items-center gap-2">
             <div className="relative inline-flex items-center justify-center rounded-lg p-1.5 text-muted-foreground hover:bg-muted/50 cursor-pointer" title="Thông báo">
@@ -513,7 +527,9 @@ export function StaffLayout() {
 
         {/* Content Area */}
         <main className="min-w-0 max-w-[1680px] flex-1 p-4 md:p-5 lg:p-7">
-          <Outlet context={session.data} />
+          <AppErrorBoundary key={location.pathname} scope="page">
+            <Outlet context={outletContext} />
+          </AppErrorBoundary>
         </main>
       </div>
     </div>

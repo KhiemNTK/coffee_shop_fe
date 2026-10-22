@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useOutletContext } from 'react-router-dom'
 import { Pencil, Plus, ShieldCheck, Trash2, RefreshCw } from 'lucide-react'
@@ -10,10 +11,10 @@ import {
   saveRole,
   type Role,
 } from '../employees.api'
-import type { Session } from '../../auth/session'
+import { sessionKey, type Session } from '../../auth/session'
 import { errorMessage } from '@/shared/api/client'
 import { Button, Badge, Dialog, Input } from '@/shared/ui'
-import { groupPermissions, isSensitivePermission } from '../permission-groups'
+import { groupPermissions, isSensitivePermission, permissionLabel } from '../permission-groups'
 
 export function RolesTab({
   roles,
@@ -26,8 +27,8 @@ export function RolesTab({
   canManagePermissions: boolean
   onToast: (message: string) => void
 }) {
-  const { authorization } = useOutletContext<Session>()
-  const can = (key: string) => authorization.permissionKeys.includes(key)
+  const { access } = useOutletContext<Session>()
+  const can = access.has
   const client = useQueryClient()
   const [permissionsFor, setPermissionsFor] = useState<Role | null>(null)
   const [editing, setEditing] = useState<Role | 'new' | null>(null)
@@ -232,10 +233,13 @@ function RolePermissions({
   onToast: (message: string) => void
 }) {
   const { employee, authorization } = useOutletContext<Session>()
+  const { t } = useTranslation()
   const client = useQueryClient()
   const flight = useRef(false)
+  const baseline = useRef<string[] | null>(null)
   const [selected, setSelected] = useState<string[] | null>(null)
   const [search, setSearch] = useState('')
+  const [showKeys, setShowKeys] = useState(false)
   const [reviewRequired, setReviewRequired] = useState(false)
   const granted = new Set(authorization.permissionKeys)
   const canReadCatalog = granted.has('/permissions_read')
@@ -270,15 +274,15 @@ function RolePermissions({
       ? (catalog.data ?? [])
       : (query.data?.rolePermissions.map((entry) => entry.permission) ?? [])
     ).filter((permission) =>
-      [permission.name, permission.key, permission.description ?? ''].some(
+      [permissionLabel(permission), permission.name, permission.key, permission.description ?? ''].some(
         (value) => value.toLocaleLowerCase('vi').includes(needle),
       ),
     ),
   )
   const mutation = useMutation({
     retry: false,
-    mutationFn: (permissionIds: string[]) =>
-      replaceRolePermissions(role.id, permissionIds),
+    mutationFn: ({ permissionIds, expectedPermissionIds }: { permissionIds: string[]; expectedPermissionIds: string[] }) =>
+      replaceRolePermissions(role.id, permissionIds, expectedPermissionIds),
     onSuccess: () => {
       void client.invalidateQueries({ queryKey: ['private'] })
       onToast('Đã cập nhật danh sách quyền cho vai trò')
@@ -287,7 +291,10 @@ function RolePermissions({
     onSettled: () => {
       flight.current = false
     },
-    onError: () => setReviewRequired(true),
+    onError: () => {
+      setReviewRequired(true)
+      void client.invalidateQueries({ queryKey: sessionKey })
+    },
   })
   return (
     <Dialog
@@ -334,6 +341,10 @@ function RolePermissions({
       <p className="text-sm text-muted-foreground">
         {ids.length} quyền được chọn
       </p>
+      <label className="mt-3 flex items-center gap-2 text-sm text-muted-foreground">
+        <input type="checkbox" checked={showKeys} onChange={(event) => setShowKeys(event.target.checked)} />
+        {t('permissions.showKeys')}
+      </label>
       <div className="my-4 max-h-80 space-y-4 overflow-auto">
         {grouped.map(([label, permissions]) => (
           <fieldset
@@ -352,24 +363,25 @@ function RolePermissions({
                     type="checkbox"
                     checked={ids.includes(permission.id)}
                     disabled={!granted.has(permission.key)}
-                    onChange={(event) =>
+                    onChange={(event) => {
+                      baseline.current ??= query.data?.rolePermissions.map((entry) => entry.permission.id) ?? []
                       setSelected(
                         event.target.checked
                           ? [...ids, permission.id]
                           : ids.filter((id) => id !== permission.id),
                       )
-                    }
+                    }}
                   />
                   <span className="min-w-0 break-words">
-                    {permission.name}
+                    {permissionLabel(permission)}
                     {isSensitivePermission(permission.key) && (
                       <Badge variant="warning" className="ml-2">
                         Nhạy cảm
                       </Badge>
                     )}
-                    <span className="block break-all text-xs text-muted-foreground">
+                    {showKeys && <span className="block break-all text-xs text-muted-foreground">
                       {permission.key}
-                    </span>
+                    </span>}
                     {!granted.has(permission.key) && (
                       <span className="block text-xs text-muted-foreground">
                         Ngoài phạm vi được cấp
@@ -396,6 +408,7 @@ function RolePermissions({
               catalog.refetch(),
             ])
             if (current.isSuccess && permissions.isSuccess) {
+              baseline.current = null
               setSelected(null)
               setReviewRequired(false)
               mutation.reset()
@@ -431,7 +444,10 @@ function RolePermissions({
           )
             return
           flight.current = true
-          mutation.mutate(ids)
+          mutation.mutate({
+            permissionIds: ids,
+            expectedPermissionIds: baseline.current ?? query.data?.rolePermissions.map((entry) => entry.permission.id) ?? [],
+          })
         }}
       >
         Lưu danh sách quyền
