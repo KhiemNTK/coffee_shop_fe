@@ -25,8 +25,8 @@ import {
 } from '../reconciliation.api'
 
 export function BankStatementsTab() {
-  const { employee, authorization } = useOutletContext<Session>()
-  const can = (key: string) => authorization.permissionKeys.includes(key)
+  const { employee, access } = useOutletContext<Session>()
+  const can = access.has
   const [page, setPage] = useState(1)
   const [entryPage, setEntryPage] = useState(1)
   const [selectedId, setSelectedId] = useState('')
@@ -298,7 +298,7 @@ export function BankStatementsTab() {
         <section aria-label="Chi tiết sao kê" className="space-y-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <h3 className="text-base font-bold text-foreground">Giao dịch trong sao kê đã chọn</h3>
-            {can('/bank-reconciliation_reconcile') && (
+            {can('/bank-reconciliation_manage') && (
               <Button
                 size="sm"
                 disabled={reconcile.isPending}
@@ -380,7 +380,7 @@ export function BankStatementsTab() {
                     </p>
                   )}
 
-                  {can('/bank-reconciliation_reconcile') &&
+                  {can('/bank-reconciliation_manage') &&
                     entry.matchStatus === 'UNMATCHED' && (
                       <Button
                         variant="outline"

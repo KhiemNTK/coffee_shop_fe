@@ -21,7 +21,7 @@ import {
   RefreshCw,
   RotateCcw,
 } from 'lucide-react'
-import { printingApi } from '../../printing/printing.api'
+import { printingApi, printingKeys } from '../../printing/printing.api'
 import {
   getInvoiceById,
   voidInvoice,
@@ -46,10 +46,10 @@ interface InvoiceDetailDialogProps {
 }
 
 export function InvoiceDetailDialog({ invoiceId, onClose, onUpdated }: InvoiceDetailDialogProps) {
-  const { employee, authorization } = useOutletContext<Session>()
+  const { employee, access } = useOutletContext<Session>()
   const { t: translate } = useTranslation()
   const client = useQueryClient()
-  const can = (key: string) => authorization.permissionKeys.includes(key)
+  const can = access.has
   const [selectedTab, setActiveTab] = useState<'items' | 'gateway' | 'pay_manual' | 'aftersales'>(
     'items'
   )
@@ -78,6 +78,7 @@ export function InvoiceDetailDialog({ invoiceId, onClose, onUpdated }: InvoiceDe
     onSuccess: (job) => {
       setReprintSuccess(`Đã tạo lệnh in lại hóa đơn #${job.id.slice(0, 8)} thành công.`)
       setReprintOpen(false)
+      void client.invalidateQueries({ queryKey: printingKeys.jobs(employee.id) })
     },
     onError: (err) => {
       setActionError(errorMessage(err))
@@ -221,7 +222,7 @@ export function InvoiceDetailDialog({ invoiceId, onClose, onUpdated }: InvoiceDe
       manualFlight.current ||
       manualBlocked ||
       inv?.paymentStatus !== 'UNPAID' ||
-      !can('/invoices_update')
+      !can('/invoices_pay')
     )
       return
     if (!submittedManual && manualMethod === 'CASH' && !tenderedEnough) {
@@ -324,7 +325,7 @@ export function InvoiceDetailDialog({ invoiceId, onClose, onUpdated }: InvoiceDe
               </button>
             )}
           {inv?.paymentStatus === 'UNPAID' &&
-            (can('/invoices_update') || can('/payment-attempts_read')) && (
+            (can('/invoices_pay') || can('/payment-attempts_read')) && (
               <>
                 {can('/payment-attempts_read') && (
                   <button
@@ -342,7 +343,7 @@ export function InvoiceDetailDialog({ invoiceId, onClose, onUpdated }: InvoiceDe
                     {translate('payment.gatewayTab')}
                   </button>
                 )}
-                {can('/invoices_update') && (
+                {can('/invoices_pay') && (
                   <button
                     type="button"
                     disabled={paymentLocked}
@@ -618,7 +619,7 @@ export function InvoiceDetailDialog({ invoiceId, onClose, onUpdated }: InvoiceDe
                   onClick={confirmManualPayment}
                   isLoading={updatePaymentMutation.isPending}
                   disabled={
-                    !can('/invoices_update') ||
+                    !can('/invoices_pay') ||
                     manualBlocked ||
                     (!submittedManual && manualMethod === 'CASH' && !tenderedEnough)
                   }
@@ -635,7 +636,7 @@ export function InvoiceDetailDialog({ invoiceId, onClose, onUpdated }: InvoiceDe
         {/* Modal Footer */}
         <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-border bg-muted/40 p-4">
           <div className="flex flex-wrap items-center gap-2">
-            {inv?.paymentStatus === 'UNPAID' && can('/invoices_update') && (
+            {inv?.paymentStatus === 'UNPAID' && can('/invoices_void') && (
               <Button
                 type="button"
                 variant="destructive"

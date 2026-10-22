@@ -37,7 +37,7 @@ const attempt = {
 const link = 'https://sandbox.vnpayment.vn/paymentv2/vpcpay.html?vnp_TxnRef=PA-GATEWAY'
 const permissions = [
   '/invoices_read',
-  '/invoices_create',
+  '/invoices_create', '/invoices_pay',
   '/payment-attempts_read',
   '/payment-attempts_create',
   '/orders_sessions_read',
@@ -56,6 +56,7 @@ async function setup(
     configured?: boolean
     attempts?: () => unknown[]
     paid?: () => boolean
+    paymentMethod?: () => string
   } = {}
 ) {
   await page.clock.install({ time: now })
@@ -81,6 +82,7 @@ async function setup(
       json: envelope({
         ...invoice,
         paymentStatus: options.paid?.() ? 'PAID' : 'UNPAID',
+        paymentMethod: options.paymentMethod?.() ?? invoice.paymentMethod,
       }),
     })
   )
@@ -97,12 +99,111 @@ async function openGateway(page: Page) {
     .click()
 }
 
+async function mockAudio(page: Page) {
+  await page.addInitScript(() => {
+    const stats = { contexts: 0, plays: 0, disconnected: 0 }
+    class FixtureAudio {
+      state = 'running'
+      currentTime = 0
+      destination = {}
+      constructor() { stats.contexts++ }
+      resume() { return Promise.resolve() }
+      createOscillator() {
+        const oscillator = {
+          type: 'sine',
+          frequency: { setValueAtTime() {} },
+          onended: null as (() => void) | null,
+          connect() {},
+          disconnect() { stats.disconnected++ },
+          start() { stats.plays++ },
+          stop() { oscillator.onended?.() },
+        }
+        return oscillator
+      }
+      createGain() {
+        return {
+          gain: { setValueAtTime() {}, linearRampToValueAtTime() {}, exponentialRampToValueAtTime() {} },
+          connect() {},
+          disconnect() { stats.disconnected++ },
+        }
+      }
+    }
+    Object.assign(window, { AudioContext: FixtureAudio, audioFixture: stats })
+  })
+}
+
+for (const paymentMethod of ['TRANSFER', 'CASH']) {
+  test(`payment sound only announces a confirmed transfer, not ${paymentMethod === 'CASH' ? 'cash settlement' : 'repeated invoice reads'}`, async ({ page }) => {
+    let paid = false
+    await setup(page, { paid: () => paid, paymentMethod: () => paymentMethod })
+    await mockAudio(page)
+    await openGateway(page)
+    await page.getByRole('button', { name: 'Bật và thử âm báo thanh toán' }).click()
+    const plays = () => page.evaluate(() => Reflect.get(window, 'audioFixture').plays as number)
+    await expect.poll(plays).toBe(1)
+    await page.getByRole('button', { name: /^Chi tiết món/ }).click()
+    await page.getByRole('button', { name: 'Cổng thanh toán (VNPay / MoMo / payOS)', exact: true }).click()
+    await expect(page.getByRole('button', { name: 'Tắt âm báo thanh toán' })).toHaveAttribute('aria-pressed', 'true')
+    await expect(page.getByRole('button', { name: 'Kiểm tra trạng thái', exact: true })).toBeEnabled()
+    paid = true
+    await page.getByRole('button', { name: 'Kiểm tra trạng thái', exact: true }).click()
+    await expect(page.getByText('Tổng hóa đơn:', { exact: false })).toContainText('Đã thanh toán')
+    await expect.poll(plays).toBe(paymentMethod === 'TRANSFER' ? 2 : 1)
+    await page.getByRole('button', { name: 'Kiểm tra trạng thái', exact: true }).click()
+    await expect(page.getByRole('button', { name: 'Kiểm tra trạng thái', exact: true })).toBeEnabled()
+    expect(await plays()).toBe(paymentMethod === 'TRANSFER' ? 2 : 1)
+    expect(await page.evaluate(() => Reflect.get(window, 'audioFixture').contexts)).toBe(1)
+    expect(await page.evaluate(() => Reflect.get(window, 'audioFixture').disconnected)).toBe((await plays()) * 2)
+  })
+}
+
+test('enabling payment sound does not replay an invoice paid while muted', async ({ page }) => {
+  let paid = false
+  await setup(page, { paid: () => paid })
+  await mockAudio(page)
+  await openGateway(page)
+  paid = true
+  await page.getByRole('button', { name: 'Kiểm tra trạng thái', exact: true }).click()
+  await expect(page.getByText('Tổng hóa đơn:', { exact: false })).toContainText('Đã thanh toán')
+  expect(await page.evaluate(() => Reflect.get(window, 'audioFixture').plays)).toBe(0)
+  await page.getByRole('button', { name: 'Bật và thử âm báo thanh toán' }).click()
+  await expect(page.getByRole('button', { name: 'Tắt âm báo thanh toán' })).toHaveAttribute('aria-pressed', 'true')
+  expect(await page.evaluate(() => Reflect.get(window, 'audioFixture').plays)).toBe(1)
+  await page.getByRole('button', { name: 'Kiểm tra trạng thái', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Kiểm tra trạng thái', exact: true })).toBeEnabled()
+  expect(await page.evaluate(() => Reflect.get(window, 'audioFixture').plays)).toBe(1)
+})
+
+test('unsupported audio leaves payment controls available and reports the fallback', async ({ page }) => {
+  await setup(page)
+  await page.addInitScript(() => {
+    Object.assign(window, { AudioContext: class { constructor() { throw new Error('Audio unavailable') } } })
+  })
+  await openGateway(page)
+  await page.getByRole('button', { name: 'Bật và thử âm báo thanh toán' }).click()
+  await expect(page.getByRole('status').filter({ hasText: 'Chưa phát được âm thanh' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Tạo phiên VNPAY', exact: true })).toBeEnabled()
+})
+
+for (const allowed of ['pay', 'void', 'legacy'] as const) {
+  test(`permission workflow separates invoice ${allowed} access`, async ({ page }) => {
+    const permission = allowed === 'pay' ? '/invoices_pay' : allowed === 'void' ? '/invoices_void' : '/invoices_update'
+    await setup(page, { permissions: ['/invoices_read', permission] })
+    await page.goto('/staff/invoices')
+    await page.getByTitle('Xem chi tiết & Thanh toán').click()
+    await expect(page.getByRole('dialog').getByRole('heading', { name: `Hóa đơn #${invoice.invoiceNumber}`, exact: true })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Xác nhận tiền mặt / Thẻ', exact: true })).toHaveCount(allowed === 'pay' ? 1 : 0)
+    await expect(page.getByRole('button', { name: 'Hủy hóa đơn', exact: true })).toHaveCount(allowed === 'void' ? 1 : 0)
+  })
+}
+
 test('payOS uses the shared gateway, preserves the link across reload, and stays within mobile bounds', async ({
   page,
 }, info) => {
   let created = false
   let creations = 0
   let recoveries = 0
+  await page.addInitScript(() => localStorage.setItem('coffee_theme', 'dark'))
   const payosLink = `https://pay.payos.vn/web/${'a'.repeat(32)}`
   const payosAttempt = { ...attempt, provider: 'PAYOS', merchantReference: '1000000000' }
   if (info.project.name === 'mobile') await page.setViewportSize({ width: 320, height: 844 })
@@ -151,6 +252,13 @@ test('payOS uses the shared gateway, preserves the link across reload, and stays
   await expect(paymentLink).toHaveAttribute('href', payosLink)
   await paymentLink.scrollIntoViewIfNeeded()
   await expect(paymentLink).toBeInViewport({ ratio: 1 })
+  const qr = page.getByRole('img', { name: 'Mã QR mở trang thanh toán', exact: true })
+  await expect(qr).toBeVisible()
+  const qrBounds = await qr.boundingBox()
+  expect(Math.abs(qrBounds!.width - qrBounds!.height)).toBeLessThan(1)
+  await expect.poll(() => qr.evaluate((node) => Array.from((node as HTMLCanvasElement)
+    .getContext('2d')!.getImageData(0, 0, 1, 1).data))).toEqual([255, 255, 255, 255])
+  await expect(page.getByText('Đây là QR liên kết', { exact: false })).toBeVisible()
   expect({ creations, recoveries }).toEqual({ creations: 1, recoveries: 1 })
   expect(
     await page
@@ -183,7 +291,7 @@ test('created link survives reads without paymentUrl and paid UI waits for the i
     'href',
     link
   )
-  const qr = page.getByRole('img', { name: 'Mã QR thanh toán' })
+  const qr = page.getByRole('img', { name: 'Mã QR mở trang thanh toán' })
   await expect(qr).toBeVisible()
   await expect
     .poll(() =>
@@ -216,7 +324,7 @@ test('created link survives reads without paymentUrl and paid UI waits for the i
 for (const status of ['PENDING', 'EXPIRED', 'REQUIRES_REVIEW']) {
   test(`${status} blocks manual collection and invoice cancellation`, async ({ page }) => {
     await setup(page, {
-      permissions: [...permissions, '/invoices_update'],
+      permissions: [...permissions, '/invoices_void'],
       attempts: () => [{ ...attempt, status }],
     })
     await page.goto('/staff/invoices')
@@ -281,6 +389,51 @@ test('an unknown refund freezes the intent and replays the original key', async 
   await expect(page.getByRole('button', { name: 'Đóng', exact: true })).toBeEnabled()
 })
 
+test('refund pagination is translated and blocks navigation during a history refresh', async ({ page }) => {
+  await setup(page, {
+    permissions: [...permissions, '/payment-refunds_read'],
+    paid: () => true,
+    attempts: () => [{ ...attempt, status: 'SUCCEEDED' }],
+  })
+  let holdNextRead = false
+  let releaseRead!: () => void
+  const heldRead = new Promise<void>(resolve => { releaseRead = resolve })
+  const pages: number[] = []
+  await page.route('**/api/v1/payment-attempts/attempt-gateway/refunds?*', async route => {
+    const currentPage = Number(new URL(route.request().url()).searchParams.get('page'))
+    pages.push(currentPage)
+    if (holdNextRead) { holdNextRead = false; await heldRead }
+    const list = Array.from({ length: currentPage === 1 ? 20 : 1 }, (_, index) => ({
+      id: `refund-${currentPage}-${index}`, paymentAttemptId: attempt.id, amount: '1',
+      reason: `Historical refund ${currentPage}-${index}`, status: 'SUCCEEDED', type: 'PARTIAL', createdAt: now.toISOString(),
+    }))
+    return route.fulfill({ json: envelope({ ...paged(list), currentPage, totalPages: 2, totalItems: 21 }) })
+  })
+  await page.goto('/staff/invoices')
+  await page.getByTitle('Xem chi tiết & Thanh toán').click()
+  await page.getByRole('button', { name: 'Hoàn tiền & làm lại', exact: true }).click()
+  const panel = page.getByRole('heading', { name: 'Hoàn tiền VNPay', exact: true }).locator('..')
+  const pagination = panel.getByRole('navigation', { name: 'Phân trang', exact: true })
+  await expect(pagination.getByRole('button', { name: 'Trang sau' })).toBeEnabled()
+  holdNextRead = true
+  await panel.getByRole('button', { name: 'Làm mới lịch sử hoàn tiền' }).click()
+  try {
+    await expect(pagination.getByRole('button', { name: 'Trang sau' })).toBeDisabled()
+  } finally {
+    releaseRead()
+  }
+  await expect(pagination.getByRole('button', { name: 'Trang sau' })).toBeEnabled()
+  await pagination.getByRole('button', { name: 'Trang sau' }).click()
+  await expect(panel.getByText('Historical refund 2-0')).toBeVisible()
+  expect(pages.at(-1)).toBe(2)
+  await page.evaluate(async () => {
+    const path = '/src/shared/i18n/index.ts'
+    const { changeLanguage } = await import(path) as typeof import('../src/shared/i18n/index.js')
+    await changeLanguage('en')
+  })
+  await expect(panel.getByRole('navigation', { name: 'Pagination' }).getByRole('button', { name: 'Next page' })).toBeDisabled()
+})
+
 test('failed refund history reads do not expose a fresh refund command', async ({ page }) => {
   await setup(page, {
     permissions: [...permissions, '/payment-refunds_read', '/payment-refunds_create'],
@@ -302,7 +455,7 @@ test('failed refund history reads do not expose a fresh refund command', async (
 test('uncertain manual collection keeps the original method and tender', async ({ page }) => {
   const bodies: Record<string, unknown>[] = []
   let paid = false
-  await setup(page, { permissions: [...permissions, '/invoices_update'], paid: () => paid })
+  await setup(page, { permissions: [...permissions, '/invoices_void'], paid: () => paid })
   await page.route('**/api/v1/invoices/invoice-gateway/payment', (route) => {
     bodies.push(route.request().postDataJSON())
     if (bodies.length === 1) return route.abort()
@@ -331,7 +484,7 @@ test('a paid invoice read releases an uncertain manual collection without anothe
 }) => {
   let paid = false
   let writes = 0
-  await setup(page, { permissions: [...permissions, '/invoices_update'], paid: () => paid })
+  await setup(page, { permissions: [...permissions, '/invoices_void'], paid: () => paid })
   await page.route('**/api/v1/invoices/invoice-gateway/payment', (route) => {
     writes++
     paid = true
@@ -371,7 +524,10 @@ test('uncertain creation freezes provider and retry reuses the same key', async 
 })
 
 test('missing configuration and permissions do not expose unsafe commands', async ({ page }) => {
-  await setup(page, { configured: false })
+  await setup(page, {
+    configured: false,
+    permissions: ['/invoices_read', '/payment-attempts_create', '/payment-attempts_read'],
+  })
   await openGateway(page)
   await expect(
     page.getByRole('button', { name: 'Tạo phiên thanh toán', exact: true })
@@ -494,7 +650,7 @@ test('unsafe gateway URL is rejected before link or QR rendering', async ({ page
   await page.getByRole('button', { name: 'Tạo phiên VNPAY', exact: true }).click()
   await expect(page.getByRole('alert')).toContainText('Phản hồi không hợp lệ')
   await expect(page.getByRole('link', { name: /^Mở thanh toán/ })).toHaveCount(0)
-  await expect(page.getByRole('img', { name: 'Mã QR thanh toán' })).toHaveCount(0)
+  await expect(page.getByRole('img', { name: 'Mã QR mở trang thanh toán' })).toHaveCount(0)
 })
 
 async function openPos(
@@ -548,8 +704,17 @@ async function openPos(
       .click()
 }
 
+test('permission workflow keeps digital checkout independent from cash settlement', async ({ page }) => {
+  await setup(page, { permissions: ['/orders_sessions_read', '/invoices_create', '/invoices_read', '/payment-attempts_create', '/payment-attempts_read'] })
+  await openPos(page)
+  const dialog = page.getByRole('dialog')
+  await expect(dialog.getByRole('button', { name: 'Tiền mặt', exact: true })).toBeDisabled()
+  await expect(dialog.getByRole('button', { name: 'Quẹt thẻ POS', exact: true })).toBeDisabled()
+  await expect(dialog.getByRole('checkbox').first()).toBeEnabled()
+})
+
 test('POS cash change is exact to the cent', async ({ page }) => {
-  await setup(page, { permissions: ['/invoices_create', '/orders_sessions_read'] })
+  await setup(page, { permissions: ['/invoices_create', '/invoices_pay', '/orders_sessions_read'] })
   await openPos(page, { unitPrice: '35000.25' })
   await page.getByLabel('Khách đưa (₫)').fill('35000.30')
   await expect(page.getByRole('dialog').getByText('0,05 ₫', { exact: true })).toBeVisible()
@@ -572,7 +737,7 @@ test('an unknown POS submission freezes the draft and replays the same item batc
     optionGroups: [],
   }
   await setup(page, {
-    permissions: ['/orders_sessions_read', '/orders_items_create', '/invoices_create'],
+    permissions: ['/orders_sessions_read', '/orders_items_create', '/invoices_create', '/invoices_pay'],
   })
   await page.route(`**/api/v1/orders/sessions/${sessionId}/items`, (route) => {
     bodies.push(route.request().postDataJSON())
@@ -646,7 +811,7 @@ test('POS reuses the gateway panel after reviewing an actual invoice', async ({ 
 
 test('uncertain POS cash checkout cannot change its tender or method', async ({ page }) => {
   const bodies: Record<string, unknown>[] = []
-  await setup(page, { permissions: ['/invoices_create', '/orders_sessions_read'] })
+  await setup(page, { permissions: ['/invoices_create', '/invoices_pay', '/orders_sessions_read'] })
   await page.route('**/api/v1/invoices/checkout', (route) => {
     bodies.push(route.request().postDataJSON())
     return bodies.length === 1
@@ -674,7 +839,7 @@ test('uncertain POS cash checkout cannot change its tender or method', async ({ 
 })
 
 test('POS closes an untouched checkout on Escape', async ({ page }) => {
-  await setup(page, { permissions: ['/invoices_create', '/orders_sessions_read'] })
+  await setup(page, { permissions: ['/invoices_create', '/invoices_pay', '/orders_sessions_read'] })
   await openPos(page)
   await page.keyboard.press('Escape')
   await expect(page.getByRole('dialog')).toHaveCount(0)

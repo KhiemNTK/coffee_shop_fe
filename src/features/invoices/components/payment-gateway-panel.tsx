@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useOutletContext } from 'react-router-dom'
-import { CreditCard, ExternalLink, QrCode, RefreshCw } from 'lucide-react'
+import { CreditCard, ExternalLink, QrCode, RefreshCw, Volume2, VolumeX } from 'lucide-react'
 import type { Session } from '../../auth/session'
 import { ApiError, errorMessage } from '../../../shared/api/client'
 import { formatDateTime, formatPrice } from '../../../shared/lib/format'
@@ -22,6 +22,10 @@ import {
 } from '../invoices.api'
 import { AttemptStatusBadge, PaymentStatusBadge } from './invoice-badges'
 import { isUnresolvedPayment } from '../payment-status'
+import { enableNotificationSound, playNotificationChime } from '../../../shared/lib/sound'
+
+const soundedPayments = new Set<string>()
+let paymentSoundEnabled = false
 
 function stillPolling(attempt: PaymentAttempt) {
   return attempt.status === 'PENDING' && Date.now() < Date.parse(attempt.expiresAt) + 30_000
@@ -37,14 +41,17 @@ export function PaymentGatewayPanel({
   onLockChange?: (locked: boolean) => void
 }) {
   const { t: translate } = useTranslation()
-  const { employee, authorization } = useOutletContext<Session>()
-  const can = (key: string) => authorization.permissionKeys.includes(key)
+  const { employee, access } = useOutletContext<Session>()
+  const can = access.has
   const queryClient = useQueryClient()
   const [provider, setProvider] = useState<PaymentProvider>('VNPAY')
   const [submitted, setSubmitted] = useState<CreatePaymentAttemptPayload | null>(null)
   const [now, setNow] = useState(Date.now)
+  const [soundEnabled, setSoundEnabled] = useState(() => paymentSoundEnabled)
+  const [soundFailed, setSoundFailed] = useState(false)
   const flight = useRef(false)
   const notified = useRef(false)
+  const observedUnpaid = useRef<string | null>(null)
   const invoiceKey = ['private', employee.id, 'invoice-detail', invoiceId]
   const attemptsKey = ['private', employee.id, 'invoice-attempts', invoiceId]
   const providers = useQuery({
@@ -139,12 +146,22 @@ export function PaymentGatewayPanel({
       })
   }, [terminalSnapshot, invoiceId, employee.id, queryClient])
   useEffect(() => {
+    if (invoice.isError || invoice.isFetching) return
+    if (invoice.data?.paymentStatus === 'UNPAID') observedUnpaid.current = invoiceId
     if (!invoice.isError && invoice.data?.paymentStatus === 'PAID' && !notified.current) {
       notified.current = true
+      const soundKey = `${employee.id}:${invoiceId}`
+      if (soundEnabled && paymentSoundEnabled && observedUnpaid.current === invoiceId &&
+        invoice.data.paymentMethod === 'TRANSFER' && !soundedPayments.has(soundKey)) {
+        if (playNotificationChime()) {
+          soundedPayments.add(soundKey)
+          if (soundedPayments.size > 100) soundedPayments.delete(soundedPayments.values().next().value!)
+        }
+      }
       void queryClient.invalidateQueries({ queryKey: ['private', employee.id, 'invoices'] })
       onPaid?.(invoice.data)
     }
-  }, [invoice.data, invoice.isError, onPaid, employee.id, queryClient])
+  }, [invoice.data, invoice.isError, invoice.isFetching, invoiceId, onPaid, employee.id, queryClient, soundEnabled])
 
   const unresolvedSubmission =
     submitted &&
@@ -209,6 +226,30 @@ export function PaymentGatewayPanel({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h3 className="text-base font-semibold">{translate('payment.gatewayTitle')}</h3>
         <Button
+          type="button"
+          variant="outline"
+          size="icon"
+          className="h-11 w-11"
+          aria-pressed={soundEnabled}
+          aria-label={translate(soundEnabled ? 'payment.soundOff' : 'payment.soundOn')}
+          title={translate(soundEnabled ? 'payment.soundOff' : 'payment.soundOn')}
+          onClick={() => {
+            if (soundEnabled) {
+              paymentSoundEnabled = false
+              setSoundEnabled(false)
+              return
+            }
+            void enableNotificationSound().then((enabled) => {
+              paymentSoundEnabled = enabled
+              setSoundEnabled(enabled)
+              setSoundFailed(!enabled)
+              if (enabled) playNotificationChime()
+            })
+          }}
+        >
+          {soundEnabled ? <Volume2 size={18} aria-hidden="true" /> : <VolumeX size={18} aria-hidden="true" />}
+        </Button>
+        <Button
           variant="outline"
           size="sm"
           disabled={
@@ -227,6 +268,7 @@ export function PaymentGatewayPanel({
           Kiểm tra trạng thái
         </Button>
       </div>
+      {soundFailed && <p role="status" className="text-sm text-muted-foreground">{translate('payment.soundUnavailable')}</p>}
       {!can('/payment-attempts_read') || !can('/invoices_read') ? (
         <p role="alert">Bạn cần quyền đọc hóa đơn và phiên thanh toán để kiểm tra kết quả.</p>
       ) : (
@@ -338,6 +380,7 @@ export function PaymentGatewayPanel({
                 {link && linkActive && (
                   <>
                     <PaymentQr value={link} />
+                    <p className="text-sm text-muted-foreground">{translate('payment.qrLinkHint')}</p>
                     <a
                       href={link}
                       target="_blank"

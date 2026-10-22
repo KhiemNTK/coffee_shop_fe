@@ -9,7 +9,7 @@ import { FeedbackCasesTab } from './components/feedback-cases-tab'
 
 export default function ReconciliationPage() {
   const session = useOutletContext<Session>()
-  const can = (key: string) => session.authorization.permissionKeys.includes(key)
+  const can = session.access.has
   const [params, setParams] = useSearchParams()
 
   const tabs = [

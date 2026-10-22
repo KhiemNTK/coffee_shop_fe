@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 
-export function PaymentQr({ value, label = 'Mã QR thanh toán' }: { value: string; label?: string }) {
+export function PaymentQr({ value, label }: { value: string; label?: string }) {
+  const { t } = useTranslation()
   const canvas = useRef<HTMLCanvasElement>(null)
   const [failedValue, setFailedValue] = useState<string | null>(null)
   useEffect(() => {
@@ -9,11 +11,12 @@ export function PaymentQr({ value, label = 'Mã QR thanh toán' }: { value: stri
       if (cancelled || !canvas.current) return
       await qr.toCanvas(canvas.current, value, {
         width: 220, margin: 4, errorCorrectionLevel: 'M',
+        color: { dark: '#000000ff', light: '#ffffffff' },
       })
     }).catch(() => { if (!cancelled) setFailedValue(value) })
     return () => { cancelled = true }
   }, [value])
   return failedValue === value
-    ? <p role="alert" className="text-sm text-destructive">Không tạo được mã QR. Vui lòng dùng liên kết.</p>
-    : <canvas ref={canvas} width={220} height={220} role="img" aria-label={label} className="mx-auto h-55 w-55 max-w-full" />
+    ? <p role="alert" className="text-sm text-destructive">{t('payment.qrUnavailable')}</p>
+    : <canvas ref={canvas} width={220} height={220} role="img" aria-label={label ?? t('payment.qrLinkLabel')} className="mx-auto h-auto w-55 max-w-full rounded-md bg-white" />
 }

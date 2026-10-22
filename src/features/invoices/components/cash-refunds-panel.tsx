@@ -17,10 +17,10 @@ import { Pagination } from '../../../shared/ui/pagination'
 export function CashRefundsPanel({ invoice, active, blocked, onUpdated, onLockChange }: {
   invoice: Invoice; active: boolean; blocked: boolean; onUpdated: () => void; onLockChange: (locked: boolean) => void
 }) {
-  const { employee, authorization } = useOutletContext<Session>()
-  const canRead = authorization.permissionKeys.includes('/payment-refunds_read')
-  const canCreate = authorization.permissionKeys.includes('/cash-refunds_create')
-  const canReadShift = authorization.permissionKeys.includes('/cashier-shifts_current')
+  const { employee, access } = useOutletContext<Session>()
+  const canRead = access.has('/payment-refunds_read')
+  const canCreate = access.has('/cash-refunds_create')
+  const canReadShift = access.has('/cashier-shifts_current')
   const [page, setPage] = useState(1)
   const [amount, setAmount] = useState('')
   const [reason, setReason] = useState('')

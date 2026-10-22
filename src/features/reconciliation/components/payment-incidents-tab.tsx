@@ -30,8 +30,8 @@ import {
 const EMPTY_INCIDENTS: Incident[] = []
 
 export function PaymentIncidentsTab() {
-  const { employee, authorization } = useOutletContext<Session>()
-  const canManage = authorization.permissionKeys.includes('/payment-reconciliation_manage')
+  const { employee, access } = useOutletContext<Session>()
+  const canManage = access.has('/payment-reconciliation_manage')
   const client = useQueryClient()
   const [page, setPage] = useState(1)
   const [status, setStatus] = useState('OPEN')

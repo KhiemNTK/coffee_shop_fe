@@ -10,6 +10,7 @@ import { minorAmount } from '../../../shared/lib/money'
 import { moneySchema } from '../../menu/menu.api'
 import { Button, Dialog, Input } from '../../../shared/ui'
 import { RefreshCw } from 'lucide-react'
+import { Pagination } from '../../../shared/ui/pagination'
 
 const labels = {
   PENDING: 'Chờ xử lý', PROCESSING: 'Đang xử lý', SUCCEEDED: 'Đã hoàn tiền',
@@ -20,9 +21,9 @@ export function RefundsPanel({ attempts, invoiceStatus, onUpdated, onLockChange 
   attempts: PaymentAttempt[]; invoiceStatus: PaymentStatus; onUpdated: () => void
   onLockChange: (locked: boolean) => void
 }) {
-  const { employee, authorization } = useOutletContext<Session>()
-  const canCreate = authorization.permissionKeys.includes('/payment-refunds_create')
-  const canRead = authorization.permissionKeys.includes('/payment-refunds_read')
+  const { employee, access } = useOutletContext<Session>()
+  const canCreate = access.has('/payment-refunds_create')
+  const canRead = access.has('/payment-refunds_read')
   const eligible = attempts.filter((attempt) => attempt.provider === 'VNPAY' && attempt.status === 'SUCCEEDED')
   const [selectedId, setSelectedId] = useState('')
   const [page, setPage] = useState(1)
@@ -122,11 +123,7 @@ export function RefundsPanel({ attempts, invoiceStatus, onUpdated, onLockChange 
       {refunds.data?.list.map((refund) => <div key={refund.id} className="border-b border-border py-2 text-sm">
         <p>{formatPrice(refund.amount)} · {labels[refund.status]}</p><p>{refund.reason}</p>
       </div>)}
-      {refunds.data && refunds.data.totalPages > 1 && <div className="flex items-center gap-3">
-        <Button variant="outline" disabled={locked || page <= 1} onClick={() => setPage(page - 1)}>Trước</Button>
-        <span>{page}/{refunds.data.totalPages}</span>
-        <Button variant="outline" disabled={locked || page >= refunds.data.totalPages} onClick={() => setPage(page + 1)}>Sau</Button>
-      </div>}
+      {refunds.data && refunds.data.totalPages > 1 && <Pagination page={page} totalPages={refunds.data.totalPages} onPage={setPage} disabled={locked || refunds.isFetching} />}
     </section>
   )
 }

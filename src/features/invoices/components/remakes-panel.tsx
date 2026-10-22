@@ -10,8 +10,8 @@ import { Badge, Button, Dialog, DialogFooter, Input } from '../../../shared/ui'
 export function RemakesPanel({ invoice, blocked, onUpdated, onLockChange }: {
   invoice: Invoice; blocked: boolean; onUpdated: () => void; onLockChange: (locked: boolean) => void
 }) {
-  const { employee, authorization } = useOutletContext<Session>()
-  const canCreate = authorization.permissionKeys.includes('/orders_items_remake')
+  const { employee, access } = useOutletContext<Session>()
+  const canCreate = access.has('/orders_items_remake')
   const [itemId, setItemId] = useState<string | null>(null)
   const [reason, setReason] = useState('')
   const [discarded, setDiscarded] = useState(false)

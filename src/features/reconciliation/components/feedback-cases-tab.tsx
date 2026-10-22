@@ -22,7 +22,7 @@ const feedbackSchema = z.object({
 
 export function FeedbackCasesTab() {
   const { t } = useTranslation()
-  const { employee, authorization } = useOutletContext<Session>()
+  const { employee, access } = useOutletContext<Session>()
   const [page, setPage] = useState(1)
   const [selected, setSelected] = useState<z.infer<typeof feedbackSchema> | null>(null)
   const [note, setNote] = useState('')
@@ -102,7 +102,7 @@ export function FeedbackCasesTab() {
                   </p>
                 </div>
 
-                {authorization.permissionKeys.includes('/feedback_resolve') && (
+                {access.has('/feedback_resolve') && (
                   <Button
                     variant="outline"
                     size="sm"
