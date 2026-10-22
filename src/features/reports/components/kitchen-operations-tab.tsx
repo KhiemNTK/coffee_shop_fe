@@ -1,4 +1,6 @@
 import { ChefHat, Clock } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
+import { formatDateTime } from '@/shared/lib/format'
 import {
   type KitchenBottleneckSlot,
   type KitchenSlaStation,
@@ -25,6 +27,7 @@ export function KitchenOperationsTab({
   isBottlenecksPending,
   bottlenecksError,
 }: KitchenOperationsTabProps) {
+  useTranslation()
   return (
     <div className="space-y-6">
       {/* Station SLA Compliance Table */}
@@ -141,7 +144,7 @@ export function KitchenOperationsTab({
                     .map((slot, idx) => (
                       <tr key={idx} className="hover:bg-muted/30 transition-colors">
                         <td className="px-4 py-3 text-xs font-semibold text-foreground">
-                          {new Date(slot.bucketStartAt).toLocaleString('vi-VN')}
+                          {formatDateTime(slot.bucketStartAt, { seconds: true })}
                         </td>
                         <td className="px-4 py-3 text-xs">{slot.stationName}</td>
                         <td className="px-4 py-3 text-right font-medium">

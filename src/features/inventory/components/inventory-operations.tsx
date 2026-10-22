@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import { formatDateTime } from '@/shared/lib/format'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useOutletContext } from 'react-router-dom'
 import { z } from 'zod'
@@ -11,7 +13,8 @@ import { getInventoryItems } from '../inventory.api'
 import { bulkMoveStock, bulkMovementSchema, getInventoryWaste, type BulkMovement } from '../operations.api'
 
 export function InventoryWasteTab() {
-  const { employee, authorization } = useOutletContext<Session>()
+  useTranslation()
+  const { employee, access } = useOutletContext<Session>()
   const [page, setPage] = useState(1)
   const [input, setInput] = useState('')
   const [filter, setFilter] = useState('')
@@ -30,8 +33,8 @@ export function InventoryWasteTab() {
       {!waste.data.list.length && <p>Chưa có hao hụt trong bộ lọc này.</p>}
       <div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead><tr className="border-b"><th className="p-2">Nguyên liệu</th><th className="p-2">Số lượng</th><th className="p-2">Món / Phiên</th><th className="p-2">Lý do</th><th className="p-2">Người ghi nhận / Thời gian</th></tr></thead>
         <tbody>{waste.data.list.map(row => <tr key={row.id} className="border-b"><td className="p-2">{row.snapshot.inventoryItemName}</td><td className="p-2 tabular-nums">{row.quantity} {row.snapshot.unitName}</td>
-          <td className="p-2">{authorization.permissionKeys.includes('/orders_sessions_read') ? <Link className="underline" to={'/staff/pos/sessions/' + row.snapshot.orderItem.orderSessionId}>{row.snapshot.orderItem.menuItem.name}</Link> : row.snapshot.orderItem.menuItem.name}<p className="text-xs text-muted-foreground break-all">{row.orderItemId}</p></td>
-          <td className="p-2 min-w-40 break-words">{row.reason}</td><td className="p-2">{row.employee.fullName}<p className="whitespace-nowrap text-xs">{new Date(row.createdAt).toLocaleString('vi-VN')}</p></td></tr>)}</tbody>
+          <td className="p-2">{access.has('/orders_sessions_read') ? <Link className="underline" to={'/staff/pos/sessions/' + row.snapshot.orderItem.orderSessionId}>{row.snapshot.orderItem.menuItem.name}</Link> : row.snapshot.orderItem.menuItem.name}<p className="text-xs text-muted-foreground break-all">{row.orderItemId}</p></td>
+          <td className="p-2 min-w-40 break-words">{row.reason}</td><td className="p-2">{row.employee.fullName}<p className="whitespace-nowrap text-xs">{formatDateTime(row.createdAt, { seconds: true })}</p></td></tr>)}</tbody>
       </table></div>
       <Pagination page={page} totalPages={waste.data.totalPages} onPage={setPage} disabled={waste.isFetching} />
     </>}
@@ -42,7 +45,7 @@ type DraftRow = { id: string; inventoryItemId: string; label: string; quantity: 
 const newRow = (): DraftRow => ({ id: crypto.randomUUID(), inventoryItemId: '', label: '', quantity: '', unitPrice: '', note: '' })
 
 export function InventoryBulkTab() {
-  const { employee, authorization } = useOutletContext<Session>()
+  const { employee, access } = useOutletContext<Session>()
   const [type, setType] = useState<'IMPORT' | 'EXPORT'>('IMPORT')
   const [rows, setRows] = useState<DraftRow[]>(() => [newRow()])
   const [search, setSearch] = useState('')
@@ -54,7 +57,7 @@ export function InventoryBulkTab() {
   const mutation = useMutation({ mutationFn: bulkMoveStock, onSettled: () => {
     for (const key of ['inventory-items', 'inventory-transactions', 'inventory-reorder-alerts']) void client.invalidateQueries({ queryKey: [key] })
   } })
-  const canAdjust = authorization.permissionKeys.includes('/inventory_stock_adjust')
+  const canAdjust = access.has('/inventory_stock_adjust')
   const edit = (id: string, change: Partial<DraftRow>) => setRows(rows.map(row => row.id === id ? { ...row, ...change } : row))
   if (!canAdjust) return null
   return <section aria-label="Nhập xuất nhiều nguyên liệu" className="space-y-4">

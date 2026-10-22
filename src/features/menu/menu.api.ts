@@ -49,7 +49,13 @@ const pageSchema = z.object({
 })
 
 export type MenuItem = z.infer<typeof itemSchema>
-export type MenuFilters = { keyword: string; categoryId: string; page: number }
+export type MenuFilters = {
+  keyword: string
+  categoryId: string
+  page: number
+  sortBy?: 'name' | 'price'
+  sortOrder?: 'asc' | 'desc'
+}
 
 export function getPublicStore(signal: AbortSignal) {
   return apiGet('/menu/public/store', z.object({ name: z.string().max(120).nullable(), address: z.string().max(255).nullable(), phone: z.string().max(24).nullable() }), signal)
@@ -66,6 +72,8 @@ export function getMenu(filters: MenuFilters, signal: AbortSignal) {
   })
   if (filters.keyword) params.set('keyword', filters.keyword)
   if (filters.categoryId) params.set('categoryId', filters.categoryId)
+  if (filters.sortBy) params.set('sortBy', filters.sortBy)
+  if (filters.sortOrder) params.set('sortOrder', filters.sortOrder)
   return apiGet(`/menu/public/items?${params}`, pageSchema, signal)
 }
 

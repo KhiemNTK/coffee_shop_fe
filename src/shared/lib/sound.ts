@@ -1,21 +1,35 @@
-/**
- * Lightweight, zero-dependency audio synthesizer using standard Web Audio API.
- * Synthesizes a clean two-tone chime for kitchen ticket arrivals and alerts.
- * Adheres to ponytail principle: zero external mp3 assets, zero network latency.
- */
-export function playKitchenChime() {
-  if (typeof window === 'undefined') return
+let audio: AudioContext | undefined
 
-  try {
+function getAudioContext() {
+  if (typeof window === 'undefined') return
+  if (!audio || audio.state === 'closed') {
     const AudioContextClass =
       window.AudioContext ||
-      (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
+      (window as unknown as { webkitAudioContext?: typeof AudioContext })
+        .webkitAudioContext
+    if (AudioContextClass) audio = new AudioContextClass()
+  }
+  return audio
+}
 
-    if (!AudioContextClass) return
+export async function enableNotificationSound() {
+  try {
+    const ctx = getAudioContext()
+    if (!ctx) return false
+    if (ctx.state !== 'running') await ctx.resume()
+    return audio?.state === 'running'
+  } catch {
+    return false
+  }
+}
 
-    const ctx = new AudioContextClass()
-    if (ctx.state === 'suspended') {
-      void ctx.resume()
+export function playNotificationChime() {
+  try {
+    const ctx = getAudioContext()
+    if (!ctx) return false
+    if (ctx.state !== 'running') {
+      void ctx.resume().catch(() => {})
+      return false
     }
 
     const now = ctx.currentTime
@@ -34,10 +48,15 @@ export function playKitchenChime() {
 
     osc.connect(gain)
     gain.connect(ctx.destination)
+    osc.onended = () => {
+      osc.disconnect()
+      gain.disconnect()
+    }
 
     osc.start(now)
     osc.stop(now + 0.4)
+    return true
   } catch {
-    // Autoplay policy or unsupported audio environment; degrade gracefully
+    return false
   }
 }

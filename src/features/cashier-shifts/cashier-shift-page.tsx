@@ -25,40 +25,40 @@ import { ShiftHistoryTab } from './components/shift-history-tab'
 type MainTab = 'current' | 'handovers' | 'expenses' | 'funds' | 'history'
 
 export default function CashierShiftPage() {
-  const { employee, authorization } = useOutletContext<Session>()
+  const { employee, access } = useOutletContext<Session>()
 
   // Permissions
-  const canReadCurrent = authorization.permissionKeys.includes(
+  const canReadCurrent = access.has(
     '/cashier-shifts_current',
   )
-  const canOpen = authorization.permissionKeys.includes('/cashier-shifts_open')
-  const canClose = authorization.permissionKeys.includes(
+  const canOpen = access.has('/cashier-shifts_open')
+  const canClose = access.has(
     '/cashier-shifts_close',
   )
-  const canTransact = authorization.permissionKeys.includes(
+  const canTransact = access.has(
     '/cashier-shifts_transactions-create',
   )
-  const canReadShifts = authorization.permissionKeys.includes(
+  const canReadShifts = access.has(
     '/cashier-shifts_read',
   )
-  const canReviewExpenses = authorization.permissionKeys.includes(
+  const canReviewExpenses = access.has(
     '/cashier-shifts_expenses-review',
   )
-  const canCreateHandover = authorization.permissionKeys.includes(
+  const canCreateHandover = access.has(
     '/cash-handovers_create',
   )
-  const canReadHandovers = authorization.permissionKeys.includes(
+  const canReadHandovers = access.has(
     '/cash-handovers_read',
   )
-  const canReviewHandover = authorization.permissionKeys.includes(
+  const canReviewHandover = access.has(
     '/cash-handovers_review',
   )
-  const canSettleHandover = authorization.permissionKeys.includes(
+  const canSettleHandover = access.has(
     '/cash-handovers_settle',
   )
-  const canReadFunds = authorization.permissionKeys.includes('/funds_read')
+  const canReadFunds = access.has('/funds_read')
   const canManageFunds =
-    canReadFunds && authorization.permissionKeys.includes('/funds_manage')
+    canReadFunds && access.has('/funds_manage')
 
   const [params, setParams] = useSearchParams()
   const availableTabs: MainTab[] = []

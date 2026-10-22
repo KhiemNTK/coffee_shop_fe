@@ -1,4 +1,6 @@
 import { useState, useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
+import { formatDate, formatDateTime } from '@/shared/lib/format'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   AlertTriangle,
@@ -69,6 +71,7 @@ export function CashHandoversTab({
   onSuccess,
   nowTimestamp,
 }: CashHandoversTabProps) {
+  useTranslation()
   const queryClient = useQueryClient()
 
   const [handoverViewMode, setHandoverViewMode] = useState<'ALL' | 'MINE' | 'OVERDUE'>('ALL')
@@ -405,7 +408,7 @@ export function CashHandoversTab({
                       <td className="px-4 py-3 font-mono font-medium text-foreground">
                         {h.id.slice(0, 8)}...
                         <span className="text-[10px] text-muted-foreground block font-sans">
-                          {new Date(h.createdAt).toLocaleDateString('vi-VN')}
+                          {formatDate(h.createdAt)}
                         </span>
                       </td>
                       <td className="px-4 py-3 font-medium text-foreground">
@@ -824,7 +827,7 @@ export function CashHandoversTab({
               <div>
                 <span className="text-muted-foreground block">Thời gian tạo:</span>
                 <span className="font-medium text-foreground">
-                  {new Date(selectedHandover.createdAt).toLocaleString('vi-VN')}
+                  {formatDateTime(selectedHandover.createdAt, { seconds: true })}
                 </span>
               </div>
               <div>
@@ -870,7 +873,7 @@ export function CashHandoversTab({
                   {selectedHandover.resolvedBy.fullName}
                   {selectedHandover.resolvedAt && (
                     <span className="font-normal text-muted-foreground ml-2">
-                      ({new Date(selectedHandover.resolvedAt).toLocaleString('vi-VN')})
+                      ({formatDateTime(selectedHandover.resolvedAt, { seconds: true })})
                     </span>
                   )}
                 </p>

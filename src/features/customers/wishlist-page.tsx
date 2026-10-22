@@ -73,7 +73,7 @@ export default function WishlistPage() {
               {wishlist.data?.items.map(({ menuItemId, item }) => (
                 <article
                   key={menuItemId}
-                  className="flex items-start gap-4 rounded-lg border border-border p-4"
+                  className="flex flex-wrap items-start gap-4 rounded-lg border border-border p-4"
                 >
                   {item?.imageUrl && (
                     <img

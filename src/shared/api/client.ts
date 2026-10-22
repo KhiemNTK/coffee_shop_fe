@@ -255,6 +255,7 @@ export function errorMessage(error: unknown) {
   if (error instanceof Error && !(error instanceof ApiError) && error.message) return error.message
   if (!(error instanceof ApiError)) return translate('error.connection')
   if (error.code === 'CLIENT_RESPONSE_INVALID') return translate('error.invalidResponse')
+  if (error.code === 'AUTHORIZATION_CHANGED') return translate('permissions.changed')
   if (error.code === 'IMAGE_UPLOAD_DISABLED') return translate('menu.image.disabled')
   if (error.code === 'IMAGE_STORAGE_UNAVAILABLE') return translate('menu.image.unavailable')
   if (error.code === 'IMAGE_UPLOAD_INVALID') return translate('menu.image.invalid')

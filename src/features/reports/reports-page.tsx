@@ -64,12 +64,12 @@ function getTodayDateString() {
 }
 
 export default function ReportsPage() {
-  const { employee, authorization } = useOutletContext<Session>()
+  const { employee, access } = useOutletContext<Session>()
   const queryClient = useQueryClient()
-  const permissions = authorization.permissionKeys
 
-  const canExport = permissions.includes('/reports_export')
-  const canClose = permissions.includes('/reports_close')
+
+  const canExport = access.has('/reports_export')
+  const canClose = access.has('/reports_close')
 
   // Date filters
   const [preset, setPreset] = useState<'today' | '7days' | '30days' | 'month'>('today')
@@ -336,8 +336,8 @@ export default function ReportsPage() {
           from={dateRange.from}
           to={dateRange.to}
           active={activeTab === 'insights'}
-          canRead={permissions.includes('/reports_read')}
-          canGenerate={permissions.includes('/reports_insights_generate')}
+          canRead={access.has('/reports_read')}
+          canGenerate={access.has('/reports_insights_generate')}
         />
         <TabsContent value="feedback">
           <FeedbackReport

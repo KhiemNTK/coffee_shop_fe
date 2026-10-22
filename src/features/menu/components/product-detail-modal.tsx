@@ -195,8 +195,8 @@ export function ProductDetailModal({
           {/* Right Column: Title, Price, Option Pills, Toppings */}
           <div className="md:col-span-6 flex flex-col justify-between">
             <div>
-              <div className="flex items-start justify-between gap-3">
-                <h2 className="text-xl sm:text-2xl font-extrabold text-foreground leading-tight">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <h2 className="min-w-0 flex-1 break-words text-xl sm:text-2xl font-extrabold text-foreground leading-tight">
                   {item.name}
                 </h2>
                 <FavoriteButton itemId={item.id} />

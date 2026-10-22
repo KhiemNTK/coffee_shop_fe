@@ -7,6 +7,7 @@ import { getPublicStore } from '@/features/menu/menu.api'
 import { useCustomer } from '@/features/customers/customers.api'
 import { buttonVariants } from '@/shared/ui/button-variants'
 import { useCart } from '@/features/online-orders/cart'
+import { ThemeToggle } from '@/shared/theme'
 import { cn } from '@/shared/ui/utils'
 
 export function SiteHeader({
@@ -22,6 +23,9 @@ export function SiteHeader({
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
   const customer = useCustomer()
+  const signInState = customer.data
+    ? undefined
+    : { returnTo: location.pathname + location.search + location.hash }
 
   const store = useQuery({
     queryKey: ['public-store'],
@@ -99,6 +103,8 @@ export function SiteHeader({
 
         {/* Right Actions */}
         <div className="flex items-center gap-1.5 sm:gap-2.5">
+          <ThemeToggle />
+
           <Link
             to="/wishlist"
             aria-label={translate('wishlist.title')}
@@ -166,7 +172,7 @@ export function SiteHeader({
 
           <Link
             to={customer.data ? '/account' : '/customer/sign-in'}
-            state={customer.data ? undefined : { returnTo: location.pathname + location.search }}
+            state={signInState}
             aria-label={translate(customer.data ? 'customer.account' : 'wishlist.customerSignIn')}
             title={translate(customer.data ? 'customer.account' : 'wishlist.customerSignIn')}
             className="inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center gap-2 rounded-md px-2 text-primary hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
@@ -216,6 +222,7 @@ export function SiteHeader({
             <div className="pt-3 border-t border-border/80 mt-2 flex flex-col gap-2">
               <Link
                 to={customer.data ? '/account' : '/customer/sign-in'}
+                state={signInState}
                 onClick={() => setMobileMenuOpen(false)}
                 className="px-3 py-3 text-sm font-semibold text-primary"
               >

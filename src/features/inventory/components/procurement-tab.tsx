@@ -1,6 +1,8 @@
-import { useDeferredValue, useState } from 'react'
+import { useState } from 'react'
+import { useDebouncedSearch } from '../../../shared/lib/use-debounced-search'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useOutletContext } from 'react-router-dom'
+import type { PermissionAccess } from '../../../shared/auth/permissions'
 import { Plus, Pencil, Trash2, Check, X } from 'lucide-react'
 import type { Session } from '../../auth/session'
 import {
@@ -21,15 +23,15 @@ const statusLabels = { DRAFT: 'Nháp', POSTED: 'Đã ghi sổ', CANCELLED: 'Đã
 const selectClass = 'w-full rounded-md border border-border bg-card p-2 text-sm'
 
 export function ProcurementTab() {
-  const { employee, authorization } = useOutletContext<Session>()
+  const { employee, access } = useOutletContext<Session>()
   const client = useQueryClient()
-  const can = (key: string) => authorization.permissionKeys.includes(key)
+  const can = access.has
   const [view, setView] = useState<'suppliers' | DocumentKind>(() =>
     can('/inventory_suppliers_read') ? 'suppliers'
       : can('/inventory_purchase-receipts_read') ? 'purchase-receipts' : 'stocktakes')
   const [page, setPage] = useState(1)
   const [keyword, setKeyword] = useState('')
-  const search = useDeferredValue(keyword)
+  const search = useDebouncedSearch(keyword)
   const [supplierForm, setSupplierForm] = useState<Supplier | null>()
   const [newDocument, setNewDocument] = useState<DocumentKind | null>(null)
   const [document, setDocument] = useState<{ kind: DocumentKind; id: string } | null>(null)
@@ -37,7 +39,7 @@ export function ProcurementTab() {
   const key = ['private', employee.id, 'inventory-procurement'] as const
   const suppliers = useQuery({
     queryKey: [...key, 'suppliers', page, search], queryFn: ({ signal }) => getSuppliers(page, search, signal),
-    enabled: view === 'suppliers' && can('/inventory_suppliers_read'),
+    enabled: view === 'suppliers' && can('/inventory_suppliers_read') && search === keyword.trim(),
   })
   const receipts = useQuery({
     queryKey: [...key, 'receipts', page], queryFn: ({ signal }) => getReceipts(page, signal),
@@ -102,7 +104,7 @@ export function ProcurementTab() {
           onClick={() => { setView(kind); setPage(1) }}>
           {{ suppliers: 'Nhà cung cấp', 'purchase-receipts': 'Phiếu nhập', stocktakes: 'Kiểm kê' }[kind]}
         </Button>)}
-      <Button size="sm" variant="outline" disabled={!can(`/inventory_${view === 'suppliers' ? 'suppliers_manage' : `${view}_create`}`)
+      <Button size="sm" variant="outline" disabled={!can(view === 'suppliers' ? '/inventory_suppliers_manage' : view === 'purchase-receipts' ? '/inventory_purchase-receipts_create' : '/inventory_stocktakes_create')
         || (view === 'purchase-receipts' && !can('/inventory_suppliers_read')) || (view === 'stocktakes' && !can('/inventory_read'))}
         onClick={() => view === 'suppliers' ? setSupplierForm(null) : setNewDocument(view)}>
         <Plus size={16} aria-hidden="true" /> Tạo mới
@@ -176,7 +178,7 @@ export function ProcurementTab() {
 }
 
 function DocumentActions({ kind, id, can, onAction }: {
-  kind: DocumentKind; id: string; can: (key: string) => boolean
+  kind: DocumentKind; id: string; can: PermissionAccess['has']
   onAction: (action: { kind: DocumentKind; id: string; action: 'post' | 'cancel' }) => void
 }) {
   return <span className="ml-2 inline-flex gap-2">
@@ -211,20 +213,20 @@ function SupplierForm({ initial, onClose, onSaved }: { initial: Supplier | null;
 function ReceiptForm({ initial, editable, onClose, onSaved }: {
   initial?: ReceiptDetail; editable: boolean; onClose: () => void; onSaved: () => void
 }) {
-  const { employee, authorization } = useOutletContext<Session>()
-  const canReadSuppliers = authorization.permissionKeys.includes('/inventory_suppliers_read')
+  const { employee, access } = useOutletContext<Session>()
+  const canReadSuppliers = access.has('/inventory_suppliers_read')
   const [supplier, setSupplier] = useState<Supplier | null>(initial?.supplier ?? null)
   const [supplierSearch, setSupplierSearch] = useState('')
   const [itemSearch, setItemSearch] = useState('')
-  const deferredSupplierSearch = useDeferredValue(supplierSearch)
-  const deferredItemSearch = useDeferredValue(itemSearch)
+  const deferredSupplierSearch = useDebouncedSearch(supplierSearch)
+  const deferredItemSearch = useDebouncedSearch(itemSearch)
   const [uncertain, setUncertain] = useState(false)
   const readOnly = !editable || Boolean(initial && initial.status !== 'DRAFT')
   const [lines, setLines] = useState(initial?.items.map((item) => ({
     inventoryItemId: item.inventoryItemId, quantity: item.quantity, unitPrice: item.unitPrice, name: item.inventoryItemName,
   })) ?? [{ inventoryItemId: '', quantity: '1', unitPrice: '0', name: '' }])
-  const suppliers = useQuery({ queryKey: ['private', employee.id, 'receipt-supplier-options', deferredSupplierSearch], queryFn: ({ signal }) => getSuppliers(1, deferredSupplierSearch, signal), enabled: !readOnly && canReadSuppliers })
-  const inventory = useQuery({ queryKey: ['private', employee.id, 'receipt-item-options', deferredItemSearch], queryFn: ({ signal }) => getInventoryItems({ keyword: deferredItemSearch.trim() || undefined, itemPerPage: 100 }, signal), enabled: !readOnly })
+  const suppliers = useQuery({ queryKey: ['private', employee.id, 'receipt-supplier-options', deferredSupplierSearch], queryFn: ({ signal }) => getSuppliers(1, deferredSupplierSearch, signal), enabled: !readOnly && canReadSuppliers && deferredSupplierSearch === supplierSearch.trim() })
+  const inventory = useQuery({ queryKey: ['private', employee.id, 'receipt-item-options', deferredItemSearch], queryFn: ({ signal }) => getInventoryItems({ keyword: deferredItemSearch || undefined, itemPerPage: 100 }, signal), enabled: !readOnly && deferredItemSearch === itemSearch.trim() })
   const mutation = useMutation({
     mutationFn: (payload: ReceiptInput) => saveReceipt(payload, initial?.id),
     onSuccess: onSaved,
@@ -279,14 +281,14 @@ function ReceiptForm({ initial, editable, onClose, onSaved }: {
 function StocktakeForm({ initial, editable, onClose, onSaved }: {
   initial?: StocktakeDetail; editable: boolean; onClose: () => void; onSaved: () => void
 }) {
-  const { employee, authorization } = useOutletContext<Session>()
+  const { employee, access } = useOutletContext<Session>()
   const [keyword, setKeyword] = useState('')
-  const search = useDeferredValue(keyword)
+  const search = useDebouncedSearch(keyword)
   const [selected, setSelected] = useState<InventoryItem[]>([])
   const [snapshot, setSnapshot] = useState(initial)
   const [counts, setCounts] = useState(() => Object.fromEntries(initial?.items.map(item => [item.inventoryItemId, item.countedQuantity ?? '']) ?? []))
   const [uncertain, setUncertain] = useState(false)
-  const inventory = useQuery({ queryKey: ['private', employee.id, 'stocktake-item-options', search], queryFn: ({ signal }) => getInventoryItems({ keyword: search, itemPerPage: 100 }, signal), enabled: !initial && authorization.permissionKeys.includes('/inventory_read') })
+  const inventory = useQuery({ queryKey: ['private', employee.id, 'stocktake-item-options', search], queryFn: ({ signal }) => getInventoryItems({ keyword: search, itemPerPage: 100 }, signal), enabled: !initial && access.has('/inventory_read') && search === keyword.trim() })
   const readOnly = !editable || Boolean(initial && initial.status !== 'DRAFT')
   const mutation = useMutation({
     mutationFn: (payload: { inventoryItemIds: string[]; note?: string } | StocktakeCountInput[]) =>

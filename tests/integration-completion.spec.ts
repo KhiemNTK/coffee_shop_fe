@@ -32,7 +32,7 @@ async function pos(page: Page) {
   await staff(page, [
     '/orders_sessions_read',
     '/orders_sessions_cancel',
-    '/invoices_create',
+    '/invoices_create', '/invoices_pay',
     '/promotions_read',
   ])
   await page.route('**/api/v1/menu/public/categories', (route) =>
@@ -285,7 +285,7 @@ for (const canOpen of [true, false]) {
   test(`a missing cashier shift offers recovery only with opening permissions (${canOpen})`, async ({ page }) => {
     await pos(page)
     await staff(page, [
-      '/orders_sessions_read', '/invoices_create',
+      '/orders_sessions_read', '/invoices_create', '/invoices_pay',
       ...(canOpen ? ['/cashier-shifts_current', '/cashier-shifts_open', '/funds_read'] : []),
     ])
     await page.reload()

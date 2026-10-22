@@ -5,6 +5,8 @@
   "type": "module",
   "packageManager": "pnpm@9.15.9",
   "scripts": {
+    "permissions:sync": "node tools/sync-permissions.mjs",
+    "permissions:check": "node tools/sync-permissions.mjs --check",
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "oxlint --deny-warnings",

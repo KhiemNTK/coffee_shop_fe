@@ -1,5 +1,7 @@
 @import 'tailwindcss';
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme {
   --color-primary: #164a3b;
   --color-primary-hover: #103b2f;
@@ -57,6 +59,32 @@
   line-height: 1.6;
 }
 
+:root.dark {
+  --color-background: #09090b;
+  --color-foreground: #fafafa;
+  --color-card: #121215;
+  --color-card-foreground: #fafafa;
+  --color-surface-muted: #18181b;
+  --color-border: #27272a;
+  --color-input: #18181b;
+  --color-ring: #116149;
+  --color-muted: #18181b;
+  --color-muted-foreground: #a1a1aa;
+  --color-secondary: #18181b;
+  --color-secondary-foreground: #fafafa;
+  --color-coffee-dark: #fafafa;
+  --color-coffee-muted: #a1a1aa;
+  --color-coffee-border: #27272a;
+  --color-coffee-bg: #09090b;
+  color: #fafafa;
+  background: #09090b;
+}
+
+html.dark body {
+  background-color: var(--color-background);
+  color: var(--color-foreground);
+}
+
 .staff-workspace,
 body:has(.staff-workspace) > dialog {
   --color-primary: #116149;
@@ -73,6 +101,22 @@ body:has(.staff-workspace) > dialog {
   color: var(--color-foreground);
 }
 
+html.dark .staff-workspace,
+html.dark body:has(.staff-workspace) > dialog {
+  --color-primary: #116149;
+  --color-primary-hover: #157a5c;
+  --color-background: #09090b;
+  --color-foreground: #f4f4f5;
+  --color-card: #121215;
+  --color-muted: #18181b;
+  --color-muted-foreground: #a1a1aa;
+  --color-secondary: #18181b;
+  --color-border: #27272a;
+  --color-input: #18181b;
+  --color-ring: #116149;
+  color: var(--color-foreground);
+}
+
 .staff-workspace {
   background: var(--color-background);
 }
@@ -80,6 +124,99 @@ body:has(.staff-workspace) > dialog {
 .staff-sidebar {
   background: #062f29;
   border-color: #0a433a;
+}
+
+html.dark .staff-sidebar {
+  background: #0d0e12;
+  border-color: #1f2026;
+}
+
+html.dark .staff-sidebar nav a {
+  color: #9ca3af;
+}
+
+html.dark .staff-sidebar nav a:hover {
+  background: #181920;
+  color: #ffffff;
+}
+
+html.dark .staff-sidebar nav a[aria-current='page'] {
+  background: #23252e;
+  color: rgb(255, 255, 255);
+}
+
+html.dark .staff-sidebar .staff-sidebar-label {
+  color: #71717a;
+}
+
+html.dark .admin-toolbar,
+html.dark .admin-table-scroll {
+  background: #121215;
+  border-color: #27272a;
+}
+
+html.dark .admin-table th {
+  background: #15161b;
+  color: #a1a1aa;
+  border-bottom: 1px solid #27272a;
+}
+
+html.dark .admin-table td {
+  border-top-color: #222329;
+}
+
+html.dark .admin-table tbody tr:hover {
+  background: #181920;
+}
+
+html.dark .admin-tabs {
+  border-bottom-color: #27272a;
+}
+
+html.dark .admin-tabs > button {
+  color: #a1a1aa;
+}
+
+html.dark .admin-tabs > button:hover {
+  color: #fafafa;
+  background: #141418;
+}
+
+html.dark .admin-tabs > button[aria-selected='true'],
+html.dark .admin-tabs > button[aria-pressed='true'] {
+  background: #18181b;
+  color: #fafafa;
+  border-bottom-color: #10b981;
+}
+
+html.dark .staff-workspace [data-badge='success'],
+html.dark body:has(.staff-workspace) > dialog [data-badge='success'] {
+  background: rgba(16, 185, 129, 0.12);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.25);
+}
+html.dark .staff-workspace [data-badge='warning'],
+html.dark body:has(.staff-workspace) > dialog [data-badge='warning'] {
+  background: rgba(245, 158, 11, 0.12);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.25);
+}
+html.dark .staff-workspace [data-badge='destructive'],
+html.dark body:has(.staff-workspace) > dialog [data-badge='destructive'] {
+  background: rgba(239, 68, 68, 0.12);
+  color: #f87171;
+  border: 1px solid rgba(239, 68, 68, 0.25);
+}
+
+html.dark dialog,
+html.dark body:has(.staff-workspace) > dialog {
+  background: #121215;
+  border-color: #27272a;
+  color: #f4f4f5;
+}
+
+html.dark dialog::backdrop {
+  background: rgba(0, 0, 0, 0.75);
 }
 
 .staff-sidebar nav a {
@@ -298,6 +435,10 @@ summary {
 :focus-visible {
   outline: 2px solid #144637;
   outline-offset: 2px;
+}
+
+html.dark :focus-visible {
+  outline-color: #3b82f6;
 }
 
 h1,

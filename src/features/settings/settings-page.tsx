@@ -21,21 +21,21 @@ import { ManagementExceptionsTab } from '../operations/exception-queue'
 
 export function SettingsPage() {
   const queryClient = useQueryClient()
-  const { employee, authorization } = useOutletContext<Session>()
-  const permissions = authorization.permissionKeys
+  const { employee, access } = useOutletContext<Session>()
+
 
   // Permissions check
-  const canReadEquipment = permissions.includes('/equipment_read')
-  const canCreateEquipment = permissions.includes('/equipment_create')
-  const canUpdateEquipment = permissions.includes('/equipment_update')
-  const canTransitionEquipment = permissions.includes('/equipment_transition')
+  const canReadEquipment = access.has('/equipment_read')
+  const canCreateEquipment = access.has('/equipment_create')
+  const canUpdateEquipment = access.has('/equipment_update')
+  const canTransitionEquipment = access.has('/equipment_transition')
 
-  const canReadSettings = permissions.includes('/system-settings_read')
-  const canCreateSettings = permissions.includes('/system-settings_create')
-  const canUpdateSettings = permissions.includes('/system-settings_update')
-  const canDeleteSettings = permissions.includes('/system-settings_delete')
+  const canReadSettings = access.has('/system-settings_read')
+  const canCreateSettings = access.has('/system-settings_create')
+  const canUpdateSettings = access.has('/system-settings_update')
+  const canDeleteSettings = access.has('/system-settings_delete')
 
-  const canReadExceptions = permissions.includes('/management-exceptions_read')
+  const canReadExceptions = access.has('/management-exceptions_read')
 
   // Active Tab
   const [activeTab, setActiveTab] = useState<'equipment' | 'settings' | 'exceptions'>(() => {

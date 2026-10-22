@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useDebouncedSearch } from '../../shared/lib/use-debounced-search'
 import { Pagination } from '../../shared/ui/pagination'
 import { useOutletContext } from 'react-router-dom'
 import type { Session } from '../auth/session'
@@ -32,12 +33,12 @@ import {
 
 export default function InventoryPage() {
   const queryClient = useQueryClient()
-  const { employee, authorization } = useOutletContext<Session>()
+  const { employee, access } = useOutletContext<Session>()
 
-  const canCreate = authorization.permissionKeys.includes('/inventory_create')
-  const canUpdate = authorization.permissionKeys.includes('/inventory_update')
-  const canDelete = authorization.permissionKeys.includes('/inventory_delete')
-  const canAdjust = authorization.permissionKeys.includes('/inventory_stock_adjust')
+  const canCreate = access.has('/inventory_create')
+  const canUpdate = access.has('/inventory_update')
+  const canDelete = access.has('/inventory_delete')
+  const canAdjust = access.has('/inventory_stock_adjust')
 
   // Tab: 'items' | 'alerts' | 'transactions'
   const [activeTab, setActiveTab] = useState<
@@ -46,6 +47,7 @@ export default function InventoryPage() {
 
   // Search & Filter state
   const [keyword, setKeyword] = useState('')
+  const search = useDebouncedSearch(keyword)
   const [selectedCategoryId, setSelectedCategoryId] = useState('')
   const [selectedUnitId, setSelectedUnitId] = useState('')
   const [lowStockOnly, setLowStockOnly] = useState(false)
@@ -76,7 +78,7 @@ export default function InventoryPage() {
       'inventory-items',
       {
         page,
-        keyword,
+        keyword: search,
         categoryId: selectedCategoryId,
         unitId: selectedUnitId,
         lowStockOnly,
@@ -87,13 +89,14 @@ export default function InventoryPage() {
         {
           page,
           itemPerPage: 15,
-          keyword: keyword.trim() || undefined,
+          keyword: search || undefined,
           categoryId: selectedCategoryId || undefined,
           unitId: selectedUnitId || undefined,
           lowStockOnly,
         },
         signal,
       ),
+    enabled: search === keyword.trim(),
   })
 
   const alertsQuery = useQuery({
@@ -185,7 +188,7 @@ export default function InventoryPage() {
         >
           Hao hụt
         </Button>
-        {authorization.permissionKeys.includes('/inventory_stock_adjust') && (
+        {access.has('/inventory_stock_adjust') && (
           <Button
             variant={activeTab === 'bulk' ? 'default' : 'outline'}
             aria-pressed={activeTab === 'bulk'}

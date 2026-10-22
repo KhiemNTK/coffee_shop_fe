@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useDebouncedSearch } from '../../shared/lib/use-debounced-search'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useOutletContext } from 'react-router-dom'
 import { Boxes, Coffee, FolderTree, Plus, RefreshCw } from 'lucide-react'
@@ -31,13 +32,13 @@ import { OptionsModal } from './components/options-modal'
 import { type CatalogSelection } from './components/catalog-picker'
 
 export default function StaffMenuPage() {
-  const { employee, authorization } = useOutletContext<Session>()
+  const { employee, access } = useOutletContext<Session>()
   const queryClient = useQueryClient()
-  const permissions = authorization.permissionKeys
-  const canCreate = permissions.includes('/menu_create')
-  const canUpdate = permissions.includes('/menu_update')
-  const canDelete = permissions.includes('/menu_delete')
-  const canReadStations = permissions.includes('/kitchen-stations_read')
+
+  const canCreate = access.has('/menu_create')
+  const canUpdate = access.has('/menu_update')
+  const canDelete = access.has('/menu_delete')
+  const canReadStations = access.has('/kitchen-stations_read')
 
   function refreshMenu() {
     void queryClient.invalidateQueries({ queryKey: ['public-menu'] })
@@ -53,12 +54,15 @@ export default function StaffMenuPage() {
 
   const [activeTab, setActiveTab] = useState<'items' | 'categories' | 'stock'>('items')
   const [keyword, setKeyword] = useState('')
+  const search = useDebouncedSearch(keyword)
   const [categoryFilter, setCategoryFilter] = useState<CatalogSelection>(null)
   const [availabilityFilter, setAvailabilityFilter] = useState<'ALL' | 'ACTIVE' | 'INACTIVE'>('ALL')
   const [page, setPage] = useState(1)
   const [categoryKeyword, setCategoryKeyword] = useState('')
+  const categorySearch = useDebouncedSearch(categoryKeyword)
   const [categoryPage, setCategoryPage] = useState(1)
   const [stockKeyword, setStockKeyword] = useState('')
+  const stockSearch = useDebouncedSearch(stockKeyword)
   const [stockPage, setStockPage] = useState(1)
   const [createItemOpen, setCreateItemOpen] = useState(false)
   const [editingItem, setEditingItem] = useState<AdminMenuItem | null>(null)
@@ -70,10 +74,10 @@ export default function StaffMenuPage() {
   const [optionsItem, setOptionsItem] = useState<AdminMenuItem | null>(null)
 
   const categoriesQuery = useQuery({
-    queryKey: ['private', employee.id, 'admin-categories', 'list', categoryPage, categoryKeyword],
+    queryKey: ['private', employee.id, 'admin-categories', 'list', categoryPage, categorySearch],
     queryFn: ({ signal }) =>
-      getAdminCategories({ page: categoryPage, itemPerPage: 15, keyword: categoryKeyword }, signal),
-    enabled: activeTab === 'categories',
+      getAdminCategories({ page: categoryPage, itemPerPage: 15, keyword: categorySearch }, signal),
+    enabled: activeTab === 'categories' && categorySearch === categoryKeyword.trim(),
   })
   const itemsQuery = useQuery({
     queryKey: [
@@ -81,7 +85,7 @@ export default function StaffMenuPage() {
       employee.id,
       'admin-menu-items',
       page,
-      keyword,
+      search,
       categoryFilter?.id,
       availabilityFilter,
     ],
@@ -90,19 +94,19 @@ export default function StaffMenuPage() {
         {
           page,
           itemPerPage: 15,
-          keyword,
+          keyword: search,
           categoryId: categoryFilter?.id,
           isAvailable: availabilityFilter === 'ALL' ? undefined : availabilityFilter === 'ACTIVE',
         },
         signal,
       ),
-    enabled: activeTab === 'items',
+    enabled: activeTab === 'items' && search === keyword.trim(),
   })
   const stockStatusQuery = useQuery({
-    queryKey: ['private', employee.id, 'admin-menu-stock', stockPage, stockKeyword],
+    queryKey: ['private', employee.id, 'admin-menu-stock', stockPage, stockSearch],
     queryFn: ({ signal }) =>
-      getItemStockStatus({ page: stockPage, itemPerPage: 15, keyword: stockKeyword }, signal),
-    enabled: activeTab === 'stock',
+      getItemStockStatus({ page: stockPage, itemPerPage: 15, keyword: stockSearch }, signal),
+    enabled: activeTab === 'stock' && stockSearch === stockKeyword.trim(),
   })
   const activeQuery =
     activeTab === 'items'
@@ -287,7 +291,7 @@ export default function StaffMenuPage() {
           item={recipeItem}
           employeeId={employee.id}
           editable={canUpdate}
-          canReadInventory={permissions.includes('/inventory_read')}
+          canReadInventory={access.has('/inventory_read')}
           onClose={() => setRecipeItem(null)}
           onSuccess={() => {
             setRecipeItem(null)
@@ -304,7 +308,7 @@ export default function StaffMenuPage() {
           item={optionsItem}
           employeeId={employee.id}
           editable={canUpdate}
-          canReadInventory={permissions.includes('/inventory_read')}
+          canReadInventory={access.has('/inventory_read')}
           onClose={() => setOptionsItem(null)}
           onSuccess={() => {
             setOptionsItem(null)

@@ -230,6 +230,11 @@ test('decimal strings preserve minor units and large exact values', async ({
     page.getByText('999.999.999.999.999,99 ₫', { exact: true }),
   ).toBeVisible()
   expect(
+    await page.getByText('999.999.999.999.999,99 ₫', { exact: true }).evaluate(
+      (node) => node.scrollWidth <= node.clientWidth,
+    ),
+  ).toBe(true)
+  expect(
     await page.evaluate(
       () => document.documentElement.scrollWidth <= window.innerWidth,
     ),

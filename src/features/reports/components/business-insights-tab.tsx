@@ -3,29 +3,16 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, RefreshCw, Sparkles } from 'lucide-react'
 import { ApiError, sessionEvents } from '../../../shared/api/client'
 import { pendingIntentKey, readPendingIntent, writePendingIntent } from '../../../shared/api/pending-intent'
-import { formatVnd } from '../../../shared/lib/format'
+import { insightTime as time, insightMetricLabel as metricLabel, insightMetricValue as metricValue } from '../business-insight-format'
+import { BusinessInsightHistory } from './business-insight-history'
+import { CopyBusinessInsight } from './copy-business-insight'
 import { Badge, Button, Dialog, DialogDescription, DialogFooter, DialogHeader, DialogTitle, TabsContent } from '../../../shared/ui'
 import {
   businessInsightRecoverySchema, generateBusinessInsight, getBusinessInsight, getBusinessInsightsConfig, insightRangeError,
   type BusinessInsight, type BusinessInsightRequest,
 } from '../business-insights.api'
 
-const labels: Record<string, string> = {
-  paidInvoiceCount: 'Hóa đơn đã thanh toán', grossSales: 'Doanh số trước giảm giá',
-  discountAmount: 'Tiền giảm giá', refundCount: 'Giao dịch hoàn tiền thành công', refundAmount: 'Tiền đã hoàn',
-  netReceipts: 'Thực thu sau hoàn tiền', estimatedNetSalesExTax: 'Doanh thu thuần ước tính chưa VAT',
-  ingredientCost: 'Chi phí nguyên liệu đã chế biến', wasteCost: 'Chi phí hao hụt',
-  estimatedGrossProfit: 'Lợi nhuận gộp ước tính', soldItemCount: 'Số dòng món đã bán',
-  itemsWithCostSnapshot: 'Dòng món có snapshot chi phí', zeroCostSnapshotCount: 'Snapshot chi phí bằng 0',
-}
-const dateFormat = new Intl.DateTimeFormat('vi-VN', {
-  timeZone: 'Asia/Ho_Chi_Minh', dateStyle: 'short', timeStyle: 'medium',
-})
-const time = (iso: string) => dateFormat.format(new Date(iso))
 const busy = (job?: BusinessInsight) => job?.status === 'QUEUED' || job?.status === 'PROCESSING'
-const metricLabel = (metric: { key: string; label: string }) => Object.hasOwn(labels, metric.key) ? labels[metric.key] : metric.label
-const countFormat = new Intl.NumberFormat('vi-VN')
-const metricValue = (value: string, unit: 'VND' | 'COUNT') => unit === 'VND' ? formatVnd(value) : countFormat.format(BigInt(value))
 
 function insightError(error: unknown) {
   if (error instanceof ApiError) {
@@ -44,7 +31,7 @@ export function BusinessInsightsTab({ employeeId, from, to, active, canRead, can
 }) {
   const client = useQueryClient()
   const storageKey = pendingIntentKey(employeeId, 'business-insight')
-  // shortcut: recover only the latest request in this tab; add server history for cross-device recovery.
+  // Keep only the uncertain request identity locally; reports live on the server.
   const [recovery] = useState(() => {
     try {
       const intent = readPendingIntent(storageKey, businessInsightRecoverySchema)
@@ -61,6 +48,7 @@ export function BusinessInsightsTab({ employeeId, from, to, active, canRead, can
   const [jobId, setJobId] = useState<string | null>(recovery.intent?.payload.jobId ?? null)
   const [storageError, setStorageError] = useState<string | null>(recovery.error)
   const [confirmDiscard, setConfirmDiscard] = useState(false)
+  const [metricGroup, setMetricGroup] = useState('overview')
   const requestedAt = useRef(recovery.intent?.createdAt ?? null)
   const controller = useRef<AbortController | null>(null)
   const submitting = useRef(false)
@@ -88,7 +76,7 @@ export function BusinessInsightsTab({ employeeId, from, to, active, canRead, can
   })
   const jobQuery = useQuery({
     queryKey: ['private', employeeId, 'business-insight-job', jobId],
-    queryFn: ({ signal }) => getBusinessInsight(jobId!, request!, signal),
+    queryFn: ({ signal }) => getBusinessInsight(jobId!, request, signal),
     enabled: tracking && !!jobId,
     retry: false, refetchOnWindowFocus: false, refetchOnReconnect: false,
     staleTime: query => busy(query.state.data) ? 0 : Infinity,
@@ -98,6 +86,7 @@ export function BusinessInsightsTab({ employeeId, from, to, active, canRead, can
   useEffect(() => {
     if (!tracking) {
       void client.cancelQueries({ queryKey: ['private', employeeId, 'business-insights-config'], exact: true })
+      void client.cancelQueries({ queryKey: ['private', employeeId, 'business-insight-history'], exact: true })
       void client.cancelQueries({ queryKey: ['private', employeeId, 'business-insight-job', jobId], exact: true })
     }
   }, [client, employeeId, jobId, tracking])
@@ -113,11 +102,16 @@ export function BusinessInsightsTab({ employeeId, from, to, active, canRead, can
         writePendingIntent(storageKey, { payload: { request: body, jobId: job.id }, createdAt: requestedAt.current!, idempotencyKey: body.clientRequestId })
       } catch { setStorageError('Không lưu được tham chiếu phân tích. Không tạo thêm yêu cầu trước khi kiểm tra trạng thái.') }
       client.setQueryData(['private', employeeId, 'business-insight-job', job.id], job)
+      void client.invalidateQueries({ queryKey: ['private', employeeId, 'business-insight-history'] })
       setJobId(job.id)
     },
     onSettled: () => { submitting.current = false },
   })
   const job = jobQuery.data
+  useEffect(() => {
+    if (job?.status === 'COMPLETED' || job?.status === 'FAILED')
+      void client.invalidateQueries({ queryKey: ['private', employeeId, 'business-insight-history'] })
+  }, [client, employeeId, job?.id, job?.status])
   const recovering = !!jobId && jobQuery.isPending
   const blocked = !tracking || !canGenerate || config.data?.enabled !== true || config.isError ||
     config.isFetching || !!rangeError || mutation.isPending || busy(job) || jobQuery.isError || recovering || !!storageError
@@ -154,6 +148,11 @@ export function BusinessInsightsTab({ employeeId, from, to, active, canRead, can
   }
 
   const snapshot = job?.snapshot
+  const hasBreakdown = snapshot?.metrics.some(metric => metric.key.startsWith('item.') || metric.key.startsWith('category.')) ?? false
+  const displayedMetrics = snapshot?.metrics.filter(metric => {
+    const group = metric.key.startsWith('item.') ? 'item' : metric.key.startsWith('category.') ? 'category' : 'overview'
+    return group === (hasBreakdown ? metricGroup : 'overview')
+  }) ?? []
   const analysis = job?.status === 'COMPLETED' ? job.analysis : null
   const metrics = new Map(snapshot?.metrics.map(metric => [metric.key, metric]))
   const zeroCost = metrics.get('zeroCostSnapshotCount')
@@ -185,6 +184,7 @@ export function BusinessInsightsTab({ employeeId, from, to, active, canRead, can
       {config.isPending && <p role="status">Đang tải cấu hình phân tích...</p>}
       {config.data?.enabled === false && <p role="status" className="text-sm">Phân tích kinh doanh chưa được bật.</p>}
       {config.data && <p className="text-xs text-muted-foreground">Kết quả được lưu {config.data.retentionDays} ngày. Khoảng phân tích tối đa {config.data.maxRangeDays} ngày.</p>}
+      {canGenerate && <p className="text-xs text-muted-foreground">Tạo phân tích mới có thể dùng thêm hạn mức. Mở lịch sử không tạo yêu cầu AI mới.</p>}
       {config.isError && <div className="flex flex-wrap items-center gap-3">
         <p role="alert" className="text-sm text-destructive">{insightError(config.error)}</p>
         <Button variant="outline" disabled={config.isFetching} onClick={() => void config.refetch()} className="gap-2">
@@ -196,7 +196,13 @@ export function BusinessInsightsTab({ employeeId, from, to, active, canRead, can
       {storageError && <p role="alert" className="text-sm text-destructive">{storageError}</p>}
       {!mutation.isPending && !busy(job) && (storageError || jobQuery.error instanceof ApiError && jobQuery.error.status === 404) &&
         <Button variant="outline" onClick={() => setConfirmDiscard(true)}>Bỏ tham chiếu cũ</Button>}
-      {busy(job) && <p role="status">{job?.status === 'QUEUED' ? 'Yêu cầu đang chờ xử lý.' : 'Đang xử lý phân tích.'}</p>}
+      {(busy(job) || recovering || mutation.isPending) && <div className="space-y-3 border-t border-border py-4" aria-busy="true" aria-label="Đang chuẩn bị phân tích">
+        <p role="status" className="text-sm">{job?.status === 'QUEUED' ? 'Yêu cầu đang chờ xử lý.' : recovering ? 'Đang tải phân tích đã lưu.' : mutation.isPending ? 'Đang gửi yêu cầu phân tích.' : 'Đang xử lý phân tích.'}</p>
+        <div aria-hidden="true" className="space-y-3 motion-safe:animate-pulse">
+          <div className="h-4 w-2/3 rounded bg-muted" /><div className="h-4 w-full rounded bg-muted" />
+          <div className="h-4 w-5/6 rounded bg-muted" /><div className="h-16 rounded bg-muted" />
+        </div>
+      </div>}
       {jobQuery.isError && <div className="flex flex-wrap items-center gap-3">
         <p role="alert" className="text-sm text-destructive">{insightError(jobQuery.error)} Trạng thái hiển thị là lần xác nhận gần nhất.</p>
         <Button variant="outline" disabled={jobQuery.isFetching} onClick={() => void jobQuery.refetch()} className="gap-2">
@@ -204,7 +210,9 @@ export function BusinessInsightsTab({ employeeId, from, to, active, canRead, can
         </Button>
       </div>}
       {job?.status === 'FAILED' && <p role="alert" className="text-sm text-destructive">Không thể hoàn tất phân tích. Số liệu snapshot nếu có vẫn là dữ liệu hệ thống; chưa có kết luận AI.</p>}
+      {job?.errorCode === 'AI_OUTCOME_UNKNOWN' && <p className="text-sm text-muted-foreground">Lần gọi AI trước chưa xác nhận được kết quả lưu trữ. Hệ thống đã dừng thử lại để tránh gọi trùng; yêu cầu mới có thể dùng thêm hạn mức.</p>}
       {job && <dl className="grid gap-3 border-t border-border pt-4 text-sm sm:grid-cols-2">
+        {!request && <div className="min-w-0"><dt className="text-muted-foreground">Kỳ của phân tích đã lưu</dt><dd>{time(job.period.from)} - {time(job.period.to)}</dd></div>}
         <div className="min-w-0"><dt className="text-muted-foreground">Yêu cầu lúc</dt><dd>{time(job.requestedAt)}</dd></div>
         <div className="min-w-0"><dt className="text-muted-foreground">Mô hình / phiên bản prompt</dt><dd className="break-words [overflow-wrap:anywhere]">{job.model} / {job.promptVersion}</dd></div>
       </dl>}
@@ -215,6 +223,15 @@ export function BusinessInsightsTab({ employeeId, from, to, active, canRead, can
         <p className="text-sm">Kỳ so sánh: {time(snapshot.comparisonPeriod.from)} - {time(snapshot.comparisonPeriod.to)} (giờ Việt Nam)</p>
         <p className="text-sm">{snapshot.comparisonBasis === 'PREVIOUS_DAY_SAME_WINDOW' ? 'Cùng khung giờ ngày trước.' : 'Kỳ liền trước có cùng thời lượng.'}</p>
         <p className="text-sm text-muted-foreground">Doanh số theo ngày tạo hóa đơn. Hoàn tiền của nhóm hóa đơn được tính đến lúc snapshot, không phải dòng tiền trong kỳ. Hao hụt theo ngày ghi nhận.</p>
+        {hasBreakdown &&
+          <p className="text-sm text-muted-foreground">Chi tiết gồm top 5 món và top 5 danh mục theo doanh số trước giảm giá, thuế và hoàn tiền của kỳ hiện tại; tên và phân loại theo catalog lúc snapshot. Không đại diện toàn bộ menu hay lợi nhuận theo món.</p>}
+        {hasBreakdown && <label className="flex flex-wrap items-center gap-2 text-sm font-medium">
+          Nhóm chỉ số
+          <select value={metricGroup} onChange={event => setMetricGroup(event.target.value)}
+            className="min-h-11 max-w-full rounded-md border border-input bg-background px-3 text-sm text-foreground focus-visible:outline-2 focus-visible:outline-ring">
+            <option value="overview">Tổng quan</option><option value="item">Món bán chạy</option><option value="category">Danh mục</option>
+          </select>
+        </label>}
         {!snapshot.metrics.length && <p role="status">Snapshot chưa có số liệu. Dữ liệu phân tích chưa đầy đủ.</p>}
         {zeroCost && (!/^0(?:\.0+)?$/.test(zeroCost.value) || !/^0(?:\.0+)?$/.test(zeroCost.previousValue)) && <p role="status" className="flex items-start gap-2 text-sm">
           <AlertTriangle size={16} aria-hidden="true" className="mt-0.5 shrink-0" />Có snapshot chi phí bằng 0 trong kỳ báo cáo hoặc kỳ so sánh; chi phí và lợi nhuận ước tính có thể chưa đầy đủ.
@@ -224,7 +241,7 @@ export function BusinessInsightsTab({ employeeId, from, to, active, canRead, can
           <table className="w-full min-w-[28rem] text-left text-sm">
             <caption className="sr-only">Số liệu hiện tại và kỳ so sánh từ snapshot hệ thống</caption>
             <thead><tr className="border-b border-border"><th scope="col" className="p-2">Chỉ số</th><th scope="col" className="p-2 text-right">Hiện tại</th><th scope="col" className="p-2 text-right">Kỳ trước</th></tr></thead>
-            <tbody>{snapshot.metrics.map(metric => <tr key={metric.key} className="border-b border-border">
+            <tbody>{displayedMetrics.map(metric => <tr key={metric.key} className="border-b border-border">
               <th scope="row" className="max-w-64 break-words p-2 font-medium [overflow-wrap:anywhere]">{metricLabel(metric)}</th>
               <td className="whitespace-nowrap p-2 text-right tabular-nums">{metricValue(metric.value, metric.unit)}</td>
               <td className="whitespace-nowrap p-2 text-right tabular-nums">{metricValue(metric.previousValue, metric.unit)}</td>
@@ -233,7 +250,10 @@ export function BusinessInsightsTab({ employeeId, from, to, active, canRead, can
         </div>}
       </section>}
       {analysis && <section className="space-y-4 border-t border-border pt-4" aria-label="Quan sát và giả thuyết">
-        <h3 className="text-base font-semibold">Quan sát và giả thuyết</h3>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h3 className="text-base font-semibold">Quan sát và giả thuyết</h3>
+          <CopyBusinessInsight key={job!.id} job={job!} />
+        </div>
         <p className="whitespace-pre-wrap break-words text-sm [overflow-wrap:anywhere]">{analysis.summary}</p>
         <ol className="divide-y divide-border">{analysis.findings.map((finding, index) => <li key={index} className="space-y-3 py-4 first:pt-0">
           <div className="flex flex-wrap items-start gap-2">
@@ -260,6 +280,13 @@ export function BusinessInsightsTab({ employeeId, from, to, active, canRead, can
             <li key={index} className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">{limit}</li>)}</ul>
         </div>}
       </section>}
+      <BusinessInsightHistory employeeId={employeeId} enabled={tracking} selectedId={jobId}
+        locked={mutation.isPending || busy(job) || !jobId && !!request}
+        onSelect={item => {
+          setJobId(item.id)
+          setRequest(null)
+          mutation.reset()
+        }} />
     </section>
     <Dialog open={confirmDiscard} onClose={() => setConfirmDiscard(false)} maxWidth="sm">
       <DialogHeader>

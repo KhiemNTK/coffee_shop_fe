@@ -19,10 +19,10 @@ export default function PromotionsPage() {
   const client = useQueryClient()
   const session = useOutletContext<Session>()
   const employeeId = session.employee.id
-  const permissions = session.authorization.permissionKeys
-  const canCreate = permissions.includes('/promotions_create')
-  const canUpdate = permissions.includes('/promotions_update')
-  const canDelete = permissions.includes('/promotions_delete')
+  const access = session.access
+  const canCreate = access.has('/promotions_create')
+  const canUpdate = access.has('/promotions_update')
+  const canDelete = access.has('/promotions_delete')
   const [page, setPage] = useState(1)
   const [keyword, setKeyword] = useState('')
   const [search, setSearch] = useState('')

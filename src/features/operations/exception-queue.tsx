@@ -53,8 +53,8 @@ function itemTitle(item: ManagementExceptionItem) {
 }
 
 export function ManagementExceptionsTab({ summary }: { summary?: ManagementExceptionsSummary }) {
-  const { employee, authorization } = useOutletContext<Session>()
-  const can = (key: string) => authorization.permissionKeys.includes(key)
+  const { employee, access } = useOutletContext<Session>()
+  const can = access.has
   const client = useQueryClient()
   const flight = useRef(false)
   const [queuedMessage, setQueuedMessage] = useState('')

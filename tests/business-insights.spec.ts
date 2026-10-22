@@ -56,6 +56,7 @@ async function setup(page: Page, permissionKeys = permissions, enabled = true) {
   await page.route('**/api/v1/**', route => route.fulfill({ status: 503, json: { message: 'Unrelated fixture unavailable' } }))
   await page.route('**/api/v1/auth/me', route => route.fulfill({ json: envelope(defaultMockAdminEmployee) }))
   await page.route('**/api/v1/auth/me/permissions', route => route.fulfill({ json: envelope(defaultMockAdminAuth(permissionKeys)) }))
+  await page.route('**/api/v1/reports/insights?*', route => route.fulfill({ json: envelope({ items: [], nextCursor: null }) }))
   const configCalls: string[] = []
   await page.route('**/api/v1/reports/insights/config', route => {
     configCalls.push(route.request().url())
@@ -512,4 +513,87 @@ test('range validation accepts exactly 31 days and rejects longer, future, empty
   await tab(page).click()
   await expect(panel(page).getByRole('alert')).toContainText('tương lai')
   await expect(create(page)).toBeDisabled()
+})
+
+test('server history opens across sessions with GET only, paginates and labels item/category evidence', async ({ page }, info) => {
+  await setup(page)
+  const body: BusinessInsightRequest = { clientRequestId: '10000000-0000-4000-8000-000000000001', from: '2026-10-08T17:00:00.000Z', to: '2026-10-09T17:00:00.000Z', timeZone: 'Asia/Ho_Chi_Minh' }
+  const report = completed(body)
+  report.snapshot!.metrics.push(
+    { key: 'item.10000000-0000-4000-8000-000000000001.sales', label: 'Món: Cà phê sữa - Doanh số trước giảm giá', value: '99000.00', previousValue: '88000.00', unit: 'VND' },
+    { key: 'category.10000000-0000-4000-8000-000000000002.quantity', label: 'Danh mục: Cà phê - Số lượng bán', value: '3', previousValue: '2', unit: 'COUNT' },
+  )
+  const item = { id, period: report.period, status: 'COMPLETED', requestedAt: now, expiresAt: '2026-10-17T05:00:00.000Z' }
+  let posts = 0
+  await page.route('**/api/v1/reports/insights', route => { posts++; return route.abort() })
+  await page.route('**/api/v1/reports/insights?*', route => {
+    const cursor = new URL(route.request().url()).searchParams.get('cursor')
+    return route.fulfill({ json: envelope({ items: cursor ? [{ ...item, id: 'b'.repeat(64) }] : [item], nextCursor: cursor ? null : id }) })
+  })
+  await page.route('**/api/v1/reports/insights/' + id, route => route.fulfill({ json: envelope(report) }))
+  await open(page)
+  const history = panel(page).getByRole('region', { name: 'Lịch sử phân tích', exact: true })
+  await history.getByRole('button').filter({ hasText: 'Hoàn tất' }).click()
+  await expect(panel(page).getByRole('heading', { name: 'Quan sát và giả thuyết', exact: true })).toBeVisible()
+  await expect(panel(page).getByText('Kỳ của phân tích đã lưu', { exact: true })).toBeVisible()
+  await panel(page).getByRole('combobox', { name: 'Nhóm chỉ số' }).selectOption('item')
+  await expect(panel(page).getByRole('row').filter({ hasText: 'Món: Cà phê sữa' })).toContainText('99.000')
+  await expect(panel(page).getByRole('row').filter({ hasText: 'Thực thu sau hoàn tiền' })).toHaveCount(0)
+  await panel(page).getByRole('combobox', { name: 'Nhóm chỉ số' }).selectOption('category')
+  await expect(panel(page).getByRole('row').filter({ hasText: 'Danh mục: Cà phê' })).toContainText('3')
+  await history.getByRole('button', { name: 'Xem thêm lịch sử' }).click()
+  await expect(history.getByRole('button').filter({ hasText: 'Hoàn tất' })).toHaveCount(2)
+  await expect(history.getByRole('button', { name: 'Xem thêm lịch sử' })).toHaveCount(0)
+  expect(posts).toBe(0)
+  expect(await page.evaluate(employeeId => sessionStorage.getItem(`coffee-shop:pending:private:intent:${employeeId}:business-insight`), defaultMockAdminEmployee.id)).toBeNull()
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+  await page.screenshot({ path: info.outputPath('insight-history.png'), fullPage: true })
+})
+
+for (const allowed of [true, false]) {
+  test(`copy insight ${allowed ? 'includes snapshot, evidence and hypotheses' : 'offers selectable text when clipboard is denied'}`, async ({ page }) => {
+    await setup(page)
+    await page.addInitScript(canCopy => {
+      let content = ''
+      Object.defineProperty(navigator, 'clipboard', { configurable: true, value: {
+        writeText: (text: string) => { if (!canCopy) return Promise.reject(new Error('denied')); content = text; return Promise.resolve() },
+        readText: () => Promise.resolve(content),
+      } })
+    }, allowed)
+    await page.route('**/api/v1/reports/insights', route => route.fulfill({ status: 202, json: envelope(completed(route.request().postDataJSON() as BusinessInsightRequest)) }))
+    await open(page)
+    await create(page).click()
+    await panel(page).getByRole('button', { name: 'Sao chép nhận định', exact: true }).click()
+    if (allowed) {
+      await expect(panel(page).getByRole('button', { name: 'Đã sao chép nhận định' })).toBeVisible()
+      const text = await page.evaluate(() => navigator.clipboard.readText())
+      expect(text).toContain('Snapshot lúc:')
+      expect(text).toContain('Giả thuyết (chưa kiểm chứng)')
+      expect(text).toContain('150.000,25')
+      expect(text).toContain('Giới hạn dữ liệu và phân tích:')
+    } else {
+      await expect(panel(page).getByRole('alert')).toContainText('Trình duyệt không cho phép sao chép')
+      await expect(panel(page).getByRole('textbox', { name: 'Nội dung nhận định để sao chép' })).toHaveValue(/Giả thuyết \(chưa kiểm chứng\)/)
+    }
+    await expect(panel(page).locator('img, script')).toHaveCount(0)
+  })
+}
+
+test('pending analysis has accessible reduced-motion loading without a fake percentage', async ({ page }, info) => {
+  await setup(page)
+  await page.emulateMedia({ reducedMotion: 'reduce', colorScheme: 'dark' })
+  let body: BusinessInsightRequest
+  await page.route('**/api/v1/reports/insights', route => {
+    body = route.request().postDataJSON() as BusinessInsightRequest
+    return route.fulfill({ status: 202, json: envelope(queued(body)) })
+  })
+  await page.route('**/api/v1/reports/insights/' + id, route => route.fulfill({ json: envelope(queued(body)) }))
+  await open(page)
+  await create(page).click()
+  const skeleton = panel(page).getByLabel('Đang chuẩn bị phân tích', { exact: true })
+  await expect(skeleton).toHaveAttribute('aria-busy', 'true')
+  expect(await skeleton.locator('[aria-hidden="true"]').evaluate(element => getComputedStyle(element).animationName)).toBe('none')
+  await expect(panel(page).getByRole('progressbar')).toHaveCount(0)
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+  await page.screenshot({ path: info.outputPath('insight-loading.png'), fullPage: true })
 })

@@ -8,15 +8,18 @@ import { AppErrorBoundary } from './app/error-boundary'
 import { ConnectionStatus } from './app/connection-status'
 import { initializeI18n } from './shared/i18n'
 import { LanguageSelector } from './shared/i18n/language-selector'
+import { ThemeProvider } from './shared/theme'
 
 void initializeI18n().then(() =>
   createRoot(document.getElementById('root')!).render(
     <StrictMode>
       <QueryClientProvider client={queryClient}>
         <AppErrorBoundary>
-          <LanguageSelector />
-          <ConnectionStatus />
-          <AppRouter />
+          <ThemeProvider>
+            <LanguageSelector />
+            <ConnectionStatus />
+            <AppRouter />
+          </ThemeProvider>
         </AppErrorBoundary>
       </QueryClientProvider>
     </StrictMode>,

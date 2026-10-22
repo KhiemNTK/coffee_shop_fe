@@ -23,14 +23,19 @@ import { MenuCatalogSidebar } from './components/menu-catalog-sidebar'
 import { MenuCard } from './components/menu-card'
 import { StoreFooter } from './components/store-footer'
 
-const initialFilters: MenuFilters = { keyword: '', categoryId: '', page: 1 }
+const initialFilters: MenuFilters = {
+  keyword: '',
+  categoryId: '',
+  page: 1,
+  sortBy: 'name',
+  sortOrder: 'asc',
+}
 
 export function MenuPage() {
   const { t: translate } = useTranslation()
   const navigate = useNavigate()
   const [copyrightYear] = useState(() => new Date().getFullYear())
   const [draft, setDraft] = useState('')
-  const [sortBy, setSortBy] = useState('popular')
   const [filters, setFilters] = useState<MenuFilters>(initialFilters)
   const [selectedProduct, setSelectedProduct] = useState<MenuItem | null>(null)
   const [isCartOpen, setIsCartOpen] = useState(false)
@@ -57,7 +62,7 @@ export function MenuPage() {
 
   function resetFilters() {
     setDraft('')
-    setFilters(initialFilters)
+    setFilters((current) => ({ ...current, keyword: '', categoryId: '', page: 1 }))
   }
 
   function handleSelectItem(item: MenuItem) {
@@ -291,16 +296,26 @@ export function MenuPage() {
                 )}
 
                 <div className="flex items-center gap-1.5 text-xs">
-                  <span className="text-muted-foreground hidden sm:inline">Sắp xếp:</span>
+                  <label htmlFor="menu-sort" className="text-muted-foreground">
+                    {translate('menu.sortLabel')}
+                  </label>
                   <select
-                    value={sortBy}
-                    onChange={(e) => setSortBy(e.target.value)}
-                    className="rounded-[8px] border border-border bg-card px-2.5 py-1.5 text-xs font-semibold text-foreground focus:outline-primary cursor-pointer"
+                    id="menu-sort"
+                    value={`${filters.sortBy}-${filters.sortOrder}`}
+                    onChange={(event) => {
+                      const value = event.target.value
+                      setFilters((current) => ({
+                        ...current,
+                        sortBy: value === 'name-asc' ? 'name' : 'price',
+                        sortOrder: value === 'price-desc' ? 'desc' : 'asc',
+                        page: 1,
+                      }))
+                    }}
+                    className="min-h-10 min-w-0 rounded-[8px] border border-border bg-card px-2.5 py-1.5 text-xs font-semibold text-foreground focus:outline-primary cursor-pointer"
                   >
-                    <option value="popular">Phổ biến nhất</option>
-                    <option value="price-asc">Giá tăng dần</option>
-                    <option value="price-desc">Giá giảm dần</option>
-                    <option value="name">Tên A-Z</option>
+                    <option value="name-asc">{translate('menu.sortName')}</option>
+                    <option value="price-asc">{translate('menu.sortPriceAsc')}</option>
+                    <option value="price-desc">{translate('menu.sortPriceDesc')}</option>
                   </select>
                 </div>
               </div>

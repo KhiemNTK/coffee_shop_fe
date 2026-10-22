@@ -5,12 +5,10 @@ import type { Session } from '../../auth/session'
 import { buttonVariants } from '../../../shared/ui'
 
 export function ShiftRequiredLink() {
-  const { authorization } = useOutletContext<Session>()
+  const { access } = useOutletContext<Session>()
   const { t } = useTranslation()
   if (
-    !['/cashier-shifts_current', '/cashier-shifts_open', '/funds_read'].every((key) =>
-      authorization.permissionKeys.includes(key),
-    )
+    !access.hasAll('/cashier-shifts_current', '/cashier-shifts_open', '/funds_read')
   )
     return null
   return (

@@ -14,9 +14,9 @@ import { Pagination } from '../../../shared/ui/pagination'
 import { errorMessage } from '../../../shared/api/client'
 
 export function InventoryTaxonomy() {
-  const { employee, authorization } = useOutletContext<Session>()
-  const can = (action: string) =>
-    authorization.permissionKeys.includes('/inventory_' + action)
+  const { employee, access } = useOutletContext<Session>()
+  const can = (action: 'create' | 'update' | 'delete') =>
+    access.has(`/inventory_${action}`)
   const [kind, setKind] = useState<'categories' | 'units'>('categories')
   const [page, setPage] = useState(1)
   const [editing, setEditing] = useState<InventoryCategory | 'new' | null>(null)

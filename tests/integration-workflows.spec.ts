@@ -200,7 +200,7 @@ test('waste trace keeps four-decimal quantities and links the source session', a
 })
 
 test('split snapshots original quantities and stops resubmitting on conflict', async ({ page }) => {
-  await staff(page, ['/orders_sessions_read', '/orders_tables_split'])
+  await staff(page, ['/orders_sessions_read', '/orders_tables_split', '/dining-tables_read'])
   await page.route('**/api/v1/menu/public/categories', route => route.fulfill({ json: envelope([]) }))
   await page.route('**/api/v1/menu/public/items?*', route => route.fulfill({ json: envelope(paged([])) }))
   await page.route('**/api/v1/recommendations/**', route => route.fulfill({ json: envelope([]) }))

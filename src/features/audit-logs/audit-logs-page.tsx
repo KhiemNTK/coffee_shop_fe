@@ -1,4 +1,10 @@
-import { useState, useMemo, useDeferredValue } from 'react'
+import { useState, useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
+import { useOutletContext } from 'react-router-dom'
+import type { Session } from '../auth/session'
+import { Pagination } from '@/shared/ui/pagination'
+import { fromStoreLocal, toStoreLocal } from '@/shared/lib/store-time'
+import { useDebouncedSearch } from '@/shared/lib/use-debounced-search'
 import { useQuery } from '@tanstack/react-query'
 import {
   ScrollText,
@@ -53,14 +59,9 @@ function calculateDateRange(filter: 'ALL' | 'TODAY' | '7DAYS' | '30DAYS'): {
   if (filter === 'ALL') return {}
   const now = new Date()
   const to = now.toISOString()
-  const from = new Date()
-  if (filter === 'TODAY') {
-    from.setHours(0, 0, 0, 0)
-  } else if (filter === '7DAYS') {
-    from.setDate(now.getDate() - 7)
-  } else if (filter === '30DAYS') {
-    from.setDate(now.getDate() - 30)
-  }
+  const from = filter === 'TODAY'
+    ? fromStoreLocal(`${toStoreLocal(now).slice(0, 10)}T00:00`)
+    : new Date(now.getTime() - (filter === '7DAYS' ? 7 : 30) * 86_400_000)
   return { fromDate: from.toISOString(), toDate: to }
 }
 
@@ -109,9 +110,11 @@ function getActionBadgeVariant(actionType: string): {
 }
 
 export function AuditLogsPage() {
+  const { t } = useTranslation()
+  const { employee } = useOutletContext<Session>()
   // State for filters
   const [keyword, setKeyword] = useState('')
-  const deferredKeyword = useDeferredValue(keyword)
+  const search = useDebouncedSearch(keyword)
 
   const [categoryPreset, setCategoryPreset] = useState<string>('ALL')
   const [dateRangeFilter, setDateRangeFilter] = useState<'ALL' | 'TODAY' | '7DAYS' | '30DAYS'>('ALL')
@@ -124,14 +127,14 @@ export function AuditLogsPage() {
 
   // Map categoryPreset to actual actionType prefix or exact filter
   const actionTypeQuery = useMemo(() => {
-    if (deferredKeyword.trim()) {
-      return deferredKeyword.trim()
+    if (search) {
+      return search
     }
     if (categoryPreset !== 'ALL') {
       return categoryPreset
     }
     return undefined
-  }, [deferredKeyword, categoryPreset])
+  }, [search, categoryPreset])
 
   // Main Query
   const {
@@ -140,7 +143,7 @@ export function AuditLogsPage() {
     isFetching,
     refetch,
   } = useQuery({
-    queryKey: ['audit-logs-list', currentPage, actionTypeQuery, dateBounds.fromDate, dateBounds.toDate],
+    queryKey: ['private', employee.id, 'audit-logs', currentPage, actionTypeQuery, dateBounds.fromDate, dateBounds.toDate],
     queryFn: ({ signal }) =>
       auditLogsApi.getAuditLogs(
         {
@@ -152,6 +155,7 @@ export function AuditLogsPage() {
         },
         signal,
       ),
+    enabled: search === keyword.trim(),
   })
 
   const logs = logsData?.list ?? EMPTY_LOGS
@@ -466,28 +470,9 @@ export function AuditLogsPage() {
           {totalPages > 1 && (
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between px-1">
               <p className="text-xs text-muted-foreground">
-                Hiển thị trang <span className="font-bold text-foreground">{currentPage}</span> / {totalPages} (Tổng cộng {totalItems} lượt ghi)
+                {t('common.paginationSummary', { page: currentPage, totalPages, totalItems })}
               </p>
-              <div className="flex items-center gap-1.5">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                  disabled={currentPage <= 1 || isFetching}
-                  className="h-8 px-3 text-xs"
-                >
-                  Trước
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                  disabled={currentPage >= totalPages || isFetching}
-                  className="h-8 px-3 text-xs"
-                >
-                  Tiếp
-                </Button>
-              </div>
+              <Pagination page={currentPage} totalPages={totalPages} onPage={setCurrentPage} disabled={isFetching} />
             </div>
           )}
         </div>

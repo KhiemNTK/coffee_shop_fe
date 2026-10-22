@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import { formatDateTime } from '@/shared/lib/format'
 import { useQuery } from '@tanstack/react-query'
 import { useOutletContext } from 'react-router-dom'
 import { z } from 'zod'
@@ -29,6 +31,7 @@ const feedbackPageSchema = z.object({
 })
 
 export function FeedbackReport({ from, to }: { from: string; to: string }) {
+  useTranslation()
   const { employee } = useOutletContext<Session>()
   const [page, setPage] = useState(1)
   const [rating, setRating] = useState('')
@@ -125,7 +128,7 @@ export function FeedbackReport({ from, to }: { from: string; to: string }) {
                 {item.invoice.invoiceNumber} · {item.rating} sao
               </strong>
               <time className="text-muted-foreground">
-                {new Date(item.createdAt).toLocaleString('vi-VN')}
+                {formatDateTime(item.createdAt, { seconds: true })}
               </time>
             </div>
             <p className="break-words">{item.comment || 'Không có nhận xét'}</p>

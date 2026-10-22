@@ -38,7 +38,7 @@ export function formatLineAmount(unitPrice: string, quantity: number): string {
 }
 
 /**
- * Format date in vi-VN locale (DD/MM/YYYY)
+ * Display dates in the selected language and the store timezone.
  */
 export function formatDate(date: string | Date | null | undefined): string {
   if (!date) return '—'
@@ -53,9 +53,12 @@ export function formatDate(date: string | Date | null | undefined): string {
 }
 
 /**
- * Format date and time in vi-VN locale (DD/MM/YYYY HH:mm)
+ * Operational views can retain seconds without changing the store timezone.
  */
-export function formatDateTime(date: string | Date | null | undefined): string {
+export function formatDateTime(
+  date: string | Date | null | undefined,
+  { seconds = false }: { seconds?: boolean } = {},
+): string {
   if (!date) return '—'
   const d = typeof date === 'string' ? new Date(date) : date
   if (Number.isNaN(d.getTime())) return typeof date === 'string' ? date : '—'
@@ -66,6 +69,7 @@ export function formatDateTime(date: string | Date | null | undefined): string {
     year: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
+    second: seconds ? '2-digit' : undefined,
   })
 }
 

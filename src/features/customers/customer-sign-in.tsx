@@ -3,17 +3,25 @@ import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useQueryClient } from '@tanstack/react-query'
 import { z } from 'zod'
-import { ArrowRight, ShieldCheck } from 'lucide-react'
+import { ArrowRight, LogOut, ShieldCheck } from 'lucide-react'
 import { authConfig } from '../auth/auth.config'
 import { GoogleButton } from '../auth/google-button'
 import { Turnstile } from '../auth/turnstile'
 import { SiteHeader } from '../../shared/components/site-header'
 import { Button } from '../../shared/ui'
 import { ApiError, errorMessage } from '../../shared/api/client'
-import { customerKey, customerSignIn, saveFavorite, useCustomer } from './customers.api'
+import {
+  customerKey,
+  customerSignIn,
+  saveFavorite,
+  useCustomer,
+  useCustomerLogout,
+} from './customers.api'
 
 const intentSchema = z.object({
-  returnTo: z.string().regex(/^\/(?:[?#].*|(?:menu|wishlist|cart|account|order)(?:[/?#].*)?)?$/),
+  returnTo: z.string().regex(
+    /^\/(?:[?#].*|(?:menu|wishlist|cart|account|order|reservations|pickup|reorder)(?:[/?#].*)?)?$/,
+  ),
   favoriteItemId: z.uuid().optional(),
 })
 
@@ -21,6 +29,7 @@ export function CustomerSignIn({ returnTo = '/account' }: { returnTo?: string })
   const { t } = useTranslation()
   const client = useQueryClient()
   const customer = useCustomer()
+  const logout = useCustomerLogout()
   const navigate = useNavigate()
   const location = useLocation()
   const intent = intentSchema.safeParse(location.state)
@@ -34,6 +43,7 @@ export function CustomerSignIn({ returnTo = '/account' }: { returnTo?: string })
   const mounted = useRef(true)
   const errorRef = useRef<HTMLParagraphElement>(null)
   const configMissing = import.meta.env.PROD && !authConfig.turnstileSiteKey
+  const failure = error ?? logout.error ?? customer.error
   useEffect(() => {
     mounted.current = true
     return () => {
@@ -44,10 +54,12 @@ export function CustomerSignIn({ returnTo = '/account' }: { returnTo?: string })
   async function finish(credential?: string) {
     if (
       flight.current ||
+      logout.isPending ||
       (credential && (configMissing || (authConfig.turnstileSiteKey && !token)))
     )
       return
     flight.current = true
+    logout.reset()
     setPending(true)
     setError(undefined)
     try {
@@ -93,6 +105,22 @@ export function CustomerSignIn({ returnTo = '/account' }: { returnTo?: string })
     }
   }
 
+  function switchAccount() {
+    if (flight.current || logout.isPending) return
+    flight.current = true
+    setError(undefined)
+    logout.mutate(undefined, {
+      onSuccess: () => {
+        setToken('')
+        setAttempt((value) => value + 1)
+      },
+      onError: () => requestAnimationFrame(() => errorRef.current?.focus()),
+      onSettled: () => {
+        flight.current = false
+      },
+    })
+  }
+
   return (
     <section
       className="mx-auto w-full max-w-md space-y-5 py-6"
@@ -103,14 +131,14 @@ export function CustomerSignIn({ returnTo = '/account' }: { returnTo?: string })
       <p className="text-sm leading-relaxed text-muted-foreground">
         {t('customer.signInDescription')}
       </p>
-      {(error || customer.error) && (
+      {failure && (
         <p
           ref={errorRef}
           tabIndex={-1}
           role="alert"
           className="break-words text-sm text-destructive"
         >
-          {errorMessage(error ?? customer.error)}
+          {errorMessage(failure)}
         </p>
       )}
       {customer.isPending ? (
@@ -122,10 +150,25 @@ export function CustomerSignIn({ returnTo = '/account' }: { returnTo?: string })
       ) : customer.data ? (
         <div className="space-y-3">
           <p className="break-all text-sm">{customer.data.email}</p>
-          <Button isLoading={pending} disabled={pending} onClick={() => void finish()}>
-            <ArrowRight size={16} aria-hidden="true" />
-            {t(itemId ? 'wishlist.add' : 'customer.continue')}
-          </Button>
+          <div className="flex flex-wrap gap-3">
+            <Button
+              isLoading={pending}
+              disabled={pending || logout.isPending}
+              onClick={() => void finish()}
+            >
+              <ArrowRight size={16} aria-hidden="true" />
+              {t(itemId ? 'wishlist.add' : 'customer.continue')}
+            </Button>
+            <Button
+              variant="outline"
+              isLoading={logout.isPending}
+              disabled={pending || logout.isPending}
+              onClick={switchAccount}
+            >
+              <LogOut size={16} aria-hidden="true" />
+              {t('customer.switchAccount')}
+            </Button>
+          </div>
         </div>
       ) : !authConfig.googleClientId || configMissing ? (
         <p role="status" className="border-l-2 border-border pl-3 text-sm text-muted-foreground">

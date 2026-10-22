@@ -83,6 +83,22 @@ const viewSchema = z.object({
 export type BusinessInsightRequest = z.infer<typeof requestSchema>
 export type BusinessInsight = z.infer<typeof viewSchema>
 
+const historySchema = z.object({
+  items: z.array(z.object({
+    id: z.string().regex(/^[a-f0-9]{64}$/),
+    status: z.enum(['QUEUED', 'PROCESSING', 'COMPLETED', 'FAILED']),
+    requestedAt: isoDate, expiresAt: isoDate, period: periodSchema,
+  })).max(50),
+  nextCursor: z.string().regex(/^[a-f0-9]{64}$/).nullable(),
+})
+export type BusinessInsightHistoryItem = z.infer<typeof historySchema>['items'][number]
+
+export function getBusinessInsightHistory(cursor: string | null, signal?: AbortSignal) {
+  const query = new URLSearchParams({ limit: '10' })
+  if (cursor) query.set('cursor', cursor)
+  return apiGet('/reports/insights?' + query, historySchema, signal, true)
+}
+
 export function insightRangeError(from: string, to: string, now = Date.now()) {
   if (!dateWindow.safeParse({ from, to }).success)
     return 'Khoảng thời gian không hợp lệ: thời điểm kết thúc phải sau thời điểm bắt đầu.'
@@ -119,8 +135,8 @@ export async function generateBusinessInsight(body: BusinessInsightRequest, sign
   }
 }
 
-export async function getBusinessInsight(id: string, period: BusinessInsightRequest, signal?: AbortSignal) {
+export async function getBusinessInsight(id: string, period: BusinessInsightRequest | null, signal?: AbortSignal) {
   const view = await apiGet('/reports/insights/' + id, viewSchema, signal, true)
   if (view.id !== id) throw new ApiError(502, 'CLIENT_RESPONSE_INVALID')
-  return checkPeriod(view, period)
+  return period ? checkPeriod(view, period) : view
 }

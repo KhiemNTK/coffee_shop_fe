@@ -165,3 +165,53 @@ test('unavailable and archived favorites remain removable without adding them to
   await expect(page.getByRole('button', { name: 'Bỏ yêu thích' })).toHaveCount(2)
   await expect(page.getByRole('button', { name: 'Chọn món' })).toHaveCount(0)
 })
+
+for (const placement of ['menu', 'details']) {
+  test(`wishlist limit feedback is visible and readable in ${placement}`, async ({ page }, info) => {
+    await page.emulateMedia({ colorScheme: 'light' })
+    await page.addInitScript(() => localStorage.setItem('coffee_theme', 'dark'))
+    let writes = 0
+    await page.route('**/api/v1/**', (route) => {
+      const path = new URL(route.request().url()).pathname
+      if (path.endsWith('/customers/me'))
+        return route.fulfill({ json: envelope({ id: customerId, email: 'customer@example.test' }) })
+      if (path.endsWith('/customers/wishlist'))
+        return route.fulfill({ json: envelope({ customerId, items: [] }) })
+      if (path.endsWith(`/customers/wishlist/${item.id}`)) {
+        writes++
+        return route.fulfill({ status: 409, json: { code: 'WISHLIST_LIMIT_REACHED' } })
+      }
+      if (path.endsWith('/menu/public/categories'))
+        return route.fulfill({ json: envelope([category]) })
+      if (path.endsWith('/menu/public/items'))
+        return route.fulfill({ json: envelope({ list: [item], totalPages: 1, currentPage: 1, totalItems: 1 }) })
+      return route.fulfill({ json: envelope({ name: 'Coffee Homes', address: null, phone: null }) })
+    })
+    await page.goto('/menu')
+    const card = page.getByRole('article').filter({
+      has: page.getByRole('heading', { name: item.name, exact: true }),
+    })
+    if (placement === 'details')
+      await card.getByRole('button', { name: 'Thêm', exact: true }).click()
+    const scope = placement === 'details' ? page.getByRole('dialog') : card
+    const favorite = scope.getByRole('button', { name: 'Thêm vào yêu thích', exact: true })
+    await expect(favorite).toHaveCSS('background-color', 'rgb(18, 18, 21)')
+    await expect(favorite).toHaveCSS('color', 'rgb(250, 250, 250)')
+    const bounds = await favorite.boundingBox()
+    expect(bounds!.width).toBeGreaterThanOrEqual(44)
+    expect(bounds!.height).toBeGreaterThanOrEqual(44)
+    await favorite.click()
+    const feedback = scope.getByRole('alert')
+    await expect(feedback).toHaveText('Đã đạt giới hạn 100 món yêu thích. Hãy bỏ một món trước khi thêm.')
+    expect((await feedback.boundingBox())!.height).toBeLessThan(180)
+    await expect(scope.getByRole('button', { name: /Đã đạt giới hạn/ })).not.toHaveAccessibleName(/Thử lại/)
+    expect(await feedback.evaluate((element) => {
+      const rect = element.getBoundingClientRect()
+      const hit = document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2)
+      return hit === element || element.contains(hit)
+    })).toBe(true)
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+    await page.screenshot({ path: info.outputPath(`wishlist-limit-${placement}.png`), fullPage: true })
+    expect(writes).toBe(1)
+  })
+}

@@ -32,7 +32,7 @@ async function operationsFixture(page: Page) {
     '/orders_items_update-status',
     '/online-orders_read',
     '/online-orders_review',
-    '/invoices_create',
+    '/invoices_create', '/invoices_pay',
     '/orders_items_handoff',
     '/reservations_read',
     '/reservations_create',

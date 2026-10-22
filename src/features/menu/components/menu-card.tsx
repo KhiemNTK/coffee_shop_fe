@@ -23,7 +23,7 @@ export function MenuCard({
 
   return (
     <article className="h-full">
-      <Card className="group flex flex-col justify-between overflow-hidden rounded-[14px] border border-border/80 bg-card transition-all duration-200 hover:-translate-y-1 hover:border-primary/40 hover:shadow-md h-full">
+      <Card className="relative group flex flex-col justify-between overflow-hidden rounded-[14px] border border-border/80 bg-card transition-all duration-200 hover:-translate-y-1 hover:border-primary/40 hover:shadow-md h-full">
         {/* 1:1 Image with badging and heart button */}
         <div className="relative aspect-square w-full overflow-hidden bg-surface-muted">
           <img
@@ -54,10 +54,8 @@ export function MenuCard({
               {item.category.name}
             </Badge>
           </div>
-
-          {/* Favorite button */}
-          <FavoriteButton itemId={item.id} className="absolute right-2.5 top-2.5 z-10" />
         </div>
+        <FavoriteButton itemId={item.id} className="absolute right-2.5 top-2.5 z-10" />
 
         <CardHeader className="p-4 pb-1">
           {isHeading ? (
@@ -93,12 +91,12 @@ export function MenuCard({
         </CardHeader>
 
         <CardContent className="p-4 pt-1">
-          <div className="flex items-baseline justify-between gap-2 mt-2">
-            <div>
+          <div className="flex flex-wrap items-baseline justify-between gap-2 mt-2">
+            <div className="min-w-0 max-w-full">
               <span className="text-[11px] font-medium text-muted-foreground block">
                 Giá món
               </span>
-              <p className="text-lg font-bold text-primary tabular-nums tracking-tight">
+              <p className="break-words text-lg font-bold text-primary tabular-nums">
                 {formatPrice(item.price)}
               </p>
             </div>
