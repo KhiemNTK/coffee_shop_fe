@@ -1,8 +1,10 @@
 import { useRef, useState } from 'react'
+import { useOutletContext } from 'react-router-dom'
+import type { Session } from '../../auth/session'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { CheckCircle2, Receipt, RefreshCw, Send, XCircle } from 'lucide-react'
 import { ApiError, errorMessage } from '@/shared/api/client'
-import { printingApi, type PrintDevice } from '../printing.api'
+import { printingApi, printingKeys, type PrintDevice } from '../printing.api'
 import {
   Button,
   Card,
@@ -17,6 +19,7 @@ interface ReprintReceiptTabProps {
 }
 
 export function ReprintReceiptTab({ devices }: ReprintReceiptTabProps) {
+  const { employee } = useOutletContext<Session>()
   const queryClient = useQueryClient()
 
   const [reprintInvoiceId, setReprintInvoiceId] = useState('')
@@ -50,7 +53,7 @@ export function ReprintReceiptTab({ devices }: ReprintReceiptTabProps) {
       setReprintReason('')
       setReprintCopies(1)
       setReprintDeviceId('')
-      void queryClient.invalidateQueries({ queryKey: ['print-jobs'] })
+      void queryClient.invalidateQueries({ queryKey: printingKeys.jobs(employee.id) })
     },
     onError: (err) => {
       setUncertain(

@@ -38,17 +38,15 @@ import {
 
 export function DiningTablesPage() {
   const queryClient = useQueryClient()
-  const { employee, authorization } = useOutletContext<Session>()
-  const permissions = authorization.permissionKeys
+  const { employee, access } = useOutletContext<Session>()
 
-  const canCreate = permissions.includes('/dining-tables_create')
-  const canUpdate = permissions.includes('/dining-tables_update')
-  const canDelete = permissions.includes('/dining-tables_delete')
-  const canClear = permissions.includes('/orders_tables_clear')
-  const canTransfer = permissions.includes('/orders_tables_transfer')
-  const canAccessPos = permissions.some((p: string) =>
-    ['/dining-tables_read', '/orders_sessions_read', '/orders_sessions_create'].includes(p)
-  )
+
+  const canCreate = access.has('/dining-tables_create')
+  const canUpdate = access.has('/dining-tables_update')
+  const canDelete = access.has('/dining-tables_delete')
+  const canClear = access.has('/orders_tables_clear')
+  const canTransfer = access.has('/orders_tables_transfer')
+  const canAccessPos = access.has('/orders_sessions_read')
 
   // Filters & display state
   const [searchQuery, setSearchQuery] = useState('')

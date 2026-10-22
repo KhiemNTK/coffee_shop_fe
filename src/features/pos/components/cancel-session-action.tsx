@@ -18,7 +18,7 @@ export function CancelSessionAction({
 }) {
   const { t: translate } = useTranslation()
   const [open, setOpen] = useState(false)
-  const { employee, authorization } = useOutletContext<Session>()
+  const { employee, access } = useOutletContext<Session>()
   const client = useQueryClient()
   const navigate = useNavigate()
   const mutation = useMutation({
@@ -33,7 +33,7 @@ export function CancelSessionAction({
     },
   })
   if (
-    !authorization.permissionKeys.includes('/orders_sessions_cancel') ||
+    !access.has('/orders_sessions_cancel') ||
     session.sessionStatus !== 'ACTIVE' ||
     session.onlineOrderRequest
   )

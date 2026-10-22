@@ -58,6 +58,7 @@ export function PosMenuCatalog({
             <Input
               type="search"
               placeholder={translate('menu.searchQuick')}
+              aria-label={translate('menu.searchQuick')}
               value={keyword}
               onChange={(e) => onKeywordChange(e.target.value)}
               className="pl-9"

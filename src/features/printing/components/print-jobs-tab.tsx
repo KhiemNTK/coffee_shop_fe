@@ -1,4 +1,7 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import { useOutletContext } from 'react-router-dom'
+import type { Session } from '../../auth/session'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   ChefHat,
@@ -9,8 +12,11 @@ import {
   RotateCcw,
 } from 'lucide-react'
 import { errorMessage } from '@/shared/api/client'
+import { formatDateTime } from '@/shared/lib/format'
+import { Pagination } from '@/shared/ui/pagination'
 import {
   printingApi,
+  printingKeys,
   type PrintDevice,
   type PrintJob,
   type PrintJobStatus,
@@ -30,28 +36,14 @@ import {
 
 const EMPTY_JOBS: PrintJob[] = []
 
-function formatDateTime(isoString?: string | null) {
-  if (!isoString) return '—'
-  try {
-    const d = new Date(isoString)
-    const hours = String(d.getHours()).padStart(2, '0')
-    const mins = String(d.getMinutes()).padStart(2, '0')
-    const secs = String(d.getSeconds()).padStart(2, '0')
-    const day = String(d.getDate()).padStart(2, '0')
-    const month = String(d.getMonth() + 1).padStart(2, '0')
-    const year = d.getFullYear()
-    return `${hours}:${mins}:${secs} ${day}/${month}/${year}`
-  } catch {
-    return isoString
-  }
-}
-
 interface PrintJobsTabProps {
   canManageJobs: boolean
   devices: PrintDevice[]
 }
 
 export function PrintJobsTab({ canManageJobs, devices }: PrintJobsTabProps) {
+  const { employee } = useOutletContext<Session>()
+  const { t } = useTranslation()
   const queryClient = useQueryClient()
 
   const [jobStatusFilter, setJobStatusFilter] = useState<
@@ -73,7 +65,7 @@ export function PrintJobsTab({ canManageJobs, devices }: PrintJobsTabProps) {
     error,
     refetch,
   } = useQuery({
-    queryKey: ['print-jobs', jobStatusFilter, jobTypeFilter, jobPage],
+    queryKey: [...printingKeys.jobs(employee.id), 'list', jobStatusFilter, jobTypeFilter, jobPage],
     queryFn: ({ signal }) =>
       printingApi.getJobs(
         {
@@ -94,7 +86,7 @@ export function PrintJobsTab({ canManageJobs, devices }: PrintJobsTabProps) {
     mutationFn: ({ id, deviceId }: { id: string; deviceId?: string }) =>
       printingApi.retryJob(id, { deviceId: deviceId || undefined }),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['print-jobs'] })
+      void queryClient.invalidateQueries({ queryKey: printingKeys.jobs(employee.id) })
       setRetryingJob(null)
       setRetryTargetDeviceId('')
     },
@@ -140,6 +132,7 @@ export function PrintJobsTab({ canManageJobs, devices }: PrintJobsTabProps) {
               >
                 <option value="ALL">Tất cả loại lệnh</option>
                 <option value="RECEIPT">Hóa đơn thanh toán</option>
+                <option value="PRECHECK">{t('precheck.type')}</option>
                 <option value="KITCHEN_TICKET">Phiếu chế biến bếp</option>
               </select>
             </div>
@@ -222,7 +215,7 @@ export function PrintJobsTab({ canManageJobs, devices }: PrintJobsTabProps) {
                     >
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1.5">
-                          {job.type === 'RECEIPT' ? (
+                          {job.type !== 'KITCHEN_TICKET' ? (
                             <Receipt className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
                           ) : (
                             <ChefHat className="h-4 w-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
@@ -232,7 +225,7 @@ export function PrintJobsTab({ canManageJobs, devices }: PrintJobsTabProps) {
                               <span className="font-semibold text-xs text-foreground">
                                 {job.type === 'RECEIPT'
                                   ? 'Hóa đơn'
-                                  : 'Phiếu bếp'}
+                                  : job.type === 'PRECHECK' ? t('precheck.type') : 'Phiếu bếp'}
                               </span>
                               {job.reprintOfId && (
                                 <Badge
@@ -267,7 +260,7 @@ export function PrintJobsTab({ canManageJobs, devices }: PrintJobsTabProps) {
                       </td>
 
                       <td className="whitespace-nowrap px-4 py-3 text-xs text-muted-foreground">
-                        {formatDateTime(job.createdAt)}
+                        {formatDateTime(job.createdAt, { seconds: true })}
                       </td>
 
                       <td className="px-4 py-3">
@@ -341,32 +334,9 @@ export function PrintJobsTab({ canManageJobs, devices }: PrintJobsTabProps) {
           {totalJobPages > 1 && (
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between px-1">
               <p className="text-xs text-muted-foreground">
-                Trang{' '}
-                <span className="font-bold text-foreground">{jobPage}</span> /{' '}
-                {totalJobPages} (Tổng cộng {totalJobs} lệnh in)
+                {t('common.paginationSummary', { page: jobPage, totalPages: totalJobPages, totalItems: totalJobs })}
               </p>
-              <div className="flex items-center gap-1.5">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setJobPage((p) => Math.max(1, p - 1))}
-                  disabled={jobPage <= 1 || isFetchingJobs}
-                  className="h-8 px-3 text-xs"
-                >
-                  Trước
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() =>
-                    setJobPage((p) => Math.min(totalJobPages, p + 1))
-                  }
-                  disabled={jobPage >= totalJobPages || isFetchingJobs}
-                  className="h-8 px-3 text-xs"
-                >
-                  Tiếp
-                </Button>
-              </div>
+              <Pagination page={jobPage} totalPages={totalJobPages} onPage={setJobPage} disabled={isFetchingJobs} />
             </div>
           )}
         </div>
@@ -493,7 +463,7 @@ export function PrintJobsTab({ canManageJobs, devices }: PrintJobsTabProps) {
                   <span className="font-semibold text-foreground">
                     {selectedJob.type === 'RECEIPT'
                       ? 'Hóa đơn thanh toán'
-                      : 'Phiếu chế biến bếp'}
+                      : selectedJob.type === 'PRECHECK' ? t('precheck.type') : 'Phiếu chế biến bếp'}
                   </span>
                 </div>
                 <div>
@@ -518,7 +488,7 @@ export function PrintJobsTab({ canManageJobs, devices }: PrintJobsTabProps) {
                     Thời gian tạo
                   </span>
                   <span className="font-semibold text-foreground">
-                    {formatDateTime(selectedJob.createdAt)}
+                    {formatDateTime(selectedJob.createdAt, { seconds: true })}
                   </span>
                 </div>
                 {selectedJob.invoiceId && (
@@ -529,6 +499,12 @@ export function PrintJobsTab({ canManageJobs, devices }: PrintJobsTabProps) {
                     <span className="font-mono text-foreground">
                       {selectedJob.invoiceId}
                     </span>
+                  </div>
+                )}
+                {selectedJob.orderSessionId && (
+                  <div className="col-span-2">
+                    <span className="block text-[11px] text-muted-foreground">{t('precheck.session')}</span>
+                    <span className="break-all font-mono text-foreground">{selectedJob.orderSessionId}</span>
                   </div>
                 )}
                 {selectedJob.kitchenTicketId && (

@@ -44,7 +44,7 @@ async function staff(page: Page, permissions: string[]) {
   )
 }
 async function fulfillment(page: Page) {
-  await staff(page, ['/online-orders_read', '/orders_items_handoff', '/invoices_create'])
+  await staff(page, ['/online-orders_read', '/orders_items_handoff', '/invoices_create', '/invoices_pay'])
   await page.route('**/api/v1/online-orders/requests?*', (route) =>
     route.fulfill({ json: envelope(paged([])) }),
   )

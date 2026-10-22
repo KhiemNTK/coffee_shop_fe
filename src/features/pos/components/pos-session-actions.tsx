@@ -10,6 +10,7 @@ import { posKeys } from '../pos.keys'
 import { kitchenKeys } from '../../kitchen/kitchen.api'
 import { errorMessage } from '@/shared/api/client'
 import { Button, Dialog, Input } from '@/shared/ui'
+import { WorkflowPermissions } from '@/shared/auth/workflow-permissions'
 
 export function PosSessionActions({
   session,
@@ -19,19 +20,18 @@ export function PosSessionActions({
   disabled: boolean
 }) {
   const { t: translate } = useTranslation()
-  const { authorization } = useOutletContext<Session>()
+  const { access } = useOutletContext<Session>()
   const [mode, setMode] = useState<'merge' | 'split' | null>(null)
-  const can = (key: string) => authorization.permissionKeys.includes(key)
   if (!session.table || session.sessionStatus !== 'ACTIVE') return null
   return (
     <>
-      {can('/orders_tables_merge') && (
+      {access.hasAll(...WorkflowPermissions.mergeTables) && (
         <Button variant="outline" disabled={disabled} onClick={() => setMode('merge')}>
           <GitMerge className="h-4 w-4" />
           {translate('pos.merge')}
         </Button>
       )}
-      {can('/orders_tables_split') && (
+      {access.hasAll(...WorkflowPermissions.splitTable) && (
         <Button variant="outline" disabled={disabled} onClick={() => setMode('split')}>
           <Split className="h-4 w-4" />
           {translate('pos.split')}
@@ -52,7 +52,8 @@ function SessionActionDialog({
   onClose: () => void
 }) {
   const { t: translate } = useTranslation()
-  const { employee } = useOutletContext<Session>()
+  const { employee, access } = useOutletContext<Session>()
+  const allowed = access.hasAll(...WorkflowPermissions[mode === 'merge' ? 'mergeTables' : 'splitTable'])
   const navigate = useNavigate()
   const client = useQueryClient()
   // Freeze original quantities while the parent continues polling.
@@ -69,6 +70,7 @@ function SessionActionDialog({
   const tables = useQuery({
     queryKey: posKeys.tables(employee.id),
     queryFn: ({ signal }) => getDiningTables(signal),
+    enabled: allowed,
   })
   const choices =
     tables.data?.filter(
@@ -92,7 +94,7 @@ function SessionActionDialog({
     )
   })
   const eligible =
-    mode === 'split'
+    !allowed ? false : mode === 'split'
       ? items.length > 0 && !invalid
       : !session.orderItems.some((item) => item.isPaid || item.invoiceId)
   const mutation = useMutation({

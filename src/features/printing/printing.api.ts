@@ -3,13 +3,18 @@ import { apiGet, apiMutate } from '@/shared/api/client'
 import { apiIdempotentMutate } from '@/shared/api/idempotency'
 import { paginatedResponseSchema } from '@/shared/api/types'
 
+export const printingKeys = {
+  devices: (employeeId: string) => ['private', employeeId, 'printing', 'devices'] as const,
+  jobs: (employeeId: string) => ['private', employeeId, 'printing', 'jobs'] as const,
+}
+
 export const PrintDeviceTypeSchema = z.enum(['RECEIPT', 'KITCHEN'])
 export type PrintDeviceType = z.infer<typeof PrintDeviceTypeSchema>
 
 export const PrintDeviceStatusSchema = z.enum(['READY', 'ERROR', 'PAUSED'])
 export type PrintDeviceStatus = z.infer<typeof PrintDeviceStatusSchema>
 
-export const PrintJobTypeSchema = z.enum(['RECEIPT', 'KITCHEN_TICKET'])
+export const PrintJobTypeSchema = z.enum(['RECEIPT', 'KITCHEN_TICKET', 'PRECHECK'])
 export type PrintJobType = z.infer<typeof PrintJobTypeSchema>
 
 export const PrintJobStatusSchema = z.enum([
@@ -69,6 +74,7 @@ export const PrintJobSchema = z.object({
     .nullable()
     .optional(),
   invoiceId: z.string().nullable().optional(),
+  orderSessionId: z.string().nullable().optional(),
   kitchenTicketId: z.string().nullable().optional(),
   reprintOfId: z.string().nullable().optional(),
 })
@@ -128,6 +134,7 @@ export interface GetPrintJobsParams {
   status?: PrintJobStatus
   deviceId?: string
   invoiceId?: string
+  orderSessionId?: string
 }
 
 export interface RetryPrintJobDto {
@@ -141,7 +148,18 @@ export interface ReprintReceiptDto {
   idempotencyKey?: string
 }
 
+export interface CreatePrecheckDto {
+  orderSessionId: string
+  orderItemIds?: string[]
+  promotionId?: string | null
+  copies?: number
+  idempotencyKey?: string
+}
+
 export const printingApi = {
+  createPrecheck: (dto: CreatePrecheckDto): Promise<PrintJob> =>
+    apiIdempotentMutate('/printing/prechecks', PrintJobSchema, { promotionId: null, copies: 1, ...dto }),
+
   getDevices: (
     params?: GetPrintDevicesParams,
     signal?: AbortSignal,
@@ -209,6 +227,7 @@ export const printingApi = {
     if (params?.status) qs.set('status', params.status)
     if (params?.deviceId) qs.set('deviceId', params.deviceId)
     if (params?.invoiceId) qs.set('invoiceId', params.invoiceId)
+    if (params?.orderSessionId) qs.set('orderSessionId', params.orderSessionId)
     const query = qs.toString()
     return apiGet(
       `/printing/jobs${query ? `?${query}` : ''}`,

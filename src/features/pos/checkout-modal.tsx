@@ -4,12 +4,15 @@ import { useQuery } from '@tanstack/react-query'
 import { useOutletContext } from 'react-router-dom'
 import type { Session } from '../auth/session'
 import { PaymentGatewayPanel } from '../invoices/components/payment-gateway-panel'
+import { CheckoutReceipt } from '../printing/components/checkout-receipt'
+import { PrecheckPrint } from '../printing/components/precheck-print'
 import { ShiftRequiredLink } from '../cashier-shifts/components/shift-required-link'
 import { AlertCircle, CheckCircle2, CreditCard, DollarSign, QrCode } from 'lucide-react'
 import { ApiError, errorMessage } from '../../shared/api/client'
 import { formatPrice, moneySchema } from '../menu/menu.api'
 import { decimalAmount, minorAmount } from '../../shared/lib/money'
 import { checkoutInvoice, quoteInvoice, type Invoice, type SessionItem } from './pos.api'
+import { WorkflowPermissions } from '@/shared/auth/workflow-permissions'
 import { getActivePromotions, promotionKeys } from '../promotions/promotions.api'
 import { OrderOptions } from '../../shared/ui/order-options'
 import { createUnpaidInvoice, getInvoices } from '../invoices/invoices.api'
@@ -42,7 +45,7 @@ export function CheckoutModal({
   const [billableItems] = useState(items)
   const [selectedIds, setSelectedIds] = useState(() => items.map((item) => item.id))
   const [promotionId, setPromotionId] = useState('')
-  const { employee, authorization } = useOutletContext<Session>()
+  const { employee, access } = useOutletContext<Session>()
   const [pending, setPending] = useState(false)
   const [activeInvoiceId, setActiveInvoiceId] = useState<string | null>(null)
   const [submittedDirect, setSubmittedDirect] = useState<
@@ -72,7 +75,7 @@ export function CheckoutModal({
   const promotions = useQuery({
     queryKey: promotionKeys.active(employee.id),
     queryFn: ({ signal }) => getActivePromotions({}, signal),
-    enabled: authorization.permissionKeys.includes('/promotions_read') && !paymentLocked,
+    enabled: access.has('/promotions_read') && !paymentLocked,
     retry: false,
     staleTime: 0,
   })
@@ -80,7 +83,7 @@ export function CheckoutModal({
     !promotionId ||
     (promotions.isSuccess &&
       !promotions.isFetching &&
-      authorization.permissionKeys.includes('/promotions_read') &&
+      access.has('/promotions_read') &&
       promotions.data.list.some((promotion) => promotion.id === promotionId))
   const payableTotal = customInvoice ? (quote.data?.totalAmount ?? '0') : totalAmount
   const quoteReady =
@@ -88,18 +91,14 @@ export function CheckoutModal({
     (!billableItems.length || selectedIds.length > 0) &&
     (!customInvoice || (quote.isSuccess && !quote.isFetching))
   const totalMinor = minorAmount(payableTotal)
-  const [method, setMethod] = useState<'CASH' | 'CARD' | 'DIGITAL'>('CASH')
+  const canDirect = access.hasAll(...WorkflowPermissions.manualCheckout)
+  const [method, setMethod] = useState<'CASH' | 'CARD' | 'DIGITAL'>(canDirect ? 'CASH' : 'DIGITAL')
   const [tendered, setTendered] = useState(totalAmount)
   const [error, setError] = useState<string | null>(null)
   const [shiftRequired, setShiftRequired] = useState(false)
   const [invoice, setInvoice] = useState<Invoice | null>(null)
 
-  const canDigital = [
-    '/invoices_read',
-    '/invoices_create',
-    '/payment-attempts_create',
-    '/payment-attempts_read',
-  ].every((key) => authorization.permissionKeys.includes(key))
+  const canDigital = access.hasAll(...WorkflowPermissions.digitalCheckout)
   const flight = useRef(false)
   const completed = useRef(false)
   const parsedTendered = moneySchema.safeParse(tendered.trim())
@@ -115,7 +114,7 @@ export function CheckoutModal({
   ].filter((val, idx, arr) => val >= totalMinor && arr.indexOf(val) === idx)
 
   async function handleDirectCheckout(payMethod: 'CASH' | 'CARD') {
-    if (flight.current || (!submittedDirect && !quoteReady)) return
+    if (flight.current || !canDirect || (!submittedDirect && !quoteReady)) return
     if (!submittedDirect && payMethod === 'CASH' && !tenderedEnough) {
       setError(translate('pos.insufficientCash'))
       return
@@ -263,6 +262,7 @@ export function CheckoutModal({
             )}
           </div>
 
+          <CheckoutReceipt invoiceId={invoice.id} />
           <DialogFooter>
             <Button className="w-full cursor-pointer font-bold" onClick={onClose}>
               {translate('pos.finishClose')}
@@ -289,6 +289,17 @@ export function CheckoutModal({
           )}
 
           {shiftRequired && <ShiftRequiredLink />}
+
+          <div className="mt-4">
+            <PrecheckPrint
+              input={{
+                orderSessionId: sessionId,
+                orderItemIds: billableItems.length ? selectedIds : undefined,
+                promotionId: promotionId || null,
+              }}
+              disabled={paymentLocked || !quoteReady}
+            />
+          </div>
 
           {billableItems.length > 0 && (
             <fieldset
@@ -319,7 +330,7 @@ export function CheckoutModal({
                   </label>
                 ))}
               </div>
-              {authorization.permissionKeys.includes('/promotions_read') && (
+              {access.has('/promotions_read') && (
                 <label className="block text-sm">
                   {translate('nav.promotions')}
                   <select
@@ -400,7 +411,7 @@ export function CheckoutModal({
                 setMethod('CASH')
               }}
               disabled={
-                pending || Boolean(activeInvoiceId) || Boolean(submittedDirect) || digitalUncertain
+                !canDirect || pending || Boolean(activeInvoiceId) || Boolean(submittedDirect) || digitalUncertain
               }
               className={cn(
                 'flex flex-col items-center justify-center gap-1.5 rounded-xl border p-3 text-xs font-bold transition-all cursor-pointer',
@@ -419,7 +430,7 @@ export function CheckoutModal({
                 setMethod('CARD')
               }}
               disabled={
-                pending || Boolean(activeInvoiceId) || Boolean(submittedDirect) || digitalUncertain
+                !canDirect || pending || Boolean(activeInvoiceId) || Boolean(submittedDirect) || digitalUncertain
               }
               className={cn(
                 'flex flex-col items-center justify-center gap-1.5 rounded-xl border p-3 text-xs font-bold transition-all cursor-pointer',
@@ -627,7 +638,7 @@ export function CheckoutModal({
                 type="button"
                 onClick={() => void handleDirectCheckout('CASH')}
                 isLoading={pending}
-                disabled={pending || (!submittedDirect && (!quoteReady || !tenderedEnough))}
+                disabled={!canDirect || pending || (!submittedDirect && (!quoteReady || !tenderedEnough))}
                 className="flex-2 cursor-pointer font-bold"
               >
                 {submittedDirect ? translate('pos.reviewCash') : translate('pos.confirmCash')}
@@ -639,7 +650,7 @@ export function CheckoutModal({
                 type="button"
                 onClick={() => void handleDirectCheckout('CARD')}
                 isLoading={pending}
-                disabled={pending || (!submittedDirect && !quoteReady)}
+                disabled={!canDirect || pending || (!submittedDirect && !quoteReady)}
                 className="flex-2 cursor-pointer font-bold"
               >
                 {submittedDirect ? translate('pos.reviewCard') : translate('pos.confirmCard')}

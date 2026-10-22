@@ -19,7 +19,7 @@ export function CompleteSessionAction({
   const { t: translate } = useTranslation()
   const [open, setOpen] = useState(false)
   const flight = useRef(false)
-  const { employee, authorization } = useOutletContext<Session>()
+  const { employee, access } = useOutletContext<Session>()
   const client = useQueryClient()
   const navigate = useNavigate()
   const mutation = useMutation({
@@ -37,7 +37,7 @@ export function CompleteSessionAction({
   if (
     !session.table ||
     session.sessionStatus !== 'ACTIVE' ||
-    !authorization.permissionKeys.includes('/orders_tables_clear')
+    !access.has('/orders_tables_clear')
   )
     return null
   const unfinished = session.orderItems.some(

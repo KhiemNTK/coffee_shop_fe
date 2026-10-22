@@ -20,18 +20,18 @@ import { Pagination } from '../../../shared/ui/pagination'
 
 export function TakeawayHandoffQueue() {
   const { t: translate } = useTranslation()
-  const { employee, authorization } = useOutletContext<Session>()
+  const { employee, access } = useOutletContext<Session>()
   const [page, setPage] = useState(1)
   const flight = useRef(false)
   const [reviewRequired, setReviewRequired] = useState(false)
-  const canHandoff = authorization.permissionKeys.includes('/orders_items_handoff')
+  const canHandoff = access.has('/orders_items_handoff')
   const [target, setTarget] = useState<{ id: string; name: string } | null>(null)
   const client = useQueryClient()
   const query = useQuery({
     queryKey: ['private', employee.id, 'takeaway-handoff', page],
     queryFn: ({ signal }) => getHandoffQueue(page, signal),
     refetchInterval: 10_000,
-    enabled: authorization.permissionKeys.includes('/orders_sessions_read'),
+    enabled: access.has('/orders_sessions_read'),
   })
   const mutation = useMutation({
     retry: false,

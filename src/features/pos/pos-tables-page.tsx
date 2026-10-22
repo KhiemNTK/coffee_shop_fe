@@ -33,7 +33,7 @@ import { TakeawayHandoffQueue } from './components/takeaway-handoff-queue'
 
 export default function PosTablesPage() {
   const { t: translate } = useTranslation()
-  const { employee, authorization } = useOutletContext<Session>()
+  const { employee, access } = useOutletContext<Session>()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
 
@@ -41,12 +41,12 @@ export default function PosTablesPage() {
   const [guestCount, setGuestCount] = useState<number>(2)
   const [actionError, setActionError] = useState<string | null>(null)
 
-  const can = (key: string) => authorization.permissionKeys.includes(key)
+  const can = access.has
   const canReadTables = can('/dining-tables_read')
   const canReadSessions = can('/orders_sessions_read')
   const canReadShift = can('/cashier-shifts_current')
   const canCreateSession =
-    canReadSessions && authorization.permissionKeys.includes('/orders_sessions_create')
+    canReadSessions && access.has('/orders_sessions_create')
 
   const shiftQuery = useQuery({
     queryKey: ['private', employee.id, 'cashier-shift', 'current'],
@@ -58,6 +58,7 @@ export default function PosTablesPage() {
     queryKey: posKeys.tables(employee.id),
     queryFn: ({ signal }) => getDiningTables(signal),
     enabled: canReadTables,
+    refetchInterval: 10_000,
   })
 
   const sessionsQuery = useQuery({
@@ -130,8 +131,6 @@ export default function PosTablesPage() {
   const activeSessions = sessionsQuery.data || []
   const currentShift = shiftQuery.data
 
-  const emptyCount = tables.filter((t) => t.status === 'EMPTY').length
-  const occupiedCount = tables.filter((t) => t.status === 'OCCUPIED').length
   const takeawaySessions = activeSessions.filter((s) => s.table === null)
   const listedSessions = canReadTables ? takeawaySessions : activeSessions
 
@@ -141,6 +140,13 @@ export default function PosTablesPage() {
       sessionByTableId.set(s.table.id, s)
     }
   }
+  const displayTables = tables.map((table) => {
+    const session = sessionByTableId.get(table.id)
+    return { table, session, status: session ? 'OCCUPIED' : table.status }
+  })
+  const emptyCount = displayTables.filter(({ status }) => status === 'EMPTY').length
+  const occupiedCount = displayTables.filter(({ status }) => status === 'OCCUPIED').length
+  const reservedCount = displayTables.filter(({ status }) => status === 'RESERVED').length
 
   function handleTableClick(table: DiningTable) {
     if (!canReadSessions) {
@@ -211,7 +217,7 @@ export default function PosTablesPage() {
 
       {/* Thống kê nhanh */}
       {canReadTables && (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
           <Card className="border-l-4 border-l-emerald-500 shadow-xs">
             <CardContent className="p-4">
               <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
@@ -226,6 +232,14 @@ export default function PosTablesPage() {
                 {translate('pos.occupiedTables')}
               </span>
               <p className="mt-1 text-2xl font-bold text-amber-600 tabular-nums">{occupiedCount}</p>
+            </CardContent>
+          </Card>
+          <Card className="border-l-4 border-l-sky-500 shadow-xs">
+            <CardContent className="p-4">
+              <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                {translate('pos.reservedTables')}
+              </span>
+              <p className="mt-1 text-2xl font-bold text-sky-700 tabular-nums">{reservedCount}</p>
             </CardContent>
           </Card>
           {canReadSessions && (
@@ -307,27 +321,32 @@ export default function PosTablesPage() {
           </h2>
 
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5">
-            {tables.map((table) => {
-              const session = sessionByTableId.get(table.id)
-              const isOccupied = table.status === 'OCCUPIED' || Boolean(session)
+            {displayTables.map(({ table, session, status }) => {
+              const isOccupied = status === 'OCCUPIED'
+              const isReserved = status === 'RESERVED'
               return (
                 <button
                   type="button"
                   key={table.id}
                   onClick={() => handleTableClick(table)}
+                  disabled={isReserved || (isOccupied && !session)}
                   className={cn(
-                    'group flex min-h-[128px] cursor-pointer flex-col justify-between rounded-xl border-2 p-3.5 sm:p-4 text-left transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-primary overflow-hidden disabled:opacity-100',
-                    isOccupied
+                    'group flex min-h-[128px] cursor-pointer flex-col justify-between rounded-xl border-2 p-3.5 sm:p-4 text-left transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-primary overflow-hidden disabled:opacity-100! disabled:cursor-default',
+                    isReserved
+                      ? 'border-sky-400 bg-sky-50/70'
+                      : isOccupied
                       ? 'border-amber-400 bg-amber-50/70 hover:border-amber-500 shadow-xs'
                       : 'border-emerald-500/60 bg-card hover:border-emerald-600 shadow-xs',
                   )}
                 >
-                  <div className="flex items-start justify-between gap-2 min-w-0 w-full">
-                    <div className="flex items-center gap-2 min-w-0 flex-1">
+                  <div className="flex flex-wrap items-start justify-between gap-2 min-w-0 w-full">
+                    <div className="flex basis-24 items-center gap-2 min-w-0 flex-1">
                       <div
                         className={cn(
                           'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg font-bold text-xs shadow-xs',
-                          isOccupied
+                          isReserved
+                            ? 'bg-sky-100 text-sky-900 border border-sky-300'
+                            : isOccupied
                             ? 'bg-amber-100 text-amber-900 border border-amber-300'
                             : 'bg-emerald-100 text-emerald-900 border border-emerald-300',
                         )}
@@ -342,10 +361,10 @@ export default function PosTablesPage() {
                       </span>
                     </div>
                     <Badge
-                      variant={isOccupied ? 'warning' : 'success'}
-                      className="text-[10px] sm:text-[11px] shrink-0 font-bold shadow-xs"
+                      variant={isOccupied ? 'warning' : isReserved ? 'secondary' : 'success'}
+                      className={cn('text-[10px] sm:text-[11px] shrink-0 font-bold shadow-xs', isReserved && 'bg-sky-100 text-sky-900')}
                     >
-                      {isOccupied ? translate('pos.occupied') : translate('pos.empty')}
+                      {isReserved ? translate('pos.reserved') : isOccupied ? translate('pos.occupied') : translate('pos.empty')}
                     </Badge>
                   </div>
 
@@ -364,6 +383,10 @@ export default function PosTablesPage() {
                         </span>
                       </div>
                     </div>
+                  ) : isReserved || isOccupied ? (
+                    <p className="mt-3 text-xs font-medium text-muted-foreground">
+                      {translate(isReserved ? 'pos.reserved' : 'pos.waitingSession')}
+                    </p>
                   ) : (
                     <div className="mt-3 flex items-center gap-1.5 text-xs font-semibold text-emerald-700">
                       <Plus className="h-3.5 w-3.5 text-emerald-600 shrink-0" />

@@ -1,10 +1,11 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useIsFetching, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useOutletContext } from 'react-router-dom'
 import { Clock, Plus, Printer, Receipt, RefreshCw } from 'lucide-react'
 import { type Session } from '@/features/auth/session'
 import { errorMessage } from '@/shared/api/client'
-import { printingApi, type PrintDevice } from './printing.api'
+import { printingApi, printingKeys, type PrintDevice } from './printing.api'
 import { Button } from '@/shared/ui'
 import { PrintDevicesTab } from './components/print-devices-tab'
 import { PrintJobsTab } from './components/print-jobs-tab'
@@ -13,9 +14,10 @@ import { ReprintReceiptTab } from './components/reprint-receipt-tab'
 const EMPTY_DEVICES: PrintDevice[] = []
 
 export function PrintingPage() {
-  const { authorization } = useOutletContext<Session>()
+  useTranslation()
+  const { employee, access } = useOutletContext<Session>()
   const client = useQueryClient()
-  const can = (key: string) => authorization.permissionKeys.includes(key)
+  const can = access.has
   const canReadDevices = can('/print-devices_read')
   const canReadJobs = can('/print-jobs_read')
   const canManageDevices = canReadDevices && can('/print-devices_manage')
@@ -49,7 +51,7 @@ export function PrintingPage() {
   const [isCreateOpen, setIsCreateOpen] = useState(false)
 
   const options = useQuery({
-    queryKey: ['print-devices', 'active-options'],
+    queryKey: [...printingKeys.devices(employee.id), 'active-options'],
     queryFn: ({ signal }) => printingApi.getActiveDevices(signal),
     enabled:
       canReadDevices &&
@@ -63,7 +65,7 @@ export function PrintingPage() {
 
   const refreshing =
     useIsFetching({
-      queryKey: activeTab === 'DEVICES' ? ['print-devices'] : ['print-jobs'],
+      queryKey: activeTab === 'DEVICES' ? printingKeys.devices(employee.id) : printingKeys.jobs(employee.id),
     }) > 0
 
   return (
@@ -92,11 +94,11 @@ export function PrintingPage() {
             onClick={() => {
               void client.invalidateQueries({
                 queryKey:
-                  activeTab === 'DEVICES' ? ['print-devices'] : ['print-jobs'],
+                  activeTab === 'DEVICES' ? printingKeys.devices(employee.id) : printingKeys.jobs(employee.id),
               })
               if (canReadDevices && activeTab !== 'DEVICES') {
                 void client.invalidateQueries({
-                  queryKey: ['print-devices', 'active-options'],
+                  queryKey: [...printingKeys.devices(employee.id), 'active-options'],
                 })
               }
             }}

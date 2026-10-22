@@ -1,4 +1,8 @@
 import { useState, useDeferredValue } from 'react'
+import { useTranslation } from 'react-i18next'
+import { useOutletContext } from 'react-router-dom'
+import type { Session } from '../../auth/session'
+import { formatDateTime } from '@/shared/lib/format'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   AlertTriangle,
@@ -17,6 +21,7 @@ import { errorMessage } from '@/shared/api/client'
 import { Pagination } from '@/shared/ui/pagination'
 import {
   printingApi,
+  printingKeys,
   type PrintDevice,
   type PrintDeviceStatus,
   type PrintDeviceType,
@@ -38,22 +43,6 @@ import {
 
 const EMPTY_DEVICES: PrintDevice[] = []
 
-function formatDateTime(isoString?: string | null) {
-  if (!isoString) return '—'
-  try {
-    const d = new Date(isoString)
-    const hours = String(d.getHours()).padStart(2, '0')
-    const mins = String(d.getMinutes()).padStart(2, '0')
-    const secs = String(d.getSeconds()).padStart(2, '0')
-    const day = String(d.getDate()).padStart(2, '0')
-    const month = String(d.getMonth() + 1).padStart(2, '0')
-    const year = d.getFullYear()
-    return `${hours}:${mins}:${secs} ${day}/${month}/${year}`
-  } catch {
-    return isoString
-  }
-}
-
 interface PrintDevicesTabProps {
   canManageDevices: boolean
   isCreateOpen: boolean
@@ -65,6 +54,8 @@ export function PrintDevicesTab({
   isCreateOpen,
   setIsCreateOpen,
 }: PrintDevicesTabProps) {
+  useTranslation()
+  const { employee } = useOutletContext<Session>()
   const queryClient = useQueryClient()
 
   const [deviceSearch, setDeviceSearch] = useState('')
@@ -112,7 +103,8 @@ export function PrintDevicesTab({
     refetch,
   } = useQuery({
     queryKey: [
-      'print-devices',
+      ...printingKeys.devices(employee.id),
+      'list',
       deviceTypeFilter,
       deviceActiveFilter,
       deferredDeviceSearch,
@@ -142,7 +134,7 @@ export function PrintDevicesTab({
   const createDeviceMutation = useMutation({
     mutationFn: printingApi.createDevice,
     onSuccess: (data) => {
-      void queryClient.invalidateQueries({ queryKey: ['print-devices'] })
+      void queryClient.invalidateQueries({ queryKey: printingKeys.devices(employee.id) })
       setIsCreateOpen(false)
       setCreateForm({
         name: '',
@@ -165,7 +157,7 @@ export function PrintDevicesTab({
       dto: Parameters<typeof printingApi.updateDevice>[1]
     }) => printingApi.updateDevice(id, dto),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['print-devices'] })
+      void queryClient.invalidateQueries({ queryKey: printingKeys.devices(employee.id) })
       setEditingDevice(null)
     },
   })
@@ -173,7 +165,7 @@ export function PrintDevicesTab({
   const deleteDeviceMutation = useMutation({
     mutationFn: printingApi.deleteDevice,
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['print-devices'] })
+      void queryClient.invalidateQueries({ queryKey: printingKeys.devices(employee.id) })
       setDeletingDevice(null)
       setPage(1)
     },
@@ -183,7 +175,7 @@ export function PrintDevicesTab({
     mutationFn: printingApi.rotateKey,
     onSuccess: (data, deviceId) => {
       const targetDevice = devices.find((d) => d.id === deviceId)
-      void queryClient.invalidateQueries({ queryKey: ['print-devices'] })
+      void queryClient.invalidateQueries({ queryKey: printingKeys.devices(employee.id) })
       setRotatingDevice(null)
       if (data.apiKey) {
         setApiKeyModal({
@@ -412,7 +404,7 @@ export function PrintDevicesTab({
                     </div>
                     <div className="mt-1 flex items-center justify-between text-[11px] text-muted-foreground">
                       <span>Lần cuối kết nối:</span>
-                      <span className="font-mono text-[10px]">{formatDateTime(device.lastSeenAt)}</span>
+                      <span className="font-mono text-[10px]">{formatDateTime(device.lastSeenAt, { seconds: true })}</span>
                     </div>
                   </div>
 

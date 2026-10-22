@@ -42,10 +42,13 @@ import type { DraftItem } from './pos.types'
 import { PosMenuCatalog } from './components/pos-menu-catalog'
 import { PosOrderItemsList } from './components/pos-order-items-list'
 import { PosDraftItemsList } from './components/pos-draft-items-list'
+import { PrecheckPrint } from '../printing/components/precheck-print'
 import { PosItemOptionsDialog } from './components/pos-item-options-dialog'
 import { PosTransferDialog } from './components/pos-transfer-dialog'
+import { WorkflowPermissions } from '@/shared/auth/workflow-permissions'
 import { PosSessionActions } from './components/pos-session-actions'
 import { posKeys } from './pos.keys'
+import { useDebouncedSearch } from '@/shared/lib/use-debounced-search'
 import type { Session } from '../auth/session'
 import { Pagination } from '../../shared/ui/pagination'
 import { CancelSessionAction } from './components/cancel-session-action'
@@ -61,12 +64,15 @@ function PosSessionPage() {
   const { sessionId } = useParams<{ sessionId: string }>()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
-  const { employee, authorization } = useOutletContext<Session>()
-  const can = (key: string) => authorization.permissionKeys.includes(key)
+  const { employee, access } = useOutletContext<Session>()
+  const can = access.has
+  const canCheckout = access.hasAll(...WorkflowPermissions.manualCheckout) || access.hasAll(...WorkflowPermissions.digitalCheckout)
   const draftKey = `coffee_pos_draft_${employee.id}_${sessionId}`
   const submissionKey = pendingIntentKey(employee.id, `orders.items:${sessionId}`)
 
   const [keyword, setKeyword] = useState('')
+  const menuSearch = useDebouncedSearch(keyword)
+  const menuSearchPending = menuSearch !== keyword.trim()
   const [selectedCategoryId, setSelectedCategoryId] = useState('')
   const [menuPage, setMenuPage] = useState(1)
   const [draftItems, setDraftItems] = useState<DraftItem[]>(() => {
@@ -123,15 +129,16 @@ function PosSessionPage() {
   })
 
   const menuQuery = useQuery({
-    queryKey: ['public-menu', 'items', { keyword, categoryId: selectedCategoryId, page: menuPage }],
+    queryKey: ['public-menu', 'items', { keyword: menuSearch, categoryId: selectedCategoryId, page: menuPage }],
     queryFn: ({ signal }) =>
-      getMenu({ keyword, categoryId: selectedCategoryId, page: menuPage }, signal),
+      getMenu({ keyword: menuSearch, categoryId: selectedCategoryId, page: menuPage }, signal),
+    enabled: !menuSearchPending,
   })
 
   const tablesQuery = useQuery({
     queryKey: posKeys.tables(employee.id),
     queryFn: ({ signal }) => getDiningTables(signal),
-    enabled: showTransferModal,
+    enabled: showTransferModal && access.hasAll(...WorkflowPermissions.transferTable),
   })
 
   const recommendationsQuery = useQuery({
@@ -205,7 +212,7 @@ function PosSessionPage() {
     if (
       orderFlight.current ||
       !sessionId ||
-      !authorization.permissionKeys.includes('/orders_items_create') ||
+      !access.has('/orders_items_create') ||
       (!submittedItems && draftItems.length === 0)
     )
       return
@@ -244,7 +251,7 @@ function PosSessionPage() {
     addItemsMutation.mutate(intent)
   }, [
     sessionId,
-    authorization.permissionKeys,
+    access,
     submittedItems,
     draftItems,
     addItemsMutation,
@@ -335,7 +342,7 @@ function PosSessionPage() {
           sessionQuery.data?.sessionStatus !== 'CANCELLED'
 
         if (
-          authorization.permissionKeys.includes('/invoices_create') &&
+          canCheckout &&
           isSessionOpen &&
           hasUnpaid &&
           !orderWriteLocked &&
@@ -352,7 +359,7 @@ function PosSessionPage() {
         if (
           draftItems.length > 0 &&
           !orderWriteLocked &&
-          authorization.permissionKeys.includes('/orders_items_create')
+          access.has('/orders_items_create')
         ) {
           e.preventDefault()
           submitDraftRef.current()
@@ -368,7 +375,8 @@ function PosSessionPage() {
     showTransferModal,
     showCheckoutModal,
     sessionQuery.data,
-    authorization.permissionKeys,
+    access,
+    canCheckout,
     orderWriteLocked,
     draftItems.length,
   ])
@@ -540,7 +548,7 @@ function PosSessionPage() {
               }
             />
           )}
-          {session.table && can('/orders_tables_transfer') && !isCompleted && !isCancelled && (
+          {session.table && access.hasAll(...WorkflowPermissions.transferTable) && !isCompleted && !isCancelled && (
             <Button
               type="button"
               variant="outline"
@@ -553,7 +561,13 @@ function PosSessionPage() {
             </Button>
           )}
 
-          {can('/invoices_create') && !isCompleted && !isCancelled && existingUnpaidTotal > 0 && (
+          {!isCompleted && !isCancelled && unpaidItems.length > 0 && (
+            <PrecheckPrint
+              input={{ orderSessionId: sessionId, orderItemIds: unpaidItems.map((item) => item.id) }}
+              disabled={orderWriteLocked || draftItems.length > 0}
+            />
+          )}
+          {canCheckout && !isCompleted && !isCancelled && existingUnpaidTotal > 0 && (
             <Button
               type="button"
               size="default"
@@ -657,7 +671,7 @@ function PosSessionPage() {
           categories={categoriesQuery.data}
           menuItems={menuQuery.data?.list}
           recommendations={recommendationsQuery.data}
-          isLoadingMenu={menuQuery.isPending}
+          isLoadingMenu={menuSearchPending || menuQuery.isPending}
           onSelectItem={handleSelectItem}
           disabled={!can('/orders_items_create') || isCompleted || isCancelled || orderWriteLocked}
           pagination={
@@ -666,11 +680,11 @@ function PosSessionPage() {
                 page={menuPage}
                 totalPages={menuQuery.data.totalPages}
                 onPage={setMenuPage}
-                disabled={menuQuery.isFetching}
+                disabled={menuSearchPending || menuQuery.isFetching}
               />
             )
           }
-          error={menuQuery.error && errorMessage(menuQuery.error)}
+          error={!menuSearchPending && menuQuery.error ? errorMessage(menuQuery.error) : null}
           onRetry={() => void menuQuery.refetch()}
         />
 
@@ -712,7 +726,7 @@ function PosSessionPage() {
                 </span>
               </div>
 
-              {can('/invoices_create') &&
+              {canCheckout &&
                 !isCompleted &&
                 !isCancelled &&
                 existingUnpaidTotal > 0 && (
