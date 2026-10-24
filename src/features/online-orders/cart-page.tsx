@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/react-query'
 import { ArrowRight, Minus, Plus, ShoppingBag, Trash2 } from 'lucide-react'
 import { formatPrice, getMenu, type MenuItem } from '../menu/menu.api'
 import { ProductDetailModal } from '../menu/components/product-detail-modal'
+import { ProductImage } from '../menu/components/product-image'
 import { useCart } from './cart'
 import { CartCheckoutDrawer } from './components/cart-checkout-drawer'
 import { OrderTrackingView } from './components/order-tracking-view'
@@ -80,12 +81,9 @@ export default function CartPage() {
               <ul className="divide-y divide-border">
                 {cart.items.map((item) => (
                   <li key={item.id} className="flex flex-wrap items-center gap-4 py-5">
-                    <img
-                      src={item.menuItem.imageUrl || '/iced-coffee.jpg'}
-                      alt=""
+                    <ProductImage
+                      item={item.menuItem}
                       className="h-20 w-20 shrink-0 rounded-lg object-cover"
-                      loading="lazy"
-                      referrerPolicy="no-referrer"
                     />
                     <div className="min-w-0 flex-1 space-y-1">
                       <h2 className="break-words font-semibold">{item.menuItem.name}</h2>

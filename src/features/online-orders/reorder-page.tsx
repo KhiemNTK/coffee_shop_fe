@@ -5,6 +5,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import {
   getReorderTemplate,
   createOnlineOrder,
+  recoverOnlineOrder,
   findPendingOnlineOrderKey,
   revokeReorderKey,
   getOnlineAvailability,
@@ -49,6 +50,8 @@ export default function ReorderPage() {
   const [captcha, setCaptcha] = useState('')
   const [captchaAttempt, setCaptchaAttempt] = useState(0)
   const [submitted, setSubmitted] = useState<CreateOnlineOrderPayload | null>(null)
+  const [recoveryMissing, setRecoveryMissing] = useState(false)
+  const recovering = Boolean(submitted) && !recoveryMissing
   const [formError, setFormError] = useState<string | null>(null)
   const [storageWarning, setStorageWarning] = useState(false)
   const flight = useRef(false)
@@ -69,8 +72,9 @@ export default function ReorderPage() {
     },
   })
   const order = useMutation({
-    mutationFn: (payload: CreateOnlineOrderPayload) => createOnlineOrder(payload),
-    onSuccess: (result, payload) => {
+    mutationFn: ({ payload, recoverOnly }: { payload: CreateOnlineOrderPayload; recoverOnly: boolean }) =>
+      recoverOnly ? recoverOnlineOrder(payload) : createOnlineOrder(payload),
+    onSuccess: (result, { payload }) => {
       if (payload.expectedCustomerId)
         void client.invalidateQueries({
           queryKey: ['customer', payload.expectedCustomerId, 'orders'],
@@ -92,6 +96,7 @@ export default function ReorderPage() {
       navigate('/order')
     },
     onError: (error) => {
+      setRecoveryMissing(error instanceof ApiError && error.code === 'ONLINE_ORDER_RECOVERY_NOT_FOUND')
       if (
         error instanceof ApiError &&
         (error.status === 401 || error.code === 'CUSTOMER_SESSION_CHANGED')
@@ -133,9 +138,9 @@ export default function ReorderPage() {
       flight.current ||
       customer.isPending ||
       customer.isError ||
-      unavailable ||
+      (!recovering && unavailable) ||
       !templateData?.quote.canSubmit ||
-      (authConfig.turnstileSiteKey && !captcha)
+      (!recovering && authConfig.turnstileSiteKey && !captcha)
     )
       return
     flight.current = true
@@ -163,8 +168,8 @@ export default function ReorderPage() {
       }
       setSubmitted(intent)
       order.mutate({
-        ...intent,
-        ...(captcha ? { turnstileToken: captcha } : {}),
+        payload: { ...intent, ...(captcha ? { turnstileToken: captcha } : {}) },
+        recoverOnly: recovering,
       })
     } catch (error) {
       setFormError(errorMessage(error))
@@ -336,7 +341,7 @@ export default function ReorderPage() {
                   onToken={setCaptcha}
                 />
               )}
-              {unavailable && <p role="alert">{translate('takeaway.orderingUnavailable')}</p>}
+              {unavailable && !recovering && <p role="alert">{translate('takeaway.orderingUnavailable')}</p>}
               {availability.isError && (
                 <p role="alert">
                   {errorMessage(availability.error)}{' '}
@@ -369,11 +374,11 @@ export default function ReorderPage() {
                 disabled={
                   customer.isPending ||
                   customer.isError ||
-                  unavailable ||
+                  (!recovering && unavailable) ||
                   (!locked && !intakeReady) ||
                   templatePending ||
                   revoke.isPending ||
-                  Boolean(authConfig.turnstileSiteKey && !captcha)
+                  Boolean(!recovering && authConfig.turnstileSiteKey && !captcha)
                 }
               >
                 {submitted

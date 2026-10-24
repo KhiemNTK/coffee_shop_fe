@@ -66,13 +66,83 @@ async function openReorder(page: Page) {
   await page.getByLabel('Điện thoại', { exact: true }).fill('0901234567')
 }
 
+async function controllableCaptcha(page: Page) {
+  await page.addInitScript(() => {
+    Reflect.set(window, 'captchaBlocked', false)
+    Reflect.set(window, 'turnstile', {
+      render(_element: HTMLElement, options: { callback: (token: string) => void; 'error-callback': () => void }) {
+        queueMicrotask(() => Reflect.get(window, 'captchaBlocked')
+          ? options['error-callback']() : options.callback(crypto.randomUUID()))
+        return crypto.randomUUID()
+      },
+      remove() {},
+    })
+  })
+}
+
+test('saved reorder recovers read-only while CAPTCHA is unavailable', async ({ page }) => {
+  await controllableCaptcha(page)
+  const writes: Record<string, unknown>[] = []
+  const recoveries: Record<string, unknown>[] = []
+  await page.route('**/api/v1/online-orders/requests', async route => {
+    writes.push(route.request().postDataJSON())
+    await page.evaluate(() => Reflect.set(window, 'captchaBlocked', true))
+    await route.abort()
+  })
+  await page.route('**/api/v1/online-orders/requests/recover', route => {
+    recoveries.push(route.request().postDataJSON())
+    return route.fulfill({ json: envelope(created) })
+  })
+  await openReorder(page)
+  await page.getByRole('button', { name: 'Đặt lại · Trả khi nhận', exact: true }).click()
+  await expect(page.getByRole('alert').filter({ hasText: 'Chưa xác minh được bảo mật' })).toBeVisible()
+  await page.getByRole('button', { name: 'Kiểm tra lại đơn đã gửi', exact: true }).click()
+  await expect(page).toHaveURL(/\/order$/)
+  expect(writes).toHaveLength(1)
+  expect(recoveries).toHaveLength(1)
+  expect(recoveries[0]!.turnstileToken).toBeUndefined()
+  expect({ ...recoveries[0], turnstileToken: writes[0]!.turnstileToken }).toEqual(writes[0])
+})
+
+test('missing recovery needs a fresh CAPTCHA and explicit resubmission with the same key', async ({ page }) => {
+  await controllableCaptcha(page)
+  const writes: Record<string, unknown>[] = []
+  await page.route('**/api/v1/online-orders/requests', async route => {
+    writes.push(route.request().postDataJSON())
+    if (writes.length > 1) return route.fulfill({ json: envelope(created) })
+    await page.evaluate(() => Reflect.set(window, 'captchaBlocked', true))
+    await route.abort()
+  })
+  await page.route('**/api/v1/online-orders/requests/recover', route =>
+    route.fulfill({ status: 404, json: { code: 'ONLINE_ORDER_RECOVERY_NOT_FOUND' } }))
+  await openReorder(page)
+  await page.getByRole('button', { name: 'Đặt lại · Trả khi nhận', exact: true }).click()
+  const retry = page.getByRole('button', { name: 'Kiểm tra lại đơn đã gửi', exact: true })
+  await retry.click()
+  await expect(page.getByRole('alert').filter({ hasText: 'Chưa tìm thấy đơn đã gửi' })).toBeVisible()
+  await expect(retry).toBeDisabled()
+  expect(writes).toHaveLength(1)
+  await page.evaluate(() => Reflect.set(window, 'captchaBlocked', false))
+  await page.getByRole('button', { name: 'Thử lại xác minh', exact: true }).click()
+  await expect(retry).toBeEnabled()
+  await retry.click()
+  await expect(page).toHaveURL(/\/order$/)
+  expect(writes).toHaveLength(2)
+  expect(writes[1]!.turnstileToken).toBeTruthy()
+  expect(writes[1]!.turnstileToken).not.toBe(writes[0]!.turnstileToken)
+  expect(writes[1]!.clientRequestId).toBe(writes[0]!.clientRequestId)
+})
+
 test('unknown reorder and a rejected retry retain the same request and freeze edits', async ({
   page,
 }, info) => {
   const bodies: Record<string, unknown>[] = []
   await page.route('**/api/v1/online-orders/requests', (route) => {
     bodies.push(route.request().postDataJSON())
-    if (bodies.length === 1) return route.abort()
+    return route.abort()
+  })
+  await page.route('**/api/v1/online-orders/requests/recover', (route) => {
+    bodies.push(route.request().postDataJSON())
     if (bodies.length === 2)
       return route.fulfill({ status: 403, json: { message: 'Temporarily rejected' } })
     return route.fulfill({ json: envelope(created) })

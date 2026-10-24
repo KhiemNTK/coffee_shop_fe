@@ -7,6 +7,7 @@ import { decimalAmount, minorAmount } from '../cart'
 import { formatPrice } from '../../../shared/lib/format'
 import { ApiError, errorMessage } from '../../../shared/api/client'
 import { ShiftRequiredLink } from '../../cashier-shifts/components/shift-required-link'
+import { PickupCodeScanner } from './pickup-code-scanner'
 import {
   Button,
   Dialog,
@@ -248,8 +249,10 @@ export function CollectOrderModal({
                 maxLength={64}
                 value={accessToken}
                 onChange={(event) => setAccessToken(event.target.value)}
+                onKeyDown={(event) => { if (event.key === 'Enter') event.preventDefault() }}
               />
             </label>
+            <PickupCodeScanner onScan={setAccessToken} disabled={mutation.isPending || Boolean(submitted)} />
             <label htmlFor={`${id}-amount`} className="block space-y-1">
               {translate('takeaway.cashInput')}
               <Input

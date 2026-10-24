@@ -1,6 +1,8 @@
 import { z } from 'zod'
 import { apiGet, apiMutate, ApiError } from '../../shared/api/client'
-import { apiIdempotentMutate, findPendingOperationKey } from '../../shared/api/idempotency'
+import { apiIdempotentMutate, clearPendingOperationByKey, findPendingOperationKey } from '../../shared/api/idempotency'
+import { readPendingIntent, writePendingIntent } from '../../shared/api/pending-intent'
+import { decimalAmount, minorAmount } from '../../shared/lib/money'
 import { moneySchema } from '../menu/menu.api'
 import { selectedOptionsSchema } from '../../shared/api/order-options'
 import { publicFeedbackSchema } from './feedback'
@@ -242,13 +244,96 @@ export function getPickupSlots(date: string, signal?: AbortSignal) {
   )
 }
 
-export function createOnlineOrder(payload: CreateOnlineOrderPayload, signal?: AbortSignal) {
-  return apiIdempotentMutate(
-    payload.expectedCustomerId ? '/customers/orders' : '/online-orders/requests',
-    CreateOrderResponseSchema,
-    { ...payload },
-    { keyField: 'clientRequestId', authenticated: false, signal },
-  )
+export const onlineOrderRecoveryKey = 'coffee-shop:pending:public:intent:online-order'
+const onlineOrderRecoverySchema = z.object({
+  clientRequestId: z.uuid(),
+  requestHash: z.string().regex(/^[0-9a-f]{64}$/),
+  expectedCustomerId: z.uuid().optional(),
+  draft: z.object({
+    pickupAt: z.iso.datetime({ offset: true }).optional(),
+    maxSubtotal: moneySchema.optional(),
+    items: z.array(z.object({
+      menuItemId: z.uuid(), quantity: z.number().int().min(1).max(20),
+      note: z.string().max(255).optional(), optionIds: z.array(z.uuid()).max(20).optional(),
+    })).min(1).max(20),
+  }).strict().optional(),
+}).strict()
+export type OnlineOrderRecoveryProof = z.infer<typeof onlineOrderRecoverySchema>
+
+export function readOnlineOrderRecovery() {
+  return readPendingIntent(onlineOrderRecoveryKey, onlineOrderRecoverySchema)
+}
+
+export async function hashOnlineOrderRequest(payload: CreateOnlineOrderPayload) {
+  // Match the validated backend DTO order and normalization; never persist contact data.
+  const canonical = JSON.stringify({
+    pickupName: payload.pickupName.trim(),
+    phoneNumber: payload.phoneNumber.trim(),
+    pickupAt: payload.pickupAt ? new Date(payload.pickupAt).toISOString() : undefined,
+    maxSubtotal: payload.maxSubtotal ? decimalAmount(minorAmount(payload.maxSubtotal)) : undefined,
+    items: payload.items.map(line => ({
+      menuItemId: line.menuItemId, quantity: line.quantity,
+      note: line.note?.trim(), optionIds: line.optionIds,
+    })),
+    ...(payload.expectedCustomerId ? { customerId: payload.expectedCustomerId } : {}),
+  })
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(canonical))
+  return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('')
+}
+
+function clearOnlineOrderRecovery(clientRequestId: string) {
+  if (readOnlineOrderRecovery()?.payload.clientRequestId === clientRequestId)
+    sessionStorage.removeItem(onlineOrderRecoveryKey)
+}
+
+export async function createOnlineOrder(payload: CreateOnlineOrderPayload, signal?: AbortSignal) {
+  const clientRequestId = payload.clientRequestId ?? await findPendingOnlineOrderKey(payload) ?? crypto.randomUUID()
+  const requestHash = await hashOnlineOrderRequest(payload)
+  const previous = readOnlineOrderRecovery()
+  if (previous && (previous.payload.clientRequestId !== clientRequestId || previous.payload.requestHash !== requestHash))
+    throw new ApiError(409, 'ONLINE_ORDER_PENDING_RECOVERY')
+  const proof = onlineOrderRecoverySchema.parse({ clientRequestId, requestHash,
+      ...(payload.expectedCustomerId ? { expectedCustomerId: payload.expectedCustomerId } : {}),
+      draft: { items: payload.items, pickupAt: payload.pickupAt, maxSubtotal: payload.maxSubtotal },
+  })
+  writePendingIntent(onlineOrderRecoveryKey, {
+    payload: proof,
+    idempotencyKey: clientRequestId, createdAt: previous?.createdAt ?? Date.now(),
+  })
+  try {
+    const result = await apiIdempotentMutate(
+      payload.expectedCustomerId ? '/customers/orders' : '/online-orders/requests',
+      CreateOrderResponseSchema, { ...payload, clientRequestId },
+      { keyField: 'clientRequestId', authenticated: false, signal },
+    )
+    clearPendingOperationByKey(payload.expectedCustomerId ? '/customers/orders' : '/online-orders/requests', clientRequestId, false)
+    clearOnlineOrderRecovery(clientRequestId)
+    return result
+  } catch (error) {
+    if (!previous && error instanceof ApiError && error.status >= 400 && error.status < 500 && ![408, 429].includes(error.status))
+      clearOnlineOrderRecovery(clientRequestId)
+    throw error
+  }
+}
+
+export async function recoverOnlineOrderByKey(proof: OnlineOrderRecoveryProof) {
+  const path = proof.expectedCustomerId ? '/customers/orders' : '/online-orders/requests'
+  const { draft: _draft, ...credential } = proof
+  const result = await apiMutate(`${path}/recover-by-key`, 'POST', CreateOrderResponseSchema, credential, undefined, false)
+  clearPendingOperationByKey(path, proof.clientRequestId, false)
+  clearOnlineOrderRecovery(proof.clientRequestId)
+  return result
+}
+
+export async function recoverOnlineOrder(payload: CreateOnlineOrderPayload) {
+  if (!payload.clientRequestId) throw new ApiError(409, 'CLIENT_PENDING_OPERATION')
+  const path = payload.expectedCustomerId ? '/customers/orders' : '/online-orders/requests'
+  const request = { ...payload }
+  delete request.turnstileToken
+  const result = await apiMutate(`${path}/recover`, 'POST', CreateOrderResponseSchema, request, undefined, false)
+  clearPendingOperationByKey(path, payload.clientRequestId, false)
+  clearOnlineOrderRecovery(payload.clientRequestId)
+  return result
 }
 
 export async function findPendingOnlineOrderKey(payload: CreateOnlineOrderPayload) {

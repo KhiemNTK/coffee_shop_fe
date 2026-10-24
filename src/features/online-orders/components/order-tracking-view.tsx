@@ -20,6 +20,7 @@ import { formatLineAmount } from '../../../shared/lib/format'
 import { formatStoreDateTime } from '../../../shared/lib/store-time'
 import { OrderOptions } from '../../../shared/ui/order-options'
 import { TelegramOrderLink } from './telegram-order-link'
+import { PaymentQr } from '../../../shared/ui/payment-qr'
 import {
   Badge,
   Button,
@@ -34,9 +35,11 @@ import {
 export function OrderStatusBadge({
   status,
   fulfillmentStatus,
+  waitingForPreparation = false,
 }: {
   status: string
   fulfillmentStatus?: string | null
+  waitingForPreparation?: boolean
 }) {
   const { t: translate } = useTranslation()
   if (status === 'CANCELLED') {
@@ -51,6 +54,8 @@ export function OrderStatusBadge({
   if (status === 'PENDING') {
     return <Badge variant="warning">{translate('takeaway.pending')}</Badge>
   }
+  if (status === 'ACCEPTED' && (!fulfillmentStatus || waitingForPreparation))
+    return <Badge variant="default">{translate('takeaway.awaitingPreparation')}</Badge>
   if (fulfillmentStatus === 'READY') {
     return <Badge variant="success">{translate('takeaway.ready')}</Badge>
   }
@@ -156,6 +161,7 @@ export function OrderTrackingView({
   const [actionError, setActionError] = useState<string | null>(null)
   const [copyError, setCopyError] = useState(false)
   const [reviewRequired, setReviewRequired] = useState(false)
+  const [showQr, setShowQr] = useState(false)
   const flight = useRef(false)
 
   // Query order status every 8 seconds
@@ -324,6 +330,12 @@ export function OrderTrackingView({
             </Button>
           </div>
           <p className="text-xs text-muted-foreground">{translate('takeaway.receiptPrivacy')}</p>
+          {order.status === 'ACCEPTED' && order.fulfillmentStatus !== 'COLLECTED' && (
+            <div className="space-y-3">
+              <Button variant="outline" aria-pressed={showQr} onClick={() => setShowQr(value => !value)}>{translate(showQr ? 'customer.hidePickupCode' : 'takeaway.showPickupQr')}</Button>
+              {showQr && <PaymentQr value={orderAuth.accessToken} label={translate('takeaway.pickupQr')} />}
+            </div>
+          )}
           {copied && (
             <p role="status" className="text-sm text-emerald-700">
               {translate('takeaway.copied')}
@@ -350,6 +362,7 @@ export function OrderTrackingView({
                     <OrderStatusBadge
                       status={order.status}
                       fulfillmentStatus={order.fulfillmentStatus}
+                      waitingForPreparation={order.orderItems.length > 0 && order.orderItems.every(item => item.serveStatus === 'PENDING')}
                     />
                   </div>
                 </div>

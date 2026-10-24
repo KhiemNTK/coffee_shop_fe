@@ -52,7 +52,9 @@ export function StaffFulfillmentOrdersTab({
           order.fulfillmentStatus === 'READY'
             ? 'takeaway.readyShort'
             : order.fulfillmentStatus === 'PREPARING'
-              ? 'takeaway.cookingShort'
+              ? order.orderItems.length > 0 && order.orderItems.every(item => item.serveStatus === 'PENDING')
+                ? 'takeaway.awaitingPreparation'
+                : 'takeaway.cookingShort'
               : order.fulfillmentStatus === 'PARTIALLY_READY'
                 ? 'takeaway.partiallyReadyShort'
                 : 'takeaway.reviewRequired',

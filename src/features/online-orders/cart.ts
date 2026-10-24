@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
-import type { MenuItem } from '../menu/menu.api'
+import { z } from 'zod'
+import { itemSchema, moneySchema, type MenuItem } from '../menu/menu.api'
 import { decimalAmount, minorAmount } from '../../shared/lib/money'
 
 export { decimalAmount, minorAmount } from '../../shared/lib/money'
@@ -24,15 +25,24 @@ export function cartSubtotal(cart: CartItem[]) {
 }
 
 const CART_STORAGE_KEY = 'coffee_shop_storefront_cart'
+const cartSchema = z.array(z.object({
+  id: z.string().min(1).max(128),
+  menuItem: itemSchema,
+  quantity: z.number().int().min(1).max(20),
+  note: z.string().max(500),
+  selectedOptionIds: z.array(z.uuid()).max(100),
+  calculatedUnitPrice: moneySchema,
+})).max(100)
 
 let inMemoryCart: CartItem[] = []
 try {
   const saved = sessionStorage.getItem(CART_STORAGE_KEY)
   if (saved) {
-    inMemoryCart = JSON.parse(saved)
+    inMemoryCart = cartSchema.parse(JSON.parse(saved))
   }
 } catch {
   inMemoryCart = []
+  try { sessionStorage.removeItem(CART_STORAGE_KEY) } catch {}
 }
 
 const listeners = new Set<() => void>()

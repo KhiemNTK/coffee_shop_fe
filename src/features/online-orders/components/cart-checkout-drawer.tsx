@@ -1,9 +1,10 @@
 import { useTranslation } from 'react-i18next'
+import { useRetryAfter } from '@/shared/api/use-retry-after'
+import { ApiErrorAlert } from '@/shared/ui/api-error-alert'
 import { useEffect, useRef, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import {
-  AlertCircle,
   ArrowLeft,
   ArrowRight,
   Minus,
@@ -17,6 +18,7 @@ import {
 import { formatPrice, type MenuItem } from '../../menu/menu.api'
 import {
   createOnlineOrder,
+  recoverOnlineOrder,
   findPendingOnlineOrderKey,
   getPickupSlots,
   getOnlineAvailability,
@@ -38,7 +40,8 @@ import { displayLocale } from '../../../shared/i18n/index.js'
 import { formatStoreDateTime } from '../../../shared/lib/store-time.js'
 import type { OrderAccess } from '../order-access-storage'
 
-const turnstileSiteKey = import.meta.env.VITE_TURNSTILE_SITE_KEY as string | undefined
+const turnstileSiteKey =
+  (import.meta.env.VITE_TURNSTILE_SITE_KEY as string | undefined)?.trim() ?? ''
 
 export function CartCheckoutDrawer({
   cart,
@@ -64,21 +67,22 @@ export function CartCheckoutDrawer({
   const [phoneNumber, setPhoneNumber] = useState('')
   const [isScheduled, setIsScheduled] = useState(false)
   const [todayStr] = useState(() =>
-    new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Ho_Chi_Minh' }),
+    new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Ho_Chi_Minh' })
   )
   const [pickupDate, setPickupDate] = useState(todayStr)
   const [selectedSlotTime, setSelectedSlotTime] = useState<string>('')
   const [turnstileToken, setTurnstileToken] = useState<string>('')
   const [captchaAttempt, setCaptchaAttempt] = useState(0)
-  const [formError, setFormError] = useState<string | null>(null)
+  const [formError, setFormError] = useState<unknown>(null)
+  const retryWait = useRetryAfter(formError)
   const [review, setReview] = useState<{
     payload: CreateOnlineOrderPayload
-    recommendations: MenuItem[]
-    warning: string | null
+    allowRecommendations: boolean
   } | null>(null)
   const [extras, setExtras] = useState<CartItem[]>([])
   const [customizingItem, setCustomizingItem] = useState<MenuItem | null>(null)
   const [submittedPayload, setSubmittedPayload] = useState<CreateOnlineOrderPayload | null>(null)
+  const [recoveryMissing, setRecoveryMissing] = useState(false)
   const [quote, setQuote] = useState<{ basketKey: string; data: OnlineOrderQuote } | null>(null)
   const [checkingQuote, setCheckingQuote] = useState(false)
   const flight = useRef(false)
@@ -95,6 +99,7 @@ export function CartCheckoutDrawer({
   const activeQuote = quote?.basketKey === basketKey ? quote.data : null
   const subtotal = activeQuote?.subtotal ?? cartSubtotal(checkoutCart)
   const locked = submittedPayload !== null
+  const recovering = locked && !recoveryMissing
   const availability = useQuery({
     queryKey: ['online-availability'],
     queryFn: ({ signal }) => getOnlineAvailability(signal),
@@ -121,29 +126,40 @@ export function CartCheckoutDrawer({
     mutationFn: async (payload: CreateOnlineOrderPayload) => {
       const pendingKey = await findPendingOnlineOrderKey(payload)
       const clientRequestId = pendingKey ?? crypto.randomUUID()
-      const menuItemIds = [...new Set(payload.items.map((item) => item.menuItemId))]
-      let recommendations: MenuItem[] = []
-      let warning: string | null = null
-      if (!pendingKey && menuItemIds.length <= 10) {
-        try {
-          recommendations = (await getOnlineRecommendations(clientRequestId, menuItemIds))
-            .recommendations
-        } catch {
-          warning = translate('takeaway.recommendationsUnavailable')
-        }
-      }
       return {
         payload: { ...payload, clientRequestId },
-        recommendations,
-        warning,
+        allowRecommendations: !pendingKey,
       }
     },
-    onSuccess: setReview,
-    onError: (error) => setFormError(errorMessage(error)),
+    onSuccess: (result) => {
+      setReview(result)
+      if (!result.allowRecommendations) {
+        uncertain.current = true
+        setSubmittedPayload(result.payload)
+        setRecoveryMissing(false)
+      }
+    },
+    onError: (error) => setFormError(error),
     onSettled: () => {
       flight.current = false
     },
   })
+
+  const recommendationItemIds = [
+    ...new Set(review?.payload.items.map((item) => item.menuItemId) ?? []),
+  ]
+  const offers = useQuery({
+    queryKey: ['online-recommendations', review?.payload.clientRequestId],
+    queryFn: ({ signal }) =>
+      getOnlineRecommendations(review!.payload.clientRequestId!, recommendationItemIds, signal),
+    enabled: Boolean(review?.allowRecommendations) && recommendationItemIds.length <= 10,
+    retry: false,
+    staleTime: Infinity,
+    gcTime: 0,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+  })
+  const recommendations = offers.data?.recommendations ?? []
 
   // Fetch slots if scheduled pickup is selected
   const slotsQuery = useQuery({
@@ -153,8 +169,14 @@ export function CartCheckoutDrawer({
   })
 
   const submitMutation = useMutation({
-    mutationFn: (payload: CreateOnlineOrderPayload) => createOnlineOrder(payload),
-    onSuccess: (data, payload) => {
+    mutationFn: ({
+      payload,
+      recoverOnly,
+    }: {
+      payload: CreateOnlineOrderPayload
+      recoverOnly: boolean
+    }) => (recoverOnly ? recoverOnlineOrder(payload) : createOnlineOrder(payload)),
+    onSuccess: (data, { payload }) => {
       if (payload.expectedCustomerId)
         void client.invalidateQueries({
           queryKey: ['customer', payload.expectedCustomerId, 'orders'],
@@ -167,12 +189,13 @@ export function CartCheckoutDrawer({
       })
     },
     onError: (err) => {
+      setRecoveryMissing(err instanceof ApiError && err.code === 'ONLINE_ORDER_RECOVERY_NOT_FOUND')
       if (
         err instanceof ApiError &&
         (err.status === 401 || err.code === 'CUSTOMER_SESSION_CHANGED')
       )
         void client.invalidateQueries({ queryKey: customerKey })
-      setFormError(errorMessage(err))
+      setFormError(err)
       if (
         !uncertain.current &&
         err instanceof ApiError &&
@@ -193,7 +216,7 @@ export function CartCheckoutDrawer({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (flight.current) return
+    if (retryWait || flight.current) return
     setFormError(null)
     if (customer.isPending || customer.isError) {
       setFormError(translate('customer.checkSession'))
@@ -201,8 +224,8 @@ export function CartCheckoutDrawer({
     }
 
     if (review) {
-      if (turnstileSiteKey && !turnstileToken) return
-      if (import.meta.env.PROD && !turnstileSiteKey) return
+      if (!recovering && turnstileSiteKey && !turnstileToken) return
+      if (!recovering && import.meta.env.PROD && !turnstileSiteKey) return
       const payload = submittedPayload ?? {
         ...review.payload,
         maxSubtotal: subtotal,
@@ -228,26 +251,37 @@ export function CartCheckoutDrawer({
           const currentQuote = await quoteOnlineOrder(payload.items)
           if (
             currentQuote.items.length !== payload.items.length ||
-            currentQuote.items.some((line, index) =>
-              line.menuItemId !== payload.items[index]?.menuItemId ||
-              line.quantity !== payload.items[index]?.quantity)
-          ) throw new ApiError(502, 'CLIENT_RESPONSE_INVALID')
+            currentQuote.items.some(
+              (line, index) =>
+                line.menuItemId !== payload.items[index]?.menuItemId ||
+                line.quantity !== payload.items[index]?.quantity
+            )
+          )
+            throw new ApiError(502, 'CLIENT_RESPONSE_INVALID')
           if (!currentQuote.canFulfill) {
             setFormError(translate('error.insufficientStock'))
             flight.current = false
             return
           }
           setQuote({ basketKey, data: currentQuote })
-          const pricesChanged = currentQuote.items.some((line, index) =>
-            minorAmount(line.unitPrice) !== minorAmount(activeQuote?.items[index]?.unitPrice ?? checkoutCart[index]!.calculatedUnitPrice))
-          if (pricesChanged || minorAmount(currentQuote.subtotal) !== minorAmount(payload.maxSubtotal!)) {
+          const pricesChanged = currentQuote.items.some(
+            (line, index) =>
+              minorAmount(line.unitPrice) !==
+              minorAmount(
+                activeQuote?.items[index]?.unitPrice ?? checkoutCart[index]!.calculatedUnitPrice
+              )
+          )
+          if (
+            pricesChanged ||
+            minorAmount(currentQuote.subtotal) !== minorAmount(payload.maxSubtotal!)
+          ) {
             setFormError(translate('takeaway.priceChanged'))
             flight.current = false
             return
           }
         }
       } catch (error) {
-        setFormError(errorMessage(error))
+        setFormError(error)
         flight.current = false
         return
       } finally {
@@ -260,8 +294,8 @@ export function CartCheckoutDrawer({
       }
       setSubmittedPayload(payload)
       submitMutation.mutate({
-        ...payload,
-        turnstileToken: turnstileToken || undefined,
+        payload: { ...payload, turnstileToken: turnstileToken || undefined },
+        recoverOnly: recovering,
       })
       return
     }
@@ -338,7 +372,9 @@ export function CartCheckoutDrawer({
             variant="ghost"
             size="sm"
             aria-label={translate('takeaway.closeCart')}
-            disabled={submitMutation.isPending || reviewMutation.isPending || checkingQuote || locked}
+            disabled={
+              submitMutation.isPending || reviewMutation.isPending || checkingQuote || locked
+            }
             onClick={closeDrawer}
             className="h-11 w-11 p-0 rounded-full"
           >
@@ -398,7 +434,9 @@ export function CartCheckoutDrawer({
                         {item.menuItem.name}
                       </h4>
                       <p className="text-xs font-semibold text-brand-700 mt-0.5 tabular-nums">
-                        {formatPrice(activeQuote?.items[index]?.unitPrice ?? item.calculatedUnitPrice)}
+                        {formatPrice(
+                          activeQuote?.items[index]?.unitPrice ?? item.calculatedUnitPrice
+                        )}
                       </p>
                       {item.selectedOptionIds.length > 0 && (
                         <p className="break-words text-xs text-muted-foreground line-clamp-2">
@@ -470,7 +508,10 @@ export function CartCheckoutDrawer({
                     )}
 
                     <span className="text-sm font-bold text-brand-800 tabular-nums shrink-0">
-                      {formatLineAmount(activeQuote?.items[index]?.unitPrice ?? item.calculatedUnitPrice, item.quantity)}
+                      {formatLineAmount(
+                        activeQuote?.items[index]?.unitPrice ?? item.calculatedUnitPrice,
+                        item.quantity
+                      )}
                     </span>
                   </div>
                 </div>
@@ -548,7 +589,9 @@ export function CartCheckoutDrawer({
                 {availability.data && !availability.data.acceptingOrders && (
                   <p role="status" className="text-sm">
                     {translate('takeaway.intakePaused')}
-                    {availability.data.reason && <span className="block break-words">{availability.data.reason}</span>}
+                    {availability.data.reason && (
+                      <span className="block break-words">{availability.data.reason}</span>
+                    )}
                   </p>
                 )}
                 {availability.data?.acceptingOrders && !availability.data.acceptingAsap && (
@@ -642,7 +685,7 @@ export function CartCheckoutDrawer({
                                   timeZone: 'Asia/Ho_Chi_Minh',
                                   hour: '2-digit',
                                   minute: '2-digit',
-                                },
+                                }
                               )
                               const isSelected = selectedSlotTime === slot.pickupAt
                               const isFull = slot.remaining <= 0
@@ -659,7 +702,7 @@ export function CartCheckoutDrawer({
                                       ? 'bg-brand-800 text-white border-brand-800 shadow-xs'
                                       : isFull
                                         ? 'bg-stone-100 text-stone-400 border-stone-200 cursor-not-allowed'
-                                        : 'bg-white text-foreground border-stone-200 hover:border-brand-500',
+                                        : 'bg-white text-foreground border-stone-200 hover:border-brand-500'
                                   )}
                                 >
                                   <span>{timeStr}</span>
@@ -715,20 +758,20 @@ export function CartCheckoutDrawer({
                 className="space-y-3 border-t border-border pt-4"
               >
                 <h3 className="text-base font-semibold">{translate('takeaway.review')}</h3>
-                {review.warning && (
+                {offers.isError && (
                   <p role="status" className="text-sm text-muted-foreground">
-                    {review.warning}
+                    {translate('takeaway.recommendationsUnavailable')}
                   </p>
                 )}
                 {!locked &&
-                  review.recommendations.some(
-                    (item) => !checkoutCart.some((line) => line.menuItem.id === item.id),
+                  recommendations.some(
+                    (item) => !checkoutCart.some((line) => line.menuItem.id === item.id)
                   ) && (
                     <section aria-label={translate('takeaway.addOn')} className="space-y-2">
                       <h4 className="text-sm font-semibold">{translate('takeaway.addOn')}</h4>
-                      {review.recommendations
+                      {recommendations
                         .filter(
-                          (item) => !checkoutCart.some((line) => line.menuItem.id === item.id),
+                          (item) => !checkoutCart.some((line) => line.menuItem.id === item.id)
                         )
                         .map((item) => (
                           <div
@@ -812,16 +855,15 @@ export function CartCheckoutDrawer({
                 />
               </div>
             )}
+            {import.meta.env.PROD && !turnstileSiteKey && !recovering && (
+              <p role="alert" className="text-sm text-destructive">
+                {translate('auth.verificationUnavailable')}
+              </p>
+            )}
 
-            {formError && (
-              <div
-                role="alert"
-                tabIndex={-1}
-                ref={errorRef}
-                className="p-3 bg-destructive/10 border border-destructive/20 rounded-lg text-xs text-destructive flex items-center gap-2"
-              >
-                <AlertCircle className="h-4 w-4 shrink-0" />
-                <span>{formError}</span>
+            {formError != null && (
+              <div tabIndex={-1} ref={errorRef}>
+                <ApiErrorAlert error={formError} />
               </div>
             )}
           </div>
@@ -842,6 +884,7 @@ export function CartCheckoutDrawer({
               size="lg"
               className="w-full font-bold"
               disabled={
+                retryWait > 0 ||
                 customer.isPending ||
                 customer.isError ||
                 submitMutation.isPending ||
@@ -849,16 +892,18 @@ export function CartCheckoutDrawer({
                 reviewMutation.isPending ||
                 (!locked && !intakeReady) ||
                 cart.length === 0 ||
-                Boolean(review && turnstileSiteKey && !turnstileToken) ||
-                (import.meta.env.PROD && !turnstileSiteKey)
+                Boolean(review && !recovering && turnstileSiteKey && !turnstileToken) ||
+                Boolean(review && !recovering && import.meta.env.PROD && !turnstileSiteKey)
               }
               isLoading={submitMutation.isPending || reviewMutation.isPending || checkingQuote}
             >
               <ArrowRight size={16} aria-hidden="true" />
               {review
-                ? locked
-                  ? translate('takeaway.resend')
-                  : translate('takeaway.submit')
+                ? recovering
+                  ? translate('takeaway.checkSubmitted')
+                  : locked
+                    ? translate('takeaway.resend')
+                    : translate('takeaway.submit')
                 : translate('takeaway.review')}
             </Button>
             <p className="text-[11px] text-muted-foreground text-center">
