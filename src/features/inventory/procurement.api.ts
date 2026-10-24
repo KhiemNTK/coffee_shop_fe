@@ -17,6 +17,7 @@ export const receiptSchema = z.object({
   status: statusSchema, totalAmount: moneySchema, receivedAt: z.string(), note: z.string().nullish(),
 })
 export const receiptDetailSchema = receiptSchema.extend({
+  updatedAt: z.iso.datetime(),
   supplier: supplierSchema,
   items: z.array(z.object({
     inventoryItemId: z.string(), inventoryItemName: z.string(), unitName: z.string(),
@@ -75,9 +76,10 @@ export function createStocktake(inventoryItemIds: string[], note?: string) {
 export function saveCounts(id: string, items: StocktakeCountInput[]) {
   return apiMutate(`/inventory/stocktakes/${id}/counts`, 'PUT', stocktakeDetailSchema, { items })
 }
-export function postDocument(kind: 'purchase-receipts' | 'stocktakes', id: string, expectedCounts?: StocktakeCountInput[]) {
+export function postDocument(kind: 'purchase-receipts' | 'stocktakes', id: string, review: { expectedCounts?: StocktakeCountInput[]; expectedUpdatedAt?: string } = {}) {
   return apiIdempotentMutate(`/inventory/${kind}/${id}/post`, z.object({ id: z.string(), status: z.literal('POSTED') }),
-    kind === 'stocktakes' && expectedCounts ? { expectedCounts: [...expectedCounts].sort((a, b) => a.inventoryItemId.localeCompare(b.inventoryItemId)) } : {})
+    kind === 'purchase-receipts' ? { expectedUpdatedAt: review.expectedUpdatedAt }
+      : review.expectedCounts ? { expectedCounts: [...review.expectedCounts].sort((a, b) => a.inventoryItemId.localeCompare(b.inventoryItemId)) } : {})
 }
 export function cancelDocument(kind: 'purchase-receipts' | 'stocktakes', id: string, reason: string) {
   return apiMutate(`/inventory/${kind}/${id}/cancel`, 'POST', z.object({ id: z.string(), status: z.literal('CANCELLED') }), { reason })

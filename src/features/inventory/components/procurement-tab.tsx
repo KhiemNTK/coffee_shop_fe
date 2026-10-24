@@ -1,9 +1,10 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useDebouncedSearch } from '../../../shared/lib/use-debounced-search'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useOutletContext } from 'react-router-dom'
 import type { PermissionAccess } from '../../../shared/auth/permissions'
-import { Plus, Pencil, Trash2, Check, X } from 'lucide-react'
+import { Plus, Pencil, Trash2, Check, X, RotateCw } from 'lucide-react'
 import type { Session } from '../../auth/session'
 import {
   getSuppliers, saveSupplier, deleteSupplier, getReceipts, getReceipt,
@@ -23,12 +24,17 @@ const statusLabels = { DRAFT: 'Nháp', POSTED: 'Đã ghi sổ', CANCELLED: 'Đã
 const selectClass = 'w-full rounded-md border border-border bg-card p-2 text-sm'
 
 export function ProcurementTab() {
+  const { t } = useTranslation()
   const { employee, access } = useOutletContext<Session>()
   const client = useQueryClient()
   const can = access.has
-  const [view, setView] = useState<'suppliers' | DocumentKind>(() =>
-    can('/inventory_suppliers_read') ? 'suppliers'
-      : can('/inventory_purchase-receipts_read') ? 'purchase-receipts' : 'stocktakes')
+  const views = (['suppliers', 'purchase-receipts', 'stocktakes'] as const)
+    .filter((kind) => can(`/inventory_${kind}_read`))
+  const [selectedView, setView] = useState<'suppliers' | DocumentKind>('suppliers')
+  const view = views.find((kind) => kind === selectedView) ?? views[0] ?? 'suppliers'
+  const canCreateDocument = (kind: DocumentKind) => can('/inventory_read')
+    && can(`/inventory_${kind}_read`) && can(`/inventory_${kind}_create`)
+    && (kind !== 'purchase-receipts' || can('/inventory_suppliers_read'))
   const [page, setPage] = useState(1)
   const [keyword, setKeyword] = useState('')
   const search = useDebouncedSearch(keyword)
@@ -52,12 +58,12 @@ export function ProcurementTab() {
   const receipt = useQuery({
     queryKey: [...key, 'receipt', document?.id],
     queryFn: ({ signal }) => getReceipt(document!.id, signal),
-    enabled: document?.kind === 'purchase-receipts',
+    enabled: document?.kind === 'purchase-receipts' && can('/inventory_purchase-receipts_read'),
   })
   const stocktake = useQuery({
     queryKey: [...key, 'stocktake', document?.id],
     queryFn: ({ signal }) => getStocktake(document!.id, signal),
-    enabled: document?.kind === 'stocktakes',
+    enabled: document?.kind === 'stocktakes' && can('/inventory_stocktakes_read'),
   })
   const postingStocktake = useQuery({
     queryKey: [...key, 'stocktake', confirmation?.id],
@@ -65,9 +71,18 @@ export function ProcurementTab() {
     enabled: confirmation?.kind === 'stocktakes' && confirmation.action === 'post' && can('/inventory_stocktakes_read'),
     staleTime: 0,
   })
+  const postingReceipt = useQuery({
+    queryKey: [...key, 'receipt', confirmation?.id],
+    queryFn: ({ signal }) => getReceipt(confirmation!.id, signal),
+    enabled: confirmation?.kind === 'purchase-receipts' && confirmation.action === 'post' && can('/inventory_purchase-receipts_read'),
+    staleTime: 0,
+  })
   const stocktakePostReady = confirmation?.kind !== 'stocktakes' || (postingStocktake.isSuccess && !postingStocktake.isFetching
     && postingStocktake.data.status === 'DRAFT' && postingStocktake.data.items.length > 0
     && postingStocktake.data.items.every(item => item.countedQuantity !== null))
+  const receiptPostReady = confirmation?.kind !== 'purchase-receipts' || (postingReceipt.isSuccess && !postingReceipt.isFetching
+    && postingReceipt.data.status === 'DRAFT' && postingReceipt.data.items.length > 0)
+  const postReady = stocktakePostReady && receiptPostReady
   function updated() {
     setDocument(null); setNewDocument(null); setSupplierForm(undefined); setConfirmation(null)
     void client.invalidateQueries({ queryKey: key })
@@ -79,13 +94,14 @@ export function ProcurementTab() {
     }
   }
   const action = useMutation({
-    mutationFn: ({ target, reason, expectedCounts }: { target: NonNullable<typeof confirmation>; reason: string; expectedCounts?: StocktakeCountInput[] }) =>
+    mutationFn: ({ target, reason, expectedCounts, expectedUpdatedAt }: { target: NonNullable<typeof confirmation>; reason: string; expectedCounts?: StocktakeCountInput[]; expectedUpdatedAt?: string }) =>
       target.kind === 'suppliers' ? deleteSupplier(target.id)
-        : target.action === 'post' ? postDocument(target.kind, target.id, expectedCounts)
+        : target.action === 'post' ? postDocument(target.kind, target.id, { expectedCounts, expectedUpdatedAt })
           : cancelDocument(target.kind, target.id, reason),
     onSuccess: updated,
   })
-  const uncertainAction = action.isError && (!(action.error instanceof ApiError) || action.error.status >= 500)
+  const uncertainAction = action.isError && (!(action.error instanceof ApiError) || action.error.status >= 500 || action.error.status === 408 || action.error.status === 429)
+  const reviewChanged = action.error instanceof ApiError && ['INVENTORY_PURCHASE_RECEIPT_CHANGED', 'INVENTORY_STOCKTAKE_COUNTS_CHANGED'].includes(action.error.code ?? '')
   function openDocument(kind: DocumentKind, id: string) {
     client.removeQueries({ queryKey: [...key, kind === 'stocktakes' ? 'stocktake' : 'receipt', id], exact: true })
     setDocument({ kind, id })
@@ -96,16 +112,19 @@ export function ProcurementTab() {
   }
   const current = view === 'suppliers' ? suppliers : view === 'purchase-receipts' ? receipts : stocktakes
   const detail = document?.kind === 'stocktakes' ? stocktake : receipt
-  const canReadView = can(`/inventory_${view === 'suppliers' ? 'suppliers' : view}_read`)
+  const canReadView = can(`/inventory_${view}_read`)
+  const canConfirm = confirmation && can(`/inventory_${confirmation.kind}_read`)
+    && can(confirmation.kind === 'suppliers' ? '/inventory_suppliers_manage'
+      : `/inventory_${confirmation.kind}_${confirmation.action === 'post' ? 'post' : 'create'}`)
   return <section className="space-y-4">
     <div className="flex flex-wrap items-center gap-2">
-      {(['suppliers', 'purchase-receipts', 'stocktakes'] as const).map((kind) =>
+      {views.map((kind) =>
         <Button key={kind} size="sm" variant={view === kind ? 'default' : 'outline'} aria-pressed={view === kind}
           onClick={() => { setView(kind); setPage(1) }}>
           {{ suppliers: 'Nhà cung cấp', 'purchase-receipts': 'Phiếu nhập', stocktakes: 'Kiểm kê' }[kind]}
         </Button>)}
-      <Button size="sm" variant="outline" disabled={!can(view === 'suppliers' ? '/inventory_suppliers_manage' : view === 'purchase-receipts' ? '/inventory_purchase-receipts_create' : '/inventory_stocktakes_create')
-        || (view === 'purchase-receipts' && !can('/inventory_suppliers_read')) || (view === 'stocktakes' && !can('/inventory_read'))}
+      <Button size="sm" variant="outline" disabled={view === 'suppliers'
+        ? !canReadView || !can('/inventory_suppliers_manage') : !canCreateDocument(view)}
         onClick={() => view === 'suppliers' ? setSupplierForm(null) : setNewDocument(view)}>
         <Plus size={16} aria-hidden="true" /> Tạo mới
       </Button>
@@ -140,27 +159,35 @@ export function ProcurementTab() {
           </table>{current.data?.totalItems === 0 && <p className="py-5 text-sm">Chưa có dữ liệu.</p>}
             <Pagination page={page} totalPages={current.data?.totalPages ?? 0} onPage={setPage} disabled={current.isFetching} />
           </div>}
-    {supplierForm !== undefined && <SupplierForm initial={supplierForm} onClose={() => setSupplierForm(undefined)} onSaved={updated} />}
-    {(newDocument === 'purchase-receipts' || (document?.kind === 'purchase-receipts' && receipt.data)) &&
+    {supplierForm !== undefined && can('/inventory_suppliers_read') && can('/inventory_suppliers_manage') && <SupplierForm initial={supplierForm} onClose={() => setSupplierForm(undefined)} onSaved={updated} />}
+    {can('/inventory_purchase-receipts_read') && (newDocument === 'purchase-receipts' || (document?.kind === 'purchase-receipts' && receipt.data)) &&
       <ReceiptForm key={document?.id ?? 'new-receipt'} initial={document ? receipt.data : undefined}
-        editable={can('/inventory_purchase-receipts_create')} onClose={() => { setDocument(null); setNewDocument(null) }} onSaved={updated} />}
-    {(newDocument === 'stocktakes' || (document?.kind === 'stocktakes' && stocktake.data)) &&
+        editable={document ? can('/inventory_purchase-receipts_create') : canCreateDocument('purchase-receipts')} onClose={() => { setDocument(null); setNewDocument(null) }} onSaved={updated} />}
+    {can('/inventory_stocktakes_read') && (newDocument === 'stocktakes' || (document?.kind === 'stocktakes' && stocktake.data)) &&
       <StocktakeForm key={document?.id ?? 'new-stocktake'} initial={document ? stocktake.data : undefined}
-        editable={can('/inventory_stocktakes_create')} onClose={() => { setDocument(null); setNewDocument(null) }} onSaved={updated} />}
-    {document && !detail.data && <Dialog open onClose={() => setDocument(null)}>
+        editable={document ? can('/inventory_stocktakes_create') : canCreateDocument('stocktakes')} onClose={() => { setDocument(null); setNewDocument(null) }} onSaved={updated} />}
+    {document && can(`/inventory_${document.kind}_read`) && !detail.data && <Dialog open onClose={() => setDocument(null)}>
       <h2>Chi tiết chứng từ</h2><p role={detail.error ? 'alert' : 'status'}>{detail.error ? errorMessage(detail.error) : 'Đang tải…'}</p>
     </Dialog>}
-    {confirmation && <Dialog open onClose={() => { if (!action.isPending) setConfirmation(null) }} maxWidth={confirmation.kind === 'stocktakes' && confirmation.action === 'post' ? 'lg' : 'sm'}>
+    {confirmation && canConfirm && <Dialog open onClose={() => { if (!action.isPending) setConfirmation(null) }} maxWidth={confirmation.action === 'post' ? 'lg' : 'sm'}>
       <form className="space-y-4" onSubmit={(event) => {
         event.preventDefault()
-        if (action.isPending || (confirmation.action === 'post' && !stocktakePostReady)) return
+        if (!canConfirm || action.isPending) return
         if (uncertainAction && action.variables) { action.mutate(action.variables); return }
+        if (confirmation.action === 'post' && (!postReady || reviewChanged)) return
         action.mutate({ target: confirmation, reason: String(new FormData(event.currentTarget).get('reason') ?? '').trim(),
+          expectedUpdatedAt: confirmation.kind === 'purchase-receipts' && confirmation.action === 'post' ? postingReceipt.data!.updatedAt : undefined,
           expectedCounts: confirmation.kind === 'stocktakes' && confirmation.action === 'post'
             ? postingStocktake.data!.items.map(item => ({ inventoryItemId: item.inventoryItemId, countedQuantity: item.countedQuantity! })) : undefined })
       }}>
         <h2 className="pr-8 text-lg font-semibold">{confirmation.action === 'post' ? 'Xác nhận ghi sổ' : confirmation.action === 'delete' ? 'Xóa nhà cung cấp' : 'Hủy chứng từ'}</h2>
         {confirmation.action === 'post' && <p>Ghi sổ sẽ cập nhật tồn kho và khóa chỉnh sửa chứng từ.</p>}
+        {confirmation.kind === 'purchase-receipts' && confirmation.action === 'post' && <>
+          {postingReceipt.isFetching ? <p role="status">{t('inventory.reviewLoading')}</p>
+            : postingReceipt.error ? <><p role="alert">{errorMessage(postingReceipt.error)}</p><Button type="button" variant="outline" onClick={() => void postingReceipt.refetch()}><RotateCw size={16} aria-hidden="true" />{t('inventory.reloadDocument')}</Button></>
+              : postingReceipt.data && <ReceiptSummary receipt={postingReceipt.data} />}
+          {postingReceipt.data && !postingReceipt.isFetching && !receiptPostReady && <p role="alert">{t('inventory.receiptNotDraft')}</p>}
+        </>}
         {confirmation.kind === 'stocktakes' && confirmation.action === 'post' && <>
           {postingStocktake.isFetching ? <p role="status">Đang đối soát số đếm đã lưu…</p>
             : postingStocktake.error ? <><p role="alert">{errorMessage(postingStocktake.error)}</p><Button type="button" variant="outline" onClick={() => void postingStocktake.refetch()}>Tải lại phiếu</Button></>
@@ -171,10 +198,35 @@ export function ProcurementTab() {
         {action.error && <p role="alert" className="text-sm text-destructive">{errorMessage(action.error)}</p>}
         {confirmation.kind === 'stocktakes' && confirmation.action === 'post' && action.error instanceof ApiError && action.error.code === 'INVENTORY_STOCKTAKE_COUNTS_CHANGED'
           && <Button type="button" variant="outline" onClick={() => { action.reset(); void postingStocktake.refetch() }}>Tải lại phiếu</Button>}
-        <Button type="submit" isLoading={action.isPending} disabled={confirmation.action === 'post' && !stocktakePostReady}>Xác nhận</Button>
+        {confirmation.kind === 'purchase-receipts' && confirmation.action === 'post' && action.error instanceof ApiError && action.error.code === 'INVENTORY_PURCHASE_RECEIPT_CHANGED'
+          && <Button type="button" variant="outline" onClick={() => { action.reset(); void postingReceipt.refetch() }}><RotateCw size={16} aria-hidden="true" />{t('inventory.reloadDocument')}</Button>}
+        <Button type="submit" isLoading={action.isPending} disabled={!uncertainAction && confirmation.action === 'post' && (!postReady || reviewChanged)}>Xác nhận</Button>
       </form>
     </Dialog>}
   </section>
+}
+
+function ReceiptSummary({ receipt }: { receipt: ReceiptDetail }) {
+  const { t } = useTranslation()
+  return <div className="space-y-2">
+    <p className="break-words font-medium">{receipt.receiptNumber} · {receipt.supplier.name}</p>
+    <p>{formatDate(receipt.receivedAt)}</p>
+    {receipt.note && <p className="break-words text-sm">{receipt.note}</p>}
+    <div className="overflow-x-auto"><table className="w-full text-left text-sm">
+      <caption className="sr-only">{t('inventory.receiptReview')}</caption>
+      <thead><tr className="border-b border-border">
+        <th className="p-2">{t('inventory.ingredient')}</th><th className="p-2">{t('inventory.quantity')}</th>
+        <th className="p-2">{t('inventory.unitPrice')}</th><th className="p-2">{t('inventory.lineTotal')}</th>
+      </tr></thead>
+      <tbody>{receipt.items.map(item => <tr key={item.inventoryItemId} className="border-b border-border">
+        <td className="break-words p-2">{item.inventoryItemName} ({item.unitName})</td>
+        <td className="p-2 tabular-nums">{formatQuantity(item.quantity)}</td>
+        <td className="p-2 tabular-nums">{formatPrice(item.unitPrice)}</td>
+        <td className="p-2 tabular-nums">{formatPrice(item.totalAmount)}</td>
+      </tr>)}</tbody>
+    </table></div>
+    <p className="font-medium">{t('inventory.total')}: {formatPrice(receipt.totalAmount)}</p>
+  </div>
 }
 
 function DocumentActions({ kind, id, can, onAction }: {
@@ -215,6 +267,7 @@ function ReceiptForm({ initial, editable, onClose, onSaved }: {
 }) {
   const { employee, access } = useOutletContext<Session>()
   const canReadSuppliers = access.has('/inventory_suppliers_read')
+  const canReadInventory = access.has('/inventory_read')
   const [supplier, setSupplier] = useState<Supplier | null>(initial?.supplier ?? null)
   const [supplierSearch, setSupplierSearch] = useState('')
   const [itemSearch, setItemSearch] = useState('')
@@ -226,7 +279,7 @@ function ReceiptForm({ initial, editable, onClose, onSaved }: {
     inventoryItemId: item.inventoryItemId, quantity: item.quantity, unitPrice: item.unitPrice, name: item.inventoryItemName,
   })) ?? [{ inventoryItemId: '', quantity: '1', unitPrice: '0', name: '' }])
   const suppliers = useQuery({ queryKey: ['private', employee.id, 'receipt-supplier-options', deferredSupplierSearch], queryFn: ({ signal }) => getSuppliers(1, deferredSupplierSearch, signal), enabled: !readOnly && canReadSuppliers && deferredSupplierSearch === supplierSearch.trim() })
-  const inventory = useQuery({ queryKey: ['private', employee.id, 'receipt-item-options', deferredItemSearch], queryFn: ({ signal }) => getInventoryItems({ keyword: deferredItemSearch || undefined, itemPerPage: 100 }, signal), enabled: !readOnly && deferredItemSearch === itemSearch.trim() })
+  const inventory = useQuery({ queryKey: ['private', employee.id, 'receipt-item-options', deferredItemSearch], queryFn: ({ signal }) => getInventoryItems({ keyword: deferredItemSearch || undefined, itemPerPage: 100 }, signal), enabled: !readOnly && canReadInventory && deferredItemSearch === itemSearch.trim() })
   const mutation = useMutation({
     mutationFn: (payload: ReceiptInput) => saveReceipt(payload, initial?.id),
     onSuccess: onSaved,
@@ -255,9 +308,9 @@ function ReceiptForm({ initial, editable, onClose, onSaved }: {
           {supplier && !suppliers.data?.list.some((entry) => entry.id === supplier.id) && <option value={supplier.id}>{supplier.name}</option>}
           {suppliers.data?.list.map((supplier) => <option key={supplier.id} value={supplier.id}>{supplier.code} · {supplier.name}</option>)}
         </select></label>
-        <label className="block text-sm">Tìm nguyên liệu<Input type="search" value={itemSearch} onChange={(event) => setItemSearch(event.target.value)} /></label>
+        <label className="block text-sm">Tìm nguyên liệu<Input type="search" disabled={!canReadInventory} value={itemSearch} onChange={(event) => setItemSearch(event.target.value)} /></label>
         {lines.map((line, index) => <div key={index} className="grid gap-2 border-b border-border pb-3 sm:grid-cols-[2fr_1fr_1fr_auto]">
-          <label className="text-sm">Nguyên liệu<select className={selectClass} required value={line.inventoryItemId} onChange={(event) => {
+          <label className="text-sm">Nguyên liệu<select className={selectClass} required disabled={!canReadInventory} value={line.inventoryItemId} onChange={(event) => {
             const item = inventory.data?.list.find((row) => row.id === event.target.value)
             setLines(lines.map((entry, i) => i === index ? { ...entry, inventoryItemId: event.target.value, name: item?.name ?? '' } : entry))
           }}><option value="">Chọn nguyên liệu</option>
@@ -288,8 +341,8 @@ function StocktakeForm({ initial, editable, onClose, onSaved }: {
   const [snapshot, setSnapshot] = useState(initial)
   const [counts, setCounts] = useState(() => Object.fromEntries(initial?.items.map(item => [item.inventoryItemId, item.countedQuantity ?? '']) ?? []))
   const [uncertain, setUncertain] = useState(false)
-  const inventory = useQuery({ queryKey: ['private', employee.id, 'stocktake-item-options', search], queryFn: ({ signal }) => getInventoryItems({ keyword: search, itemPerPage: 100 }, signal), enabled: !initial && access.has('/inventory_read') && search === keyword.trim() })
   const readOnly = !editable || Boolean(initial && initial.status !== 'DRAFT')
+  const inventory = useQuery({ queryKey: ['private', employee.id, 'stocktake-item-options', search], queryFn: ({ signal }) => getInventoryItems({ keyword: search, itemPerPage: 100 }, signal), enabled: !initial && !readOnly && access.has('/inventory_read') && search === keyword.trim() })
   const mutation = useMutation({
     mutationFn: (payload: { inventoryItemIds: string[]; note?: string } | StocktakeCountInput[]) =>
       Array.isArray(payload) ? saveCounts(initial!.id, payload) : createStocktake(payload.inventoryItemIds, payload.note),

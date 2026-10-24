@@ -63,10 +63,10 @@ async function setup(page: Page) {
     Object.assign(window, { EventSource: Source, AudioContext: Audio, fixtureChimes: () => chimes })
   })
   await page.route('**/api/v1/auth/me', (route) =>
-    route.fulfill({ json: envelope(defaultMockAdminEmployee) }),
+    route.fulfill({ json: envelope(defaultMockAdminEmployee) })
   )
   await page.route('**/api/v1/auth/me/permissions', (route) =>
-    route.fulfill({ json: envelope(defaultMockAdminAuth(['/kitchen-tickets_read'])) }),
+    route.fulfill({ json: envelope(defaultMockAdminAuth(['/kitchen-tickets_read'])) })
   )
   const reads = { tickets: 0, workload: 0 }
   await page.route('**/api/v1/kitchen/tickets?*', (route) => {
@@ -142,7 +142,7 @@ test('a silent stream falls back to polling and reconciles when reconnected', as
   await page.clock.runFor(6_200)
   await expect.poll(() => reads.tickets).toBeGreaterThan(fallbackReads)
   await page.evaluate(() =>
-    (window.EventSource as unknown as FixtureConstructor).instances.at(-1)!.onopen?.(),
+    (window.EventSource as unknown as FixtureConstructor).instances.at(-1)!.onopen?.()
   )
   await expect(page.getByText('Realtime Live', { exact: true })).toBeVisible()
   const recoveryReads = reads.tickets
@@ -155,21 +155,21 @@ test('a silent stream falls back to polling and reconciles when reconnected', as
 test('heartbeats keep an idle kitchen live without reconnecting', async ({ page }) => {
   await setup(page)
   const connections = await page.evaluate(
-    () => (window.EventSource as unknown as FixtureConstructor).instances.length,
+    () => (window.EventSource as unknown as FixtureConstructor).instances.length
   )
   for (let i = 0; i < 4; i++) {
     await page.clock.runFor(15_000)
     await page.evaluate(() =>
       (window.EventSource as unknown as FixtureConstructor).instances
         .at(-1)!
-        .dispatchEvent(new MessageEvent('heartbeat')),
+        .dispatchEvent(new MessageEvent('heartbeat'))
     )
   }
   await expect(page.getByText('Realtime Live', { exact: true })).toBeVisible()
   expect(
     await page.evaluate(
-      () => (window.EventSource as unknown as FixtureConstructor).instances.length,
-    ),
+      () => (window.EventSource as unknown as FixtureConstructor).instances.length
+    )
   ).toBe(connections)
   expect(await chimes(page)).toBe(0)
 })
@@ -227,7 +227,7 @@ test('filter changes and muted tickets do not produce delayed or replayed chimes
   }, newTicket())
   await expect(page.getByRole('button', { name: 'Tea (TEA)', exact: true })).toHaveAttribute(
     'aria-pressed',
-    'true',
+    'true'
   )
   await page.clock.runFor(300)
   expect(await chimes(page)).toBe(0)
@@ -245,6 +245,45 @@ test('filter changes and muted tickets do not produce delayed or replayed chimes
   expect(await chimes(page)).toBe(1)
 })
 
+test('a healthy SSE connection switches to fast polling when its Redis relay is degraded', async ({
+  page,
+}) => {
+  const reads = await setup(page)
+  const connectionCount = await page.evaluate(
+    () => (window.EventSource as unknown as FixtureConstructor).instances.length
+  )
+  await page.evaluate(() => {
+    ;(window.EventSource as unknown as FixtureConstructor).instances
+      .at(-1)!
+      .dispatchEvent(
+        new MessageEvent('kitchen.connection', { data: JSON.stringify({ realtime: false }) })
+      )
+  })
+  await expect(page.getByText('Đang cập nhật định kỳ', { exact: true })).toBeVisible()
+  const before = reads.tickets
+  await page.clock.runFor(6_100)
+  await expect.poll(() => reads.tickets).toBeGreaterThan(before)
+  await page.evaluate(() => {
+    ;(window.EventSource as unknown as FixtureConstructor).instances
+      .at(-1)!
+      .dispatchEvent(new MessageEvent('heartbeat', { data: JSON.stringify({ realtime: false }) }))
+  })
+  await expect(page.getByText('Đang cập nhật định kỳ', { exact: true })).toBeVisible()
+  expect(
+    await page.evaluate(
+      () => (window.EventSource as unknown as FixtureConstructor).instances.length
+    )
+  ).toBe(connectionCount)
+  await page.evaluate(() => {
+    ;(window.EventSource as unknown as FixtureConstructor).instances
+      .at(-1)!
+      .dispatchEvent(
+        new MessageEvent('kitchen.connection', { data: JSON.stringify({ realtime: true }) })
+      )
+  })
+  await expect(page.getByText('Realtime Live', { exact: true })).toBeVisible()
+})
+
 test('leaving KDS closes the stream and cancels watchdog and pending notifications', async ({
   page,
 }) => {
@@ -253,12 +292,12 @@ test('leaving KDS closes the stream and cancels watchdog and pending notificatio
   await page.getByRole('link', { name: 'Tài khoản', exact: true }).click()
   await expect(page).toHaveURL(/\/staff\/account$/)
   await expect(
-    page.getByRole('heading', { name: defaultMockAdminEmployee.fullName, exact: true }),
+    page.getByRole('heading', { name: defaultMockAdminEmployee.fullName, exact: true })
   ).toBeVisible()
   const before = { ...reads }
   const beforeChimes = await chimes(page)
   const count = await page.evaluate(
-    () => (window.EventSource as unknown as FixtureConstructor).instances.length,
+    () => (window.EventSource as unknown as FixtureConstructor).instances.length
   )
   await emit(page, newTicket())
   await page.clock.runFor(60_000)
@@ -268,6 +307,6 @@ test('leaving KDS closes the stream and cancels watchdog and pending notificatio
     await page.evaluate(() => {
       const sources = (window.EventSource as unknown as FixtureConstructor).instances
       return { count: sources.length, allClosed: sources.every((source) => source.closed) }
-    }),
+    })
   ).toEqual({ count, allClosed: true })
 })

@@ -665,6 +665,9 @@ async function openPos(
     menuItems?: unknown[]
   } = {}
 ) {
+  await page.route('**/api/v1/invoices/quote', (route) => route.fulfill({ json: envelope({
+    orderItemIds: [itemId], subTotal: unitPrice, discountAmount: '0', taxAmount: '0', totalAmount: unitPrice, quoteFingerprint: 'a'.repeat(64),
+  }) }))
   await page.route('**/api/v1/orders/sessions/' + sessionId, (route) =>
     route.fulfill({
       json: envelope({

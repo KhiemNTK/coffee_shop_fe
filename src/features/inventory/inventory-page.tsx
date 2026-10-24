@@ -35,15 +35,29 @@ export default function InventoryPage() {
   const queryClient = useQueryClient()
   const { employee, access } = useOutletContext<Session>()
 
-  const canCreate = access.has('/inventory_create')
-  const canUpdate = access.has('/inventory_update')
-  const canDelete = access.has('/inventory_delete')
-  const canAdjust = access.has('/inventory_stock_adjust')
+  const canRead = access.has('/inventory_read')
+  const canReadProcurement = access.hasAny(
+    '/inventory_suppliers_read',
+    '/inventory_purchase-receipts_read',
+    '/inventory_stocktakes_read',
+  )
+  const canCreate = canRead && access.has('/inventory_create')
+  const canUpdate = canRead && access.has('/inventory_update')
+  const canDelete = canRead && access.has('/inventory_delete')
+  const canAdjust = canRead && access.has('/inventory_stock_adjust')
 
-  // Tab: 'items' | 'alerts' | 'transactions'
-  const [activeTab, setActiveTab] = useState<
-    'items' | 'alerts' | 'transactions' | 'procurement' | 'waste' | 'bulk' | 'taxonomy'
-  >('items')
+  const tabs = [
+    { id: 'items', allowed: canRead },
+    { id: 'alerts', allowed: canRead },
+    { id: 'transactions', allowed: canRead },
+    { id: 'procurement', allowed: canReadProcurement },
+    { id: 'waste', allowed: canRead },
+    { id: 'bulk', allowed: canAdjust },
+    { id: 'taxonomy', allowed: canRead },
+  ] as const
+  const [selectedTab, setActiveTab] = useState<(typeof tabs)[number]['id']>('items')
+  const activeTab = tabs.find((tab) => tab.id === selectedTab && tab.allowed)?.id
+    ?? tabs.find((tab) => tab.allowed)?.id
 
   // Search & Filter state
   const [keyword, setKeyword] = useState('')
@@ -66,11 +80,13 @@ export default function InventoryPage() {
   const categoriesQuery = useQuery({
     queryKey: ['inventory-categories'],
     queryFn: ({ signal }) => getInventoryCategories(signal),
+    enabled: canRead,
   })
 
   const unitsQuery = useQuery({
     queryKey: ['inventory-units'],
     queryFn: ({ signal }) => getInventoryUnits(signal),
+    enabled: canRead,
   })
 
   const itemsQuery = useQuery({
@@ -96,12 +112,13 @@ export default function InventoryPage() {
         },
         signal,
       ),
-    enabled: search === keyword.trim(),
+    enabled: canRead && search === keyword.trim(),
   })
 
   const alertsQuery = useQuery({
     queryKey: ['inventory-reorder-alerts'],
     queryFn: ({ signal }) => getReorderAlerts({}, signal),
+    enabled: canRead,
   })
 
   const transactionsQuery = useQuery({
@@ -111,7 +128,7 @@ export default function InventoryPage() {
         { page: transactionPage, itemPerPage: 20, type: transactionType },
         signal,
       ),
-    enabled: activeTab === 'transactions',
+    enabled: canRead && activeTab === 'transactions',
   })
 
   // Delete Mutation
@@ -140,9 +157,14 @@ export default function InventoryPage() {
               variant="outline"
               className="min-h-10"
               onClick={() => {
-                void itemsQuery.refetch()
-                void alertsQuery.refetch()
-                if (activeTab === 'transactions') void transactionsQuery.refetch()
+                if (canRead) {
+                  void itemsQuery.refetch()
+                  void alertsQuery.refetch()
+                  if (activeTab === 'transactions') void transactionsQuery.refetch()
+                }
+                if (canReadProcurement && activeTab === 'procurement') {
+                  void queryClient.invalidateQueries({ queryKey: ['private', employee.id, 'inventory-procurement'] })
+                }
               }}
               disabled={itemsQuery.isFetching}
             >
@@ -159,12 +181,12 @@ export default function InventoryPage() {
         }
       />
       {/* Overview Stats Cards */}
-      <InventoryKpis
+      {canRead && <InventoryKpis
         totalItems={itemsQuery.isSuccess ? itemsQuery.data.totalItems : undefined}
         alertCount={alertCount}
         categoriesCount={categoriesQuery.isSuccess ? categoriesQuery.data.length : undefined}
-      />
-      {(categoriesQuery.isError || unitsQuery.isError) && (
+      />}
+      {canRead && (categoriesQuery.isError || unitsQuery.isError) && (
         <div role="alert" className="flex flex-wrap items-center gap-3 text-sm text-destructive">
           Không tải được nhóm nguyên liệu hoặc đơn vị.
           <Button
@@ -181,14 +203,14 @@ export default function InventoryPage() {
 
       {/* Tabs Control */}
       <div className="admin-tabs">
-        <Button
+        {canRead && <Button
           variant={activeTab === 'waste' ? 'default' : 'outline'}
           aria-pressed={activeTab === 'waste'}
           onClick={() => setActiveTab('waste')}
         >
           Hao hụt
-        </Button>
-        {access.has('/inventory_stock_adjust') && (
+        </Button>}
+        {canAdjust && (
           <Button
             variant={activeTab === 'bulk' ? 'default' : 'outline'}
             aria-pressed={activeTab === 'bulk'}
@@ -197,14 +219,14 @@ export default function InventoryPage() {
             Nhập / Xuất nhiều nguyên liệu
           </Button>
         )}
-        <Button
+        {canReadProcurement && <Button
           variant={activeTab === 'procurement' ? 'default' : 'outline'}
           aria-pressed={activeTab === 'procurement'}
           onClick={() => setActiveTab('procurement')}
         >
           Mua hàng & Kiểm kê
-        </Button>
-        <button
+        </Button>}
+        {canRead && <button
           type="button"
           aria-pressed={activeTab === 'items'}
           onClick={() => setActiveTab('items')}
@@ -217,9 +239,9 @@ export default function InventoryPage() {
         >
           <Boxes className="h-4 w-4" />
           Kho hàng & Tồn kho
-        </button>
+        </button>}
 
-        <button
+        {canRead && <button
           type="button"
           aria-pressed={activeTab === 'alerts'}
           onClick={() => setActiveTab('alerts')}
@@ -237,9 +259,9 @@ export default function InventoryPage() {
               {alertCount}
             </Badge>
           )}
-        </button>
+        </button>}
 
-        <button
+        {canRead && <button
           type="button"
           aria-pressed={activeTab === 'transactions'}
           onClick={() => setActiveTab('transactions')}
@@ -252,22 +274,22 @@ export default function InventoryPage() {
         >
           <History className="h-4 w-4" />
           Lịch sử Xuất / Nhập
-        </button>
+        </button>}
       </div>
 
-      <Button
+      {canRead && <Button
         variant="outline"
         onClick={() => setActiveTab(activeTab === 'taxonomy' ? 'items' : 'taxonomy')}
       >
         Nhóm nguyên liệu & đơn vị
-      </Button>
-      {activeTab === 'taxonomy' && <InventoryTaxonomy />}
-      {activeTab === 'procurement' && <ProcurementTab />}
-      {activeTab === 'waste' && <InventoryWasteTab />}
-      {activeTab === 'bulk' && <InventoryBulkTab />}
+      </Button>}
+      {activeTab === 'taxonomy' && canRead && <InventoryTaxonomy />}
+      {activeTab === 'procurement' && canReadProcurement && <ProcurementTab />}
+      {activeTab === 'waste' && canRead && <InventoryWasteTab />}
+      {activeTab === 'bulk' && canAdjust && <InventoryBulkTab />}
 
       {/* TAB 1: ITEMS INVENTORY */}
-      {activeTab === 'items' && (
+      {activeTab === 'items' && canRead && (
         <InventoryItemsTab
           canAdjust={canAdjust}
           canUpdate={canUpdate}
@@ -298,7 +320,7 @@ export default function InventoryPage() {
       )}
 
       {/* TAB 2: REORDER ALERTS */}
-      {activeTab === 'alerts' &&
+      {activeTab === 'alerts' && canRead &&
         (alertsQuery.isError ? (
           <div role="alert" className="space-y-3 border-l-4 border-destructive p-4">
             <p>Không tải được cảnh báo tồn kho.</p>
@@ -316,7 +338,7 @@ export default function InventoryPage() {
         ))}
 
       {/* TAB 3: TRANSACTIONS HISTORY */}
-      {activeTab === 'transactions' && (
+      {activeTab === 'transactions' && canRead && (
         <section aria-label="Lịch sử xuất nhập" className="space-y-3">
           <label className="block text-sm">
             Loại biến động

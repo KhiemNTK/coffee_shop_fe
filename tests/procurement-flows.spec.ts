@@ -5,6 +5,7 @@ const supplier = { id: 'supplier-fixture', code: 'SUP', name: 'Fixture supplier'
 const item = { id: 'item-fixture', name: 'Fixture beans', stock: '1.2345', reservedStock: '0', averageUnitCost: '20000',
   categoryId: 'category-fixture', unitId: 'unit-fixture', unit: { id: 'unit-fixture', name: 'kg' } }
 const receipt = { id: 'receipt-fixture', receiptNumber: 'PR-FIXTURE', supplierId: supplier.id,
+  updatedAt: '2026-10-04T01:00:00.000Z',
   supplier, status: 'DRAFT', totalAmount: '115000', receivedAt: '2026-10-04T01:00:00.000Z', note: 'Old note',
   items: [{ inventoryItemId: item.id, inventoryItemName: item.name, unitName: 'kg',
     quantity: '5', unitPrice: '23000', totalAmount: '115000' }] }
@@ -32,7 +33,9 @@ async function mockInventory(page: Page, keys = permissions) {
   })
   await page.goto('/staff/inventory')
   await page.getByRole('button', { name: 'Mua hàng & Kiểm kê' }).click()
-  await page.getByRole('button', { name: 'Phiếu nhập', exact: true }).click()
+  if (keys.includes('/inventory_purchase-receipts_read')) {
+    await page.getByRole('button', { name: 'Phiếu nhập', exact: true }).click()
+  }
 }
 
 for (const failure of ['network', 'invalid-response'] as const) {
@@ -115,6 +118,68 @@ test('new document confirmation does not inherit another failed action', async (
   await posting.getByRole('button', { name: 'Đóng', exact: true }).click()
   await page.getByRole('button', { name: 'Hủy', exact: true }).click()
   await expect(page.getByRole('dialog', { name: 'Hủy chứng từ' }).getByRole('alert')).toHaveCount(0)
+})
+
+test('receipt posting reviews quantities and prices and requires a refreshed token after a conflict', async ({ page }, info) => {
+  await mockInventory(page)
+  let current = receipt
+  const bodies: Record<string, unknown>[] = []
+  await page.route('**/api/v1/inventory/purchase-receipts/receipt-fixture', route => route.fulfill({ json: envelope(current) }))
+  await page.route('**/api/v1/inventory/purchase-receipts/receipt-fixture/post', route => {
+    bodies.push(route.request().postDataJSON())
+    if (bodies.length === 1) {
+      current = { ...receipt, updatedAt: '2026-10-04T01:00:00.001Z', totalAmount: '138000',
+        items: [{ ...receipt.items[0]!, quantity: '6', totalAmount: '138000' }] }
+      return route.fulfill({ status: 409, json: { code: 'INVENTORY_PURCHASE_RECEIPT_CHANGED', message: 'Receipt changed' } })
+    }
+    return route.fulfill({ json: envelope({ id: receipt.id, status: 'POSTED' }) })
+  })
+  await page.getByRole('button', { name: 'Ghi sổ', exact: true }).click()
+  const dialog = page.getByRole('dialog', { name: 'Xác nhận ghi sổ' })
+  await expect(dialog.getByRole('table')).toContainText(item.name)
+  await expect(dialog.getByRole('table')).toContainText('23.000')
+  await expect(dialog).toContainText('115.000')
+  await dialog.getByRole('button', { name: 'Xác nhận', exact: true }).click()
+  await expect(dialog.getByRole('alert')).toContainText('Phiếu nhập đã thay đổi')
+  await expect(dialog.getByRole('button', { name: 'Xác nhận', exact: true })).toBeDisabled()
+  expect(bodies[0]).toMatchObject({ expectedUpdatedAt: receipt.updatedAt })
+  await dialog.getByRole('button', { name: 'Tải lại phiếu', exact: true }).click()
+  await expect(dialog).toContainText('138.000')
+  await page.screenshot({ path: info.outputPath('receipt-review.png'), fullPage: true })
+  await dialog.getByRole('button', { name: 'Xác nhận', exact: true }).click()
+  await expect(dialog).not.toBeVisible()
+  expect(bodies[1]).toMatchObject({ expectedUpdatedAt: current.updatedAt })
+  expect(bodies[0]!.idempotencyKey).not.toBe(bodies[1]!.idempotencyKey)
+})
+
+test('uncertain receipt posting retries the reviewed body even when a newer version is visible', async ({ page }) => {
+  await mockInventory(page)
+  const bodies: Record<string, unknown>[] = []
+  let current = receipt
+  await page.route('**/api/v1/inventory/purchase-receipts/receipt-fixture', route => route.fulfill({ json: envelope(current) }))
+  await page.route('**/api/v1/inventory/purchase-receipts/receipt-fixture/post', route => {
+    bodies.push(route.request().postDataJSON())
+    if (bodies.length === 1) {
+      current = { ...receipt, updatedAt: '2026-10-04T01:00:00.001Z', status: 'POSTED' }
+      return route.abort()
+    }
+    return route.fulfill({ json: envelope({ id: receipt.id, status: 'POSTED' }) })
+  })
+  await page.getByRole('button', { name: 'Ghi sổ', exact: true }).click()
+  const dialog = page.getByRole('dialog', { name: 'Xác nhận ghi sổ' })
+  await dialog.getByRole('button', { name: 'Xác nhận', exact: true }).click()
+  await expect(dialog.getByRole('alert')).toBeVisible()
+  await page.evaluate(async () => {
+    const path = '/src/app/query-client.ts'
+    const { queryClient } = await import(path)
+    await queryClient.invalidateQueries({ queryKey: ['private'] })
+  })
+  await expect(dialog).toContainText('Chỉ ghi sổ phiếu nháp')
+  await expect(dialog.getByRole('button', { name: 'Xác nhận', exact: true })).toBeEnabled()
+  await dialog.getByRole('button', { name: 'Xác nhận', exact: true }).click()
+  await expect(dialog).not.toBeVisible()
+  expect(bodies).toHaveLength(2)
+  expect(bodies[0]).toEqual(bodies[1])
 })
 
 test('inventory quantity display preserves four decimal places and large values', async ({ page }) => {

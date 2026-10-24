@@ -69,6 +69,8 @@ function PosSessionPage() {
   const canCheckout = access.hasAll(...WorkflowPermissions.manualCheckout) || access.hasAll(...WorkflowPermissions.digitalCheckout)
   const draftKey = `coffee_pos_draft_${employee.id}_${sessionId}`
   const submissionKey = pendingIntentKey(employee.id, `orders.items:${sessionId}`)
+  const checkoutRecoveryKey = pendingIntentKey(employee.id, `invoice.checkout:${sessionId}`)
+  const [checkoutRecovery, setCheckoutRecovery] = useState(() => sessionStorage.getItem(checkoutRecoveryKey) !== null)
 
   const [keyword, setKeyword] = useState('')
   const menuSearch = useDebouncedSearch(keyword)
@@ -206,7 +208,7 @@ function PosSessionPage() {
       }
     },
   })
-  const orderWriteLocked = addItemsMutation.isPending || Boolean(submittedItems)
+  const orderWriteLocked = addItemsMutation.isPending || Boolean(submittedItems) || checkoutRecovery
 
   const submitDraft = useCallback(() => {
     if (
@@ -343,6 +345,7 @@ function PosSessionPage() {
 
         if (
           canCheckout &&
+          !sessionQuery.data?.onlineOrderRequest &&
           isSessionOpen &&
           hasUnpaid &&
           !orderWriteLocked &&
@@ -422,6 +425,7 @@ function PosSessionPage() {
   }
 
   const session = sessionQuery.data
+  const isOnlineOrder = Boolean(session.onlineOrderRequest)
   const isCompleted = session.sessionStatus === 'COMPLETED'
   const isCancelled = session.sessionStatus === 'CANCELLED'
 
@@ -520,6 +524,11 @@ function PosSessionPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          {checkoutRecovery && canCheckout && (
+            <Button type="button" onClick={() => setShowCheckoutModal(true)}>
+              <RefreshCw size={16} aria-hidden="true" />{translate('pos.recoverCheckout')}
+            </Button>
+          )}
           {session.orderItems.some((item) => !item.isPaid && item.invoiceId) &&
             can('/invoices_read') && (
               <Link
@@ -561,13 +570,13 @@ function PosSessionPage() {
             </Button>
           )}
 
-          {!isCompleted && !isCancelled && unpaidItems.length > 0 && (
+          {!isOnlineOrder && !isCompleted && !isCancelled && unpaidItems.length > 0 && (
             <PrecheckPrint
               input={{ orderSessionId: sessionId, orderItemIds: unpaidItems.map((item) => item.id) }}
               disabled={orderWriteLocked || draftItems.length > 0}
             />
           )}
-          {canCheckout && !isCompleted && !isCancelled && existingUnpaidTotal > 0 && (
+          {canCheckout && !isOnlineOrder && !isCompleted && !isCancelled && existingUnpaidTotal > 0 && (
             <Button
               type="button"
               size="default"
@@ -582,6 +591,12 @@ function PosSessionPage() {
         </div>
       </div>
 
+      {isOnlineOrder && (
+        <p role="status" className="border-y border-border py-3 text-sm">
+          {translate('takeaway.posManaged')}{' '}
+          {can('/online-orders_read') && <Link to="/staff/online-orders?tab=fulfillment" className="font-medium text-primary underline">{translate('nav.online-orders')}</Link>}
+        </p>
+      )}
       {actionError && (
         <div
           className="flex items-center gap-2 rounded-md bg-destructive/10 p-3 text-sm text-destructive"
@@ -673,7 +688,7 @@ function PosSessionPage() {
           recommendations={recommendationsQuery.data}
           isLoadingMenu={menuSearchPending || menuQuery.isPending}
           onSelectItem={handleSelectItem}
-          disabled={!can('/orders_items_create') || isCompleted || isCancelled || orderWriteLocked}
+          disabled={isOnlineOrder || !can('/orders_items_create') || isCompleted || isCancelled || orderWriteLocked}
           pagination={
             menuQuery.data && (
               <Pagination
@@ -698,7 +713,7 @@ function PosSessionPage() {
             {/* Danh sách món đã gửi trước đó */}
             <PosOrderItemsList
               orderItems={session.orderItems}
-              canCancel={can('/orders_items_cancel') && !orderWriteLocked}
+              canCancel={can('/orders_items_cancel') && !orderWriteLocked && !isOnlineOrder}
               onCancelItem={(itemId, reason) => cancelItemMutation.mutate({ itemId, reason })}
               isCancelling={cancelItemMutation.isPending}
             />
@@ -727,6 +742,7 @@ function PosSessionPage() {
               </div>
 
               {canCheckout &&
+                !isOnlineOrder &&
                 !isCompleted &&
                 !isCancelled &&
                 existingUnpaidTotal > 0 && (
@@ -768,13 +784,17 @@ function PosSessionPage() {
       />
 
       {/* Modal thanh toán tiền mặt */}
-      {showCheckoutModal && (
+      {showCheckoutModal && !isOnlineOrder && (
         <CheckoutModal
           sessionId={session.id}
           items={unpaidItems}
           totalAmount={decimalAmount(existingUnpaidTotal)}
           onClose={() => setShowCheckoutModal(false)}
+          onReviewRequired={() => {
+            void queryClient.invalidateQueries({ queryKey: posKeys.session(employee.id, sessionId) })
+          }}
           onCompleted={() => {
+            setCheckoutRecovery(false)
             try {
               if (sessionId) sessionStorage.removeItem(draftKey)
             } catch {

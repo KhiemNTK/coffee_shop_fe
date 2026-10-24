@@ -7,11 +7,27 @@ import { PaymentGatewayPanel } from '../invoices/components/payment-gateway-pane
 import { CheckoutReceipt } from '../printing/components/checkout-receipt'
 import { PrecheckPrint } from '../printing/components/precheck-print'
 import { ShiftRequiredLink } from '../cashier-shifts/components/shift-required-link'
-import { AlertCircle, CheckCircle2, CreditCard, DollarSign, QrCode } from 'lucide-react'
+import { CheckCircle2, CreditCard, DollarSign, QrCode } from 'lucide-react'
 import { ApiError, errorMessage } from '../../shared/api/client'
+import { useRetryAfter } from '../../shared/api/use-retry-after'
+import { ApiErrorAlert } from '../../shared/ui/api-error-alert'
 import { formatPrice, moneySchema } from '../menu/menu.api'
 import { decimalAmount, minorAmount } from '../../shared/lib/money'
-import { checkoutInvoice, quoteInvoice, type Invoice, type SessionItem } from './pos.api'
+import {
+  checkoutInvoice,
+  checkoutInputSchema,
+  quoteInvoice,
+  type CheckoutInput,
+  type Invoice,
+  type SessionItem,
+} from './pos.api'
+import {
+  pendingIntentKey,
+  readPendingIntent,
+  writePendingIntent,
+  isPendingIntentExpired,
+  type PendingIntent,
+} from '../../shared/api/pending-intent'
 import { WorkflowPermissions } from '@/shared/auth/workflow-permissions'
 import { getActivePromotions, promotionKeys } from '../promotions/promotions.api'
 import { OrderOptions } from '../../shared/ui/order-options'
@@ -34,12 +50,14 @@ export function CheckoutModal({
   items = [],
   onClose,
   onCompleted,
+  onReviewRequired,
 }: {
   sessionId: string
   totalAmount: string
   items?: SessionItem[]
   onClose: () => void
   onCompleted: (invoice: Invoice) => void
+  onReviewRequired: () => void
 }) {
   const { t: translate } = useTranslation()
   const [billableItems] = useState(items)
@@ -48,9 +66,11 @@ export function CheckoutModal({
   const { employee, access } = useOutletContext<Session>()
   const [pending, setPending] = useState(false)
   const [activeInvoiceId, setActiveInvoiceId] = useState<string | null>(null)
-  const [submittedDirect, setSubmittedDirect] = useState<
-    Parameters<typeof checkoutInvoice>[0] | null
-  >(null)
+  const recoveryKey = pendingIntentKey(employee.id, `invoice.checkout:${sessionId}`)
+  const [submittedDirect, setSubmittedDirect] = useState<PendingIntent<CheckoutInput> | null>(() =>
+    readPendingIntent(recoveryKey, checkoutInputSchema)
+  )
+  const [reviewRequired, setReviewRequired] = useState(false)
   const [digitalUncertain, setDigitalUncertain] = useState(false)
   const [gatewayLocked, setGatewayLocked] = useState(false)
   const paymentLocked =
@@ -59,7 +79,6 @@ export function CheckoutModal({
     Boolean(submittedDirect) ||
     digitalUncertain ||
     gatewayLocked
-  const customInvoice = Boolean(promotionId) || selectedIds.length !== billableItems.length
   const quote = useQuery({
     queryKey: ['private', employee.id, 'pos-quote', sessionId, selectedIds, promotionId],
     queryFn: () =>
@@ -68,7 +87,7 @@ export function CheckoutModal({
         orderItemIds: selectedIds,
         promotionId: promotionId || null,
       }),
-    enabled: customInvoice && selectedIds.length > 0 && !paymentLocked,
+    enabled: selectedIds.length > 0 && !paymentLocked && !reviewRequired,
     retry: false,
     staleTime: 0,
   })
@@ -85,16 +104,22 @@ export function CheckoutModal({
       !promotions.isFetching &&
       access.has('/promotions_read') &&
       promotions.data.list.some((promotion) => promotion.id === promotionId))
-  const payableTotal = customInvoice ? (quote.data?.totalAmount ?? '0') : totalAmount
+  const payableTotal =
+    submittedDirect?.payload.expectedTotal ?? quote.data?.totalAmount ?? totalAmount
   const quoteReady =
     promotionAvailable &&
     (!billableItems.length || selectedIds.length > 0) &&
-    (!customInvoice || (quote.isSuccess && !quote.isFetching))
+    !reviewRequired &&
+    quote.isSuccess &&
+    !quote.isFetching
   const totalMinor = minorAmount(payableTotal)
   const canDirect = access.hasAll(...WorkflowPermissions.manualCheckout)
-  const [method, setMethod] = useState<'CASH' | 'CARD' | 'DIGITAL'>(canDirect ? 'CASH' : 'DIGITAL')
-  const [tendered, setTendered] = useState(totalAmount)
-  const [error, setError] = useState<string | null>(null)
+  const [method, setMethod] = useState<'CASH' | 'CARD' | 'DIGITAL'>(
+    submittedDirect?.payload.paymentMethod ?? (canDirect ? 'CASH' : 'DIGITAL')
+  )
+  const [tendered, setTendered] = useState(submittedDirect?.payload.amountTendered ?? totalAmount)
+  const [error, setError] = useState<unknown>(null)
+  const retryWait = useRetryAfter(error)
   const [shiftRequired, setShiftRequired] = useState(false)
   const [invoice, setInvoice] = useState<Invoice | null>(null)
 
@@ -114,40 +139,70 @@ export function CheckoutModal({
   ].filter((val, idx, arr) => val >= totalMinor && arr.indexOf(val) === idx)
 
   async function handleDirectCheckout(payMethod: 'CASH' | 'CARD') {
-    if (flight.current || !canDirect || (!submittedDirect && !quoteReady)) return
+    if (retryWait || flight.current || !canDirect || (!submittedDirect && !quoteReady)) return
+    if (submittedDirect && isPendingIntentExpired(submittedDirect)) {
+      setError(translate('pos.checkoutExpired'))
+      return
+    }
     if (!submittedDirect && payMethod === 'CASH' && !tenderedEnough) {
       setError(translate('pos.insufficientCash'))
       return
     }
-    const payload = submittedDirect ?? {
-      orderSessionId: sessionId,
-      paymentMethod: payMethod,
-      orderItemIds: billableItems.length ? selectedIds : undefined,
-      promotionId: promotionId || null,
-      amountTendered: payMethod === 'CASH' ? tendered.trim() : payableTotal,
-      closeSessionAfterPayment: true,
+    const intent = submittedDirect ?? {
+      createdAt: Date.now(),
+      idempotencyKey: crypto.randomUUID(),
+      payload: {
+        orderSessionId: sessionId,
+        paymentMethod: payMethod,
+        orderItemIds: billableItems.length ? selectedIds : undefined,
+        promotionId: promotionId || null,
+        amountTendered: payMethod === 'CASH' ? tendered.trim() : payableTotal,
+        closeSessionAfterPayment: true,
+        quoteFingerprint: quote.data!.quoteFingerprint,
+        expectedTotal: payableTotal,
+      },
     }
     flight.current = true
-    setSubmittedDirect(payload)
     setError(null)
     setShiftRequired(false)
     setPending(true)
+    let saved = false
     try {
-      const result = await checkoutInvoice(payload)
+      const sending = { ...intent, uncertain: true }
+      writePendingIntent(recoveryKey, sending)
+      saved = true
+      setSubmittedDirect(sending)
+      const result = await checkoutInvoice({
+        ...intent.payload,
+        idempotencyKey: intent.idempotencyKey,
+      })
+      sessionStorage.removeItem(recoveryKey)
+      setSubmittedDirect(null)
       setInvoice(result)
       completed.current = true
       onCompleted(result)
     } catch (err) {
       setShiftRequired(err instanceof ApiError && err.code === 'CASHIER_SHIFT_REQUIRED')
-      setError(errorMessage(err))
+      setError(err)
+      if (!saved) return
       if (
         err instanceof ApiError &&
         err.status >= 400 &&
         err.status < 500 &&
         err.status !== 408 &&
-        err.status !== 429
-      )
+        err.status !== 429 &&
+        !submittedDirect?.uncertain
+      ) {
+        sessionStorage.removeItem(recoveryKey)
         setSubmittedDirect(null)
+        if (err.code === 'INVOICE_QUOTE_CHANGED') {
+          setReviewRequired(true)
+          onReviewRequired()
+        }
+      } else {
+        const uncertain = { ...intent, uncertain: true }
+        setSubmittedDirect(uncertain)
+      }
     } finally {
       flight.current = false
       setPending(false)
@@ -155,7 +210,7 @@ export function CheckoutModal({
   }
 
   async function handlePrepareDigitalPayment() {
-    if (flight.current || !canDigital || (!digitalUncertain && !quoteReady)) return
+    if (retryWait || flight.current || !canDigital || (!digitalUncertain && !quoteReady)) return
     flight.current = true
     setError(null)
     setPending(true)
@@ -170,7 +225,7 @@ export function CheckoutModal({
             (candidate) =>
               (candidate.promotionId ?? null) === (promotionId || null) &&
               candidate.orderItems.length === selectedIds.length &&
-              candidate.orderItems.every((item) => selectedIds.includes(item.id)),
+              candidate.orderItems.every((item) => selectedIds.includes(item.id))
           )
         : existing.list[0]
       if (!matching) setDigitalUncertain(true)
@@ -179,6 +234,8 @@ export function CheckoutModal({
         (await createUnpaidInvoice(sessionId, {
           orderItemIds: billableItems.length ? selectedIds : undefined,
           promotionId: promotionId || null,
+          quoteFingerprint: quote.data?.quoteFingerprint,
+          expectedTotal: payableTotal,
         }))
       setDigitalUncertain(false)
       if (unpaid.paymentStatus === 'PAID') {
@@ -188,15 +245,20 @@ export function CheckoutModal({
       } else if (unpaid.paymentStatus === 'UNPAID') setActiveInvoiceId(unpaid.id)
       else setError(translate('pos.invoiceChanged'))
     } catch (err) {
-      setError(errorMessage(err))
+      setError(err)
       if (
         err instanceof ApiError &&
         err.status >= 400 &&
         err.status < 500 &&
         err.status !== 408 &&
         err.status !== 429
-      )
+      ) {
         setDigitalUncertain(false)
+        if (err.code === 'INVOICE_QUOTE_CHANGED') {
+          setReviewRequired(true)
+          onReviewRequired()
+        }
+      }
     } finally {
       flight.current = false
       setPending(false)
@@ -278,17 +340,27 @@ export function CheckoutModal({
             <DialogDescription>{translate('pos.paymentDescription')}</DialogDescription>
           </DialogHeader>
 
-          {error && (
-            <div
-              className="mt-3 flex items-center gap-2 rounded-md bg-destructive/10 p-3 text-sm text-destructive"
-              role="alert"
-            >
-              <AlertCircle className="h-4 w-4 shrink-0" />
-              <span>{error}</span>
+          {error != null && (
+            <div className="mt-3">
+              <ApiErrorAlert error={error} />
             </div>
           )}
 
           {shiftRequired && <ShiftRequiredLink />}
+          {submittedDirect && (
+            <p role="status" className="mt-3 text-sm text-muted-foreground">
+              {translate(
+                isPendingIntentExpired(submittedDirect)
+                  ? 'pos.checkoutExpired'
+                  : 'pos.checkoutRecovering'
+              )}
+            </p>
+          )}
+          {reviewRequired && (
+            <Button type="button" variant="outline" className="mt-3" onClick={onClose}>
+              {translate('pos.reviewOrder')}
+            </Button>
+          )}
 
           <div className="mt-4">
             <PrecheckPrint
@@ -319,7 +391,7 @@ export function CheckoutModal({
                         setSelectedIds((ids) =>
                           event.target.checked
                             ? [...ids, item.id]
-                            : ids.filter((id) => id !== item.id),
+                            : ids.filter((id) => id !== item.id)
                         )
                       }
                     />
@@ -374,7 +446,7 @@ export function CheckoutModal({
                   </button>
                 </p>
               )}
-              {customInvoice && quote.isFetching && (
+              {quote.isFetching && (
                 <p role="status" className="text-sm">
                   {translate('pos.loadingQuote')}
                 </p>
@@ -387,7 +459,7 @@ export function CheckoutModal({
                   </button>
                 </p>
               )}
-              {customInvoice && quote.data && (
+              {quote.data && (
                 <p className="text-sm">
                   {translate('pos.discount')} {formatPrice(quote.data.discountAmount)}
                 </p>
@@ -399,7 +471,7 @@ export function CheckoutModal({
           <div className="mt-4 flex items-center justify-between rounded-xl bg-primary/10 px-4 py-3 text-primary">
             <span className="text-sm font-semibold">{translate('pos.paymentTotal')}</span>
             <span className="text-xl font-bold">
-              {quoteReady ? formatPrice(payableTotal) : '—'}
+              {quoteReady || submittedDirect ? formatPrice(payableTotal) : '—'}
             </span>
           </div>
 
@@ -411,13 +483,17 @@ export function CheckoutModal({
                 setMethod('CASH')
               }}
               disabled={
-                !canDirect || pending || Boolean(activeInvoiceId) || Boolean(submittedDirect) || digitalUncertain
+                !canDirect ||
+                pending ||
+                Boolean(activeInvoiceId) ||
+                Boolean(submittedDirect) ||
+                digitalUncertain
               }
               className={cn(
                 'flex flex-col items-center justify-center gap-1.5 rounded-xl border p-3 text-xs font-bold transition-all cursor-pointer',
                 method === 'CASH'
                   ? 'border-primary bg-primary/10 text-primary shadow-xs ring-1 ring-primary'
-                  : 'border-border bg-card text-muted-foreground hover:bg-muted',
+                  : 'border-border bg-card text-muted-foreground hover:bg-muted'
               )}
             >
               <DollarSign className="h-4 w-4" />
@@ -430,13 +506,17 @@ export function CheckoutModal({
                 setMethod('CARD')
               }}
               disabled={
-                !canDirect || pending || Boolean(activeInvoiceId) || Boolean(submittedDirect) || digitalUncertain
+                !canDirect ||
+                pending ||
+                Boolean(activeInvoiceId) ||
+                Boolean(submittedDirect) ||
+                digitalUncertain
               }
               className={cn(
                 'flex flex-col items-center justify-center gap-1.5 rounded-xl border p-3 text-xs font-bold transition-all cursor-pointer',
                 method === 'CARD'
                   ? 'border-primary bg-primary/10 text-primary shadow-xs ring-1 ring-primary'
-                  : 'border-border bg-card text-muted-foreground hover:bg-muted',
+                  : 'border-border bg-card text-muted-foreground hover:bg-muted'
               )}
             >
               <CreditCard className="h-4 w-4" />
@@ -451,7 +531,7 @@ export function CheckoutModal({
                 'flex flex-col items-center justify-center gap-1.5 rounded-xl border p-3 text-xs font-bold transition-all cursor-pointer',
                 method === 'DIGITAL'
                   ? 'border-primary bg-primary/10 text-primary shadow-xs ring-1 ring-primary'
-                  : 'border-border bg-card text-muted-foreground hover:bg-muted',
+                  : 'border-border bg-card text-muted-foreground hover:bg-muted'
               )}
             >
               <QrCode className="h-4 w-4" />
@@ -518,7 +598,7 @@ export function CheckoutModal({
                       disabled={pending || Boolean(submittedDirect)}
                       className={cn(
                         'rounded-lg border px-3 py-1.5 text-xs transition-all active:scale-95 cursor-pointer',
-                        colorClasses,
+                        colorClasses
                       )}
                     >
                       {isExact
@@ -537,7 +617,7 @@ export function CheckoutModal({
                     ? change > 0n
                       ? 'border-emerald-200 bg-emerald-50/60 text-emerald-950'
                       : 'border-border bg-muted/40 text-foreground'
-                    : 'border-amber-200 bg-amber-50/60 text-amber-950',
+                    : 'border-amber-200 bg-amber-50/60 text-amber-950'
                 )}
               >
                 <div>
@@ -551,7 +631,7 @@ export function CheckoutModal({
                         ? change > 0n
                           ? 'text-emerald-700'
                           : 'text-foreground'
-                        : 'text-amber-700',
+                        : 'text-amber-700'
                     )}
                   >
                     {tenderedMinor === null
@@ -612,7 +692,7 @@ export function CheckoutModal({
                   type="button"
                   onClick={() => void handlePrepareDigitalPayment()}
                   isLoading={pending}
-                  disabled={!quoteReady && !digitalUncertain}
+                  disabled={retryWait > 0 || (!quoteReady && !digitalUncertain)}
                   className="w-full"
                 >
                   <QrCode size={16} aria-hidden="true" />
@@ -638,7 +718,12 @@ export function CheckoutModal({
                 type="button"
                 onClick={() => void handleDirectCheckout('CASH')}
                 isLoading={pending}
-                disabled={!canDirect || pending || (!submittedDirect && (!quoteReady || !tenderedEnough))}
+                disabled={
+                  retryWait > 0 ||
+                  !canDirect ||
+                  pending ||
+                  (!submittedDirect && (!quoteReady || !tenderedEnough))
+                }
                 className="flex-2 cursor-pointer font-bold"
               >
                 {submittedDirect ? translate('pos.reviewCash') : translate('pos.confirmCash')}
@@ -650,7 +735,9 @@ export function CheckoutModal({
                 type="button"
                 onClick={() => void handleDirectCheckout('CARD')}
                 isLoading={pending}
-                disabled={!canDirect || pending || (!submittedDirect && !quoteReady)}
+                disabled={
+                  retryWait > 0 || !canDirect || pending || (!submittedDirect && !quoteReady)
+                }
                 className="flex-2 cursor-pointer font-bold"
               >
                 {submittedDirect ? translate('pos.reviewCard') : translate('pos.confirmCard')}

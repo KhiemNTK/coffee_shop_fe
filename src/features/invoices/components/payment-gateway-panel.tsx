@@ -4,7 +4,9 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useOutletContext } from 'react-router-dom'
 import { CreditCard, ExternalLink, QrCode, RefreshCw, Volume2, VolumeX } from 'lucide-react'
 import type { Session } from '../../auth/session'
-import { ApiError, errorMessage } from '../../../shared/api/client'
+import { ApiError } from '../../../shared/api/client'
+import { ApiErrorAlert } from '../../../shared/ui/api-error-alert'
+import { useRetryAfter } from '../../../shared/api/use-retry-after'
 import { formatDateTime, formatPrice } from '../../../shared/lib/format'
 import { Button } from '../../../shared/ui'
 import { PaymentQr } from '../../../shared/ui/payment-qr'
@@ -151,17 +153,32 @@ export function PaymentGatewayPanel({
     if (!invoice.isError && invoice.data?.paymentStatus === 'PAID' && !notified.current) {
       notified.current = true
       const soundKey = `${employee.id}:${invoiceId}`
-      if (soundEnabled && paymentSoundEnabled && observedUnpaid.current === invoiceId &&
-        invoice.data.paymentMethod === 'TRANSFER' && !soundedPayments.has(soundKey)) {
+      if (
+        soundEnabled &&
+        paymentSoundEnabled &&
+        observedUnpaid.current === invoiceId &&
+        invoice.data.paymentMethod === 'TRANSFER' &&
+        !soundedPayments.has(soundKey)
+      ) {
         if (playNotificationChime()) {
           soundedPayments.add(soundKey)
-          if (soundedPayments.size > 100) soundedPayments.delete(soundedPayments.values().next().value!)
+          if (soundedPayments.size > 100)
+            soundedPayments.delete(soundedPayments.values().next().value!)
         }
       }
       void queryClient.invalidateQueries({ queryKey: ['private', employee.id, 'invoices'] })
       onPaid?.(invoice.data)
     }
-  }, [invoice.data, invoice.isError, invoice.isFetching, invoiceId, onPaid, employee.id, queryClient, soundEnabled])
+  }, [
+    invoice.data,
+    invoice.isError,
+    invoice.isFetching,
+    invoiceId,
+    onPaid,
+    employee.id,
+    queryClient,
+    soundEnabled,
+  ])
 
   const unresolvedSubmission =
     submitted &&
@@ -192,7 +209,9 @@ export function PaymentGatewayPanel({
     attempts.error ??
     invoice.error ??
     providers.error
+  const retryWait = useRetryAfter(failed)
   const available =
+    retryWait === 0 &&
     can('/payment-attempts_create') &&
     can('/payment-attempts_read') &&
     invoice.data?.paymentStatus === 'UNPAID' &&
@@ -216,7 +235,7 @@ export function PaymentGatewayPanel({
     create.mutate(payload)
   }
   function handleReconcile(attemptId: string) {
-    if (flight.current || busy) return
+    if (retryWait || flight.current || busy) return
     flight.current = true
     reconcile.mutate(attemptId)
   }
@@ -247,7 +266,11 @@ export function PaymentGatewayPanel({
             })
           }}
         >
-          {soundEnabled ? <Volume2 size={18} aria-hidden="true" /> : <VolumeX size={18} aria-hidden="true" />}
+          {soundEnabled ? (
+            <Volume2 size={18} aria-hidden="true" />
+          ) : (
+            <VolumeX size={18} aria-hidden="true" />
+          )}
         </Button>
         <Button
           variant="outline"
@@ -255,6 +278,7 @@ export function PaymentGatewayPanel({
           disabled={
             !can('/payment-attempts_read') ||
             !can('/invoices_read') ||
+            retryWait > 0 ||
             busy ||
             attempts.isFetching ||
             invoice.isFetching
@@ -268,7 +292,11 @@ export function PaymentGatewayPanel({
           Kiểm tra trạng thái
         </Button>
       </div>
-      {soundFailed && <p role="status" className="text-sm text-muted-foreground">{translate('payment.soundUnavailable')}</p>}
+      {soundFailed && (
+        <p role="status" className="text-sm text-muted-foreground">
+          {translate('payment.soundUnavailable')}
+        </p>
+      )}
       {!can('/payment-attempts_read') || !can('/invoices_read') ? (
         <p role="alert">Bạn cần quyền đọc hóa đơn và phiên thanh toán để kiểm tra kết quả.</p>
       ) : (
@@ -280,11 +308,7 @@ export function PaymentGatewayPanel({
               <PaymentStatusBadge status={invoice.data.paymentStatus} />
             </p>
           )}
-          {failed && (
-            <p role="alert" className="break-words text-sm text-destructive">
-              {errorMessage(failed)}
-            </p>
-          )}
+          {failed && <ApiErrorAlert error={failed} />}
           {providers.data && !selectedProvider && (
             <p role="status" className="text-sm">
               Chưa cấu hình cổng thanh toán. Liên hệ quản lý hoặc chọn thu tiền tại quầy.
@@ -380,7 +404,9 @@ export function PaymentGatewayPanel({
                 {link && linkActive && (
                   <>
                     <PaymentQr value={link} />
-                    <p className="text-sm text-muted-foreground">{translate('payment.qrLinkHint')}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {translate('payment.qrLinkHint')}
+                    </p>
                     <a
                       href={link}
                       target="_blank"
@@ -397,10 +423,10 @@ export function PaymentGatewayPanel({
                     type="button"
                     variant="outline"
                     size="sm"
-                    disabled={busy || attempts.isFetching || invoice.isFetching}
+                    disabled={retryWait > 0 || busy || attempts.isFetching || invoice.isFetching}
                     isLoading={recovery.isPending && recovery.variables === attempt.id}
                     onClick={() => {
-                      if (flight.current || busy) return
+                      if (retryWait || flight.current || busy) return
                       flight.current = true
                       recovery.mutate(attempt.id)
                     }}
@@ -419,7 +445,7 @@ export function PaymentGatewayPanel({
                   <Button
                     variant="outline"
                     size="sm"
-                    disabled={busy}
+                    disabled={retryWait > 0 || busy}
                     onClick={() => handleReconcile(attempt.id)}
                   >
                     <RefreshCw size={16} aria-hidden="true" />

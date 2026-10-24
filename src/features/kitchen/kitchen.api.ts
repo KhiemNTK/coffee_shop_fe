@@ -3,6 +3,8 @@ import { apiGet, apiMutate } from '../../shared/api/client'
 import { selectedOptionsSchema } from '../../shared/api/order-options'
 import { replacementRemakeSchema } from '../../shared/api/order-remakes'
 
+export const kitchenConnectionSchema = z.object({ realtime: z.boolean() })
+
 export const kitchenKeys = {
   all: (employeeId: string) => ['private', employeeId, 'kitchen'] as const,
   tickets: (employeeId: string) => ['private', employeeId, 'kitchen', 'tickets'] as const,
@@ -19,7 +21,7 @@ export const kitchenRealtimeEventSchema = z.object({
       z.object({
         stationId: z.uuid(),
         availableAt: z.iso.datetime({ offset: true }),
-      }),
+      })
     )
     .max(100)
     .optional()
@@ -124,7 +126,7 @@ export async function getKitchenStations(signal: AbortSignal): Promise<KitchenSt
       `/kitchen/stations?page=${page}&itemPerPage=100&isActive=true`,
       kitchenStationsResponseSchema,
       signal,
-      true,
+      true
     )
     stations.push(...result.list)
     total = result.totalItems
@@ -150,7 +152,7 @@ export async function getKitchenTickets(
     includeScheduled?: boolean
     page?: number
   } = {},
-  signal?: AbortSignal,
+  signal?: AbortSignal
 ) {
   const params = new URLSearchParams({
     itemPerPage: '100',
@@ -164,14 +166,14 @@ export async function getKitchenTickets(
     `/kitchen/tickets?${params.toString()}`,
     kitchenTicketsResponseSchema,
     signal || new AbortController().signal,
-    true,
+    true
   )
   return result
 }
 
 export async function updateOrderItemStatus(
   orderItemId: string,
-  status: 'COOKING' | 'READY' | 'SERVED',
+  status: 'COOKING' | 'READY' | 'SERVED'
 ): Promise<unknown> {
   return apiMutate(
     `/orders/items/${orderItemId}/status`,
@@ -180,7 +182,7 @@ export async function updateOrderItemStatus(
       id: z.uuid(),
       serveStatus: z.enum(['COOKING', 'READY', 'SERVED']),
     }),
-    { serveStatus: status },
+    { serveStatus: status }
   )
 }
 
@@ -189,7 +191,7 @@ export function getStationPage(page: number, signal?: AbortSignal) {
     `/kitchen/stations?page=${page}&itemPerPage=20`,
     kitchenStationsResponseSchema,
     signal,
-    true,
+    true
   )
 }
 export type StationInput = {
@@ -204,7 +206,7 @@ export function saveStation(id: string | undefined, input: StationInput) {
     id ? `/kitchen/stations/${id}` : '/kitchen/stations',
     id ? 'PATCH' : 'POST',
     kitchenStationSchema,
-    input,
+    input
   )
 }
 export function deleteStation(id: string) {

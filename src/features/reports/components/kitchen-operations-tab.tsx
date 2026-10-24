@@ -1,5 +1,6 @@
 import { ChefHat, Clock } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { useState } from 'react'
 import { formatDateTime } from '@/shared/lib/format'
 import {
   type KitchenBottleneckSlot,
@@ -7,6 +8,7 @@ import {
 } from '../reports.api'
 import { errorMessage } from '../../../shared/api/client'
 import { Badge, Card, CardContent, CardHeader, CardTitle } from '../../../shared/ui'
+import { Pagination } from '../../../shared/ui/pagination'
 
 interface KitchenOperationsTabProps {
   slaStations?: KitchenSlaStation[]
@@ -27,7 +29,18 @@ export function KitchenOperationsTab({
   isBottlenecksPending,
   bottlenecksError,
 }: KitchenOperationsTabProps) {
-  useTranslation()
+  const { t } = useTranslation()
+  const [page, setPage] = useState(1)
+  const alerts = (bottleneckSlots ?? [])
+    .filter((slot) => slot.lateCompletedCount > 0 || slot.overdueOpenCount > 0)
+    .sort((a, b) =>
+      b.overdueOpenCount - a.overdueOpenCount ||
+      b.lateCompletedCount - a.lateCompletedCount ||
+      Date.parse(b.bucketStartAt) - Date.parse(a.bucketStartAt) ||
+      a.stationName.localeCompare(b.stationName),
+    )
+  const totalPages = Math.ceil(alerts.length / 10)
+  const currentPage = Math.min(page, Math.max(1, totalPages))
   return (
     <div className="space-y-6">
       {/* Station SLA Compliance Table */}
@@ -117,8 +130,9 @@ export function KitchenOperationsTab({
         <CardHeader className="pb-3">
           <CardTitle className="text-base font-bold text-foreground flex items-center gap-2">
             <Clock className="h-4 w-4 text-amber-600" />
-            Cảnh báo Khung giờ Nút thắt Cổ chai (Live Bottlenecks)
+            {t('finance.kitchenAlerts')}
           </CardTitle>
+          <p className="mt-1 text-xs text-muted-foreground">{t('finance.kitchenAlertBasis')}</p>
         </CardHeader>
         <CardContent className="p-0">
           {bottlenecksError ? <p role="alert" className="p-4 text-sm text-destructive">{errorMessage(bottlenecksError)}</p> : isBottlenecksPending ? (
@@ -138,11 +152,10 @@ export function KitchenOperationsTab({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
-                  {bottleneckSlots
-                    ?.filter((slot) => slot.lateCompletedCount > 0 || slot.overdueOpenCount > 0)
-                    .slice(0, 10)
-                    .map((slot, idx) => (
-                      <tr key={idx} className="hover:bg-muted/30 transition-colors">
+                  {alerts
+                    .slice((currentPage - 1) * 10, currentPage * 10)
+                    .map((slot) => (
+                      <tr key={`${slot.bucketStartAt}:${slot.stationId ?? slot.stationName}`} className="hover:bg-muted/30 transition-colors">
                         <td className="px-4 py-3 text-xs font-semibold text-foreground">
                           {formatDateTime(slot.bucketStartAt, { seconds: true })}
                         </td>
@@ -160,7 +173,7 @@ export function KitchenOperationsTab({
                         </td>
                       </tr>
                     ))}
-                  {!bottleneckSlots?.some((s) => s.lateCompletedCount > 0 || s.overdueOpenCount > 0) && (
+                  {!alerts.length && (
                     <tr>
                       <td colSpan={5} className="py-6 text-center text-xs text-emerald-600">
                         Không phát hiện khung giờ nút thắt cổ chai nào nghiêm trọng.
@@ -169,6 +182,9 @@ export function KitchenOperationsTab({
                   )}
                 </tbody>
               </table>
+              {totalPages > 1 && (
+                <Pagination page={currentPage} totalPages={totalPages} onPage={setPage} />
+              )}
             </div>
           )}
         </CardContent>

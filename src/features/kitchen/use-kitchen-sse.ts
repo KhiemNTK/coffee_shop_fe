@@ -1,15 +1,15 @@
 import { useEffect, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { posKeys } from '../pos/pos.keys'
-import { kitchenKeys, kitchenRealtimeEventSchema } from './kitchen.api'
+import { kitchenKeys, kitchenRealtimeEventSchema, kitchenConnectionSchema } from './kitchen.api'
 import { playNotificationChime } from '../../shared/lib/sound'
 
-export type KitchenConnectionStatus = 'connected' | 'connecting' | 'disconnected'
+export type KitchenConnectionStatus = 'connected' | 'connecting' | 'disconnected' | 'degraded'
 
 export function useKitchenSse(
   employeeId: string,
   enabled = true,
-  options?: { soundEnabled?: boolean; stationId?: string },
+  options?: { soundEnabled?: boolean; stationId?: string }
 ) {
   const queryClient = useQueryClient()
   const soundEnabled = options?.soundEnabled ?? false
@@ -38,6 +38,7 @@ export function useKitchenSse(
     let heartbeatTimeout: number | undefined
     let pendingChime = false
     let batchStationId = ''
+    let relayReady = true
     // shortcut: dedupe the latest 200 new-ticket events per mounted KDS session, not across reloads.
     const seenEvents = new Set<string>()
 
@@ -59,7 +60,7 @@ export function useKitchenSse(
       })
     }
 
-    function disconnect(connection: EventSource) {
+    function disconnect(connection: EventSource, reconnectDelay = 5_000) {
       if (!active || source !== connection) return
       source = null
       window.clearTimeout(heartbeatTimeout)
@@ -73,7 +74,7 @@ export function useKitchenSse(
         reconnectTimeout = window.setTimeout(() => {
           reconnectTimeout = undefined
           connect()
-        }, 5_000)
+        }, reconnectDelay)
       }
     }
 
@@ -92,7 +93,7 @@ export function useKitchenSse(
 
       connection.onopen = () => {
         if (!active || source !== connection) return
-        setStatus('connected')
+        setStatus(relayReady ? 'connected' : 'degraded')
         watchHeartbeat(connection)
         refresh()
       }
@@ -103,7 +104,7 @@ export function useKitchenSse(
         if (refreshTimeout === undefined) batchStationId = settingsRef.current.stationId
         try {
           const event = kitchenRealtimeEventSchema.parse(
-            JSON.parse((message as MessageEvent<string>).data),
+            JSON.parse((message as MessageEvent<string>).data)
           )
           if (event.eventName === 'order.items.added' && !seenEvents.has(event.eventId)) {
             seenEvents.add(event.eventId)
@@ -115,7 +116,7 @@ export function useKitchenSse(
                 (ticket) =>
                   (!settingsRef.current.stationId ||
                     ticket.stationId === settingsRef.current.stationId) &&
-                  Date.parse(ticket.availableAt) <= Date.now(),
+                  Date.parse(ticket.availableAt) <= Date.now()
               ) ??
                 false)
           }
@@ -137,11 +138,31 @@ export function useKitchenSse(
         }, 250)
       })
 
-      connection.addEventListener('heartbeat', () => {
+      function updateRelay(message: Event) {
+        const previous = relayReady
+        try {
+          const parsed = kitchenConnectionSchema.safeParse(
+            JSON.parse((message as MessageEvent<string>).data)
+          )
+          if (parsed.success) relayReady = parsed.data.realtime
+        } catch {
+          /* Legacy heartbeats retain the last known relay state. */
+        }
+        setStatus(relayReady ? 'connected' : 'degraded')
+        if (previous !== relayReady) refresh()
+      }
+      connection.addEventListener('kitchen.connection', (message) => {
         if (!active || source !== connection) return
         watchHeartbeat(connection)
-        setStatus('connected')
+        updateRelay(message)
       })
+      connection.addEventListener('heartbeat', (message) => {
+        if (!active || source !== connection) return
+        watchHeartbeat(connection)
+        updateRelay(message)
+      })
+
+      connection.addEventListener('kitchen.renew', () => disconnect(connection, 0))
 
       connection.onerror = () => disconnect(connection)
     }

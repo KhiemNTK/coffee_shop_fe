@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { apiDownload, apiGet, apiMutate } from '../../shared/api/client'
 import { moneySchema } from '../menu/menu.api'
+import { quantitySchema } from '../inventory/quantity'
 
 import { signedMoneySchema } from '../../shared/api/money'
 
@@ -77,7 +78,9 @@ export const promotionUsageRowSchema = z.object({
 export const lowStockReportItemSchema = z.object({
   id: z.string(),
   name: z.string(),
-  stock: z.string(),
+  stock: quantitySchema,
+  reservedStock: quantitySchema,
+  availableStock: quantitySchema,
   unitName: z.string(),
 })
 
@@ -177,6 +180,17 @@ export type KitchenBottleneckSlot = z.infer<typeof kitchenBottleneckSlotSchema>
 
 // --- Daily Sales Close Schemas ---
 
+export const dailyCloseBlockersSchema = z.object({
+  blockers: z.object({
+    openShifts: z.number().int().nonnegative(),
+    unpaidInvoices: z.number().int().nonnegative(),
+    unfinishedItems: z.number().int().nonnegative(),
+    uncertainPayments: z.number().int().nonnegative(),
+    uncertainRefunds: z.number().int().nonnegative(),
+    openIncidents: z.number().int().nonnegative(),
+  }),
+})
+
 export const dailySalesCloseSchema = z.object({
   id: z.string(),
   businessDate: z.string(),
@@ -212,7 +226,7 @@ export function getDashboardReport(
   if (filters.to) q.set('to', filters.to)
   if (filters.granularity) q.set('granularity', filters.granularity)
   if (filters.topLimit) q.set('topLimit', String(filters.topLimit))
-  if (filters.lowStockThreshold)
+  if (filters.lowStockThreshold !== undefined)
     q.set('lowStockThreshold', String(filters.lowStockThreshold))
 
   const query = q.toString()
@@ -283,7 +297,7 @@ export async function downloadDashboardExcel(
   if (filters.to) q.set('to', filters.to)
   if (filters.granularity) q.set('granularity', filters.granularity)
   if (filters.topLimit) q.set('topLimit', String(filters.topLimit))
-  if (filters.lowStockThreshold)
+  if (filters.lowStockThreshold !== undefined)
     q.set('lowStockThreshold', String(filters.lowStockThreshold))
 
   const query = q.toString()

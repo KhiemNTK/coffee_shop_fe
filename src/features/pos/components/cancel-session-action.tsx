@@ -7,7 +7,14 @@ import type { Session } from '../../auth/session'
 import { cancelSession, type SessionDetail } from '../pos.api'
 import { posKeys } from '../pos.keys'
 import { errorMessage } from '../../../shared/api/client'
-import { Button, Dialog, DialogTitle, DialogDescription, DialogFooter } from '../../../shared/ui'
+import {
+  Button,
+  Dialog,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+  Input,
+} from '../../../shared/ui'
 
 export function CancelSessionAction({
   session,
@@ -18,11 +25,12 @@ export function CancelSessionAction({
 }) {
   const { t: translate } = useTranslation()
   const [open, setOpen] = useState(false)
+  const [reason, setReason] = useState('')
   const { employee, access } = useOutletContext<Session>()
   const client = useQueryClient()
   const navigate = useNavigate()
   const mutation = useMutation({
-    mutationFn: () => cancelSession(session.id),
+    mutationFn: () => cancelSession(session.id, reason),
     onSuccess: () => {
       void client.invalidateQueries({ queryKey: posKeys.tables(employee.id) })
       void client.invalidateQueries({ queryKey: posKeys.sessions(employee.id) })
@@ -40,7 +48,7 @@ export function CancelSessionAction({
     return null
   const blocked = session.orderItems.some(
     (item) =>
-      item.isPaid || item.invoiceId || ['COOKING', 'READY', 'SERVED'].includes(item.serveStatus),
+      item.isPaid || item.invoiceId || ['COOKING', 'READY', 'SERVED'].includes(item.serveStatus)
   )
   return (
     <>
@@ -65,6 +73,17 @@ export function CancelSessionAction({
       >
         <DialogTitle>{translate('pos.cancelSessionHeading')}</DialogTitle>
         <DialogDescription>{translate('pos.cancelSessionInfo')}</DialogDescription>
+        <label className="mt-3 block space-y-1 text-sm">
+          <span>{translate('pos.cancelSessionReason')}</span>
+          <Input
+            value={reason}
+            onChange={(event) => setReason(event.target.value)}
+            minLength={3}
+            maxLength={500}
+            required
+            disabled={mutation.isPending}
+          />
+        </label>
         {mutation.isError && (
           <p role="alert" className="text-sm text-destructive">
             {errorMessage(mutation.error)}
@@ -77,7 +96,10 @@ export function CancelSessionAction({
           <Button
             variant="destructive"
             isLoading={mutation.isPending}
-            onClick={() => mutation.mutate()}
+            disabled={mutation.isPending || reason.trim().length < 3}
+            onClick={() => {
+              if (!mutation.isPending && reason.trim().length >= 3) mutation.mutate()
+            }}
           >
             <Trash2 size={16} />
             {translate('pos.confirmCancelSession')}

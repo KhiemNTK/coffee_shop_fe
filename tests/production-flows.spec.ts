@@ -58,7 +58,7 @@ test('uncertain inventory post retains its key across reload and clears only on 
       const path = '/src/features/inventory/procurement.api.ts'
       const { postDocument } = await import(path)
       try {
-        await postDocument('purchase-receipts', 'receipt-test')
+        await postDocument('purchase-receipts', 'receipt-test', { expectedUpdatedAt: '2026-10-23T00:00:00.000Z' })
         return 'success'
       } catch (error) {
         return (error as { code?: string }).code
@@ -320,6 +320,7 @@ test('receipt posting confirms once and accepts the backend movement result', as
             {
               id: 'receipt-fixture',
               receiptNumber: 'PR-FIXTURE',
+              updatedAt: '2026-10-23T00:00:00.000Z',
               supplierId: 'supplier-fixture',
               totalAmount: '123.45',
               receivedAt: '2026-10-03T02:00:00.000Z',

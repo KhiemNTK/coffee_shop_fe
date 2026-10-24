@@ -1,4 +1,3 @@
-import { useState } from 'react'
 import { useOutletContext, useSearchParams } from 'react-router-dom'
 import { ClipboardList } from 'lucide-react'
 import type { Session } from '../auth/session'
@@ -19,10 +18,8 @@ export default function ReconciliationPage() {
   ].filter(Boolean) as string[]
 
   const currentTab = tabs.includes(params.get('tab') || '') ? params.get('tab')! : (tabs[0] ?? '')
-  const [tab, setTab] = useState(currentTab)
 
   const handleTabChange = (value: string) => {
-    setTab(value)
     setParams(prev => {
       const next = new URLSearchParams(prev)
       if (value === 'payments') next.delete('tab')
@@ -51,7 +48,7 @@ export default function ReconciliationPage() {
       </div>
 
       {/* Module Tabs Navigation */}
-      <Tabs value={tab} onValueChange={handleTabChange} className="space-y-5">
+      <Tabs value={currentTab} onValueChange={handleTabChange} className="space-y-5">
         <div className="border-b border-border/70 pb-3">
           <TabsList className="h-10 p-1 bg-muted/60 rounded-xl border border-border/60 gap-1">
             {tabs.includes('payments') && (

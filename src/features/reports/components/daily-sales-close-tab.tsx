@@ -1,7 +1,10 @@
 import { AlertTriangle, CalendarCheck, CheckCircle2, RefreshCw } from 'lucide-react'
-import { type DailySalesClose } from '../reports.api'
+import { dailyCloseBlockersSchema, type DailySalesClose } from '../reports.api'
+import { Link, useOutletContext } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
+import type { Session } from '../../auth/session'
 import { formatPrice } from '../../menu/menu.api'
-import { errorMessage } from '../../../shared/api/client'
+import { ApiError, errorMessage } from '../../../shared/api/client'
 import { formatDateTime } from '../../../shared/lib/format'
 import {
   Button,
@@ -51,6 +54,21 @@ export function DailySalesCloseTab({
   isCloseError,
   closeError,
 }: DailySalesCloseTabProps) {
+  const { t } = useTranslation()
+  const { access } = useOutletContext<Session>()
+  const blockers = dailyCloseBlockersSchema.safeParse(
+    closeError instanceof ApiError && closeError.code === 'DAILY_CLOSE_BLOCKED'
+      ? closeError.details
+      : undefined,
+  )
+  const blockerLinks = [
+    ['openShifts', '/staff/shifts', access.has('/cashier-shifts_read')],
+    ['unpaidInvoices', '/staff/invoices', access.has('/invoices_read')],
+    ['unfinishedItems', '/staff/kitchen', access.has('/kitchen-tickets_read')],
+    ['uncertainPayments', '/staff/invoices', access.has('/invoices_read')],
+    ['uncertainRefunds', '/staff/invoices', access.has('/invoices_read')],
+    ['openIncidents', '/staff/reconciliation', access.has('/payment-reconciliation_read')],
+  ] as const
   return (
     <div className="space-y-6">
       <Card>
@@ -180,8 +198,25 @@ export function DailySalesCloseTab({
             </DialogHeader>
 
             {isCloseError && (
-              <div className="rounded-md border border-destructive/20 bg-destructive/5 p-3 text-xs text-destructive">
-                {errorMessage(closeError)}
+              <div role="alert" className="space-y-2 rounded-md border border-destructive/20 bg-destructive/5 p-3 text-sm text-destructive">
+                <p>{errorMessage(closeError)}</p>
+                {blockers.success && (
+                  <ul className="list-inside list-disc space-y-2">
+                    {blockerLinks.map(([key, path, allowed]) =>
+                      blockers.data.blockers[key] > 0 ? (
+                        <li key={key}>
+                          {allowed ? (
+                            <Link to={path} className="underline underline-offset-2">
+                              {t(`finance.closeBlocker.${key}`)}: {blockers.data.blockers[key]}
+                            </Link>
+                          ) : (
+                            <span>{t(`finance.closeBlocker.${key}`)}: {blockers.data.blockers[key]}</span>
+                          )}
+                        </li>
+                      ) : null,
+                    )}
+                  </ul>
+                )}
               </div>
             )}
 

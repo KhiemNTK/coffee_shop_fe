@@ -205,6 +205,9 @@ test('a page render failure preserves staff navigation and resets on route chang
 })
 
 async function checkout(page: Page, settle = true) {
+  await page.route('**/api/v1/invoices/quote', (route) => route.fulfill({ json: envelope({
+    orderItemIds: [otherId], subTotal: '35000', discountAmount: '0', taxAmount: '0', totalAmount: '35000', quoteFingerprint: 'a'.repeat(64),
+  }) }))
   await page.route(`**/api/v1/orders/sessions/${id}`, (route) =>
     route.fulfill({
       json: envelope({
@@ -360,7 +363,8 @@ test('pre-check retries the same snapshot without creating an invoice or taking 
   const requests: Record<string, unknown>[] = []
   let settlements = 0
   page.on('request', (request) => {
-    if (request.method() === 'POST' && new URL(request.url()).pathname.startsWith('/api/v1/invoices')) settlements++
+    const path = new URL(request.url()).pathname
+    if (request.method() === 'POST' && path.startsWith('/api/v1/invoices') && path !== '/api/v1/invoices/quote') settlements++
   })
   await page.route('**/api/v1/printing/prechecks', (route) => {
     requests.push(route.request().postDataJSON())

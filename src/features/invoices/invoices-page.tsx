@@ -53,7 +53,7 @@ export default function InvoicesPage() {
     const kw = deferredSearchKeyword.trim().toLowerCase()
     return invoices.filter((inv) => (
       inv.invoiceNumber.toLowerCase().includes(kw) ||
-      inv.orderSession?.table?.name.toLowerCase().includes(kw) ||
+      (inv.documentSnapshot ? inv.documentSnapshot.tableName : inv.orderSession?.table?.name)?.toLowerCase().includes(kw) ||
       inv.employee?.fullName.toLowerCase().includes(kw)
     ))
   }, [invoices, deferredSearchKeyword])

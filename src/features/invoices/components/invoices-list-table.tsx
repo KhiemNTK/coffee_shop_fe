@@ -62,7 +62,7 @@ export function InvoicesListTable({ filters, setFilters, searchKeyword, setSearc
               if (event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); onSelectInvoice(invoice.id) }
             }}>
               <td className="whitespace-nowrap px-4 py-4 font-mono text-xs font-semibold text-primary">{invoice.invoiceNumber}</td>
-              <td className="px-4 py-4 font-medium">{invoice.orderSession?.table?.name ?? 'Mang đi / Quầy'}</td>
+              <td className="px-4 py-4 font-medium">{(invoice.documentSnapshot ? invoice.documentSnapshot.tableName : invoice.orderSession?.table?.name) ?? 'Mang đi / Quầy'}</td>
               <td className="whitespace-nowrap px-4 py-4 text-xs text-muted-foreground">{formatStoreDateTime(invoice.createdAt)}</td>
               <td className="px-4 py-4 text-xs text-muted-foreground">{invoice.employee?.fullName ?? 'Hệ thống'}</td>
               <td className="px-4 py-4"><PaymentMethodBadge method={invoice.paymentMethod} /></td>

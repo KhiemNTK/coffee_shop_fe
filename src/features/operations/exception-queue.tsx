@@ -15,6 +15,7 @@ import type { Session } from '../auth/session'
 import { closeIncident, resolveFeedback } from '../reconciliation/reconciliation.api'
 import { reconcilePaymentAttempt } from '../invoices/invoices.api'
 import { ApiError, errorMessage } from '@/shared/api/client'
+import { useRetryAfter } from '@/shared/api/use-retry-after'
 import { formatVnd } from '@/shared/lib/format'
 import { formatStoreDateTime } from '@/shared/lib/store-time'
 import {
@@ -27,6 +28,7 @@ import {
   TabsTrigger,
   TabsContent,
   AdminTable,
+  ApiErrorAlert,
 } from '@/shared/ui'
 import { Pagination } from '@/shared/ui/pagination'
 
@@ -86,7 +88,7 @@ export function ManagementExceptionsTab({ summary }: { summary?: ManagementExcep
         }
         return next
       },
-      { replace },
+      { replace }
     )
   }
   const action = useMutation({
@@ -147,7 +149,9 @@ export function ManagementExceptionsTab({ summary }: { summary?: ManagementExcep
       })
     },
   })
-  const blocked = action.isPending || action.isError || query.isFetching || query.isError
+  const retryWait = useRetryAfter(action.error ?? query.error)
+  const blocked =
+    retryWait > 0 || action.isPending || action.isError || query.isFetching || query.isError
   const close = () => {
     if (!action.isPending) {
       update({ exception: null }, true)
@@ -390,12 +394,10 @@ export function ManagementExceptionsTab({ summary }: { summary?: ManagementExcep
                 </dl>
                 {(action.isError || query.isError) && (
                   <div className="space-y-2">
-                    <p role="alert" className="text-destructive">
-                      {errorMessage(action.error ?? query.error)}
-                    </p>
+                    <ApiErrorAlert error={action.error ?? query.error} />
                     <Button
                       variant="outline"
-                      disabled={query.isFetching || action.isPending}
+                      disabled={retryWait > 0 || query.isFetching || action.isPending}
                       onClick={async () => {
                         const result = await query.refetch()
                         if (result.isSuccess) action.reset()
@@ -415,10 +417,10 @@ export function ManagementExceptionsTab({ summary }: { summary?: ManagementExcep
                     <OutboxRetryForm
                       key={selected.id + selected.availableAt}
                       pending={action.isPending}
-                      blocked={query.isFetching || query.isError}
+                      blocked={retryWait > 0 || query.isFetching || query.isError}
                       error={action.error}
                       onSubmit={(note) => {
-                        if (flight.current) return
+                        if (retryWait || flight.current) return
                         flight.current = true
                         setQueuedMessage('')
                         action.mutate({
@@ -452,7 +454,9 @@ export function ManagementExceptionsTab({ summary }: { summary?: ManagementExcep
                     isFeedback={kind === 'FEEDBACK'}
                     blocked={blocked}
                     pending={action.isPending}
-                    onSubmit={(command, note, customerReply) => action.mutate({ command, note, customerReply })}
+                    onSubmit={(command, note, customerReply) =>
+                      action.mutate({ command, note, customerReply })
+                    }
                   />
                 )}
                 {((kind === 'CASH_EXPENSE' && can('/cashier-shifts_expenses-review')) ||
@@ -539,10 +543,20 @@ function ResolutionForm({
           }}
         />
       </label>
-      {isFeedback && <label className="block text-sm">
-        {t('feedback.customerReply')}
-        <Input value={customerReply} maxLength={500} disabled={pending} onChange={event => { setCustomerReply(event.target.value); setConfirm(null) }} />
-      </label>}
+      {isFeedback && (
+        <label className="block text-sm">
+          {t('feedback.customerReply')}
+          <Input
+            value={customerReply}
+            maxLength={500}
+            disabled={pending}
+            onChange={(event) => {
+              setCustomerReply(event.target.value)
+              setConfirm(null)
+            }}
+          />
+        </label>
+      )}
       {confirm ? (
         <div className="space-y-2 border-t pt-3">
           <p>Xác nhận {confirm === 'IGNORE' ? 'bỏ qua' : 'đóng'} ngoại lệ này?</p>

@@ -7,14 +7,14 @@ import { Button } from '../../../shared/ui'
 import { formatVnd } from '../../../shared/lib/format'
 import { getOnlineJourney, getRecommendationExperiment } from '../online-business.api'
 
-export function OnlineBusinessTab({ from, to }: { from: string; to: string }) {
+export function OnlineBusinessTab({ from, to, onRefresh }: { from: string; to: string; onRefresh: () => void }) {
   const { employee } = useOutletContext<Session>()
   const journey = useQuery({ queryKey: ['private', employee.id, 'online-journey', from, to], queryFn: ({ signal }) => getOnlineJourney(from, to, signal) })
   const experiment = useQuery({ queryKey: ['private', employee.id, 'recommendation-experiment', from, to], queryFn: ({ signal }) => getRecommendationExperiment(from, to, signal) })
   const summary = journey.data?.summary
   return <section className="space-y-6" aria-label="Hiệu quả đơn online">
     <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="text-lg font-semibold">Hành trình đơn mang đi</h2>
-      <Button variant="outline" disabled={journey.isFetching || experiment.isFetching} onClick={() => { void journey.refetch(); void experiment.refetch() }}><RefreshCw size={16} />Làm mới số liệu</Button></div>
+      <Button variant="outline" disabled={journey.isFetching || experiment.isFetching} onClick={onRefresh}><RefreshCw size={16} />Làm mới số liệu</Button></div>
     {journey.isPending && <p role="status">Đang tải hành trình đơn…</p>}
     {journey.isError && <p role="alert">{errorMessage(journey.error)}</p>}
     {summary && !journey.isError && <>

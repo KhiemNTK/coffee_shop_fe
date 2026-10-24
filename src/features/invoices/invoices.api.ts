@@ -73,6 +73,27 @@ export const invoiceSchema = z.object({
     .nullable()
     .optional(),
   orderItems: z.array(invoiceItemSchema).default([]),
+  documentSnapshot: z
+    .object({
+      version: z.literal(1),
+      source: z.enum(['ISSUED', 'LEGACY_BACKFILL']),
+      tableId: z.string().nullable(),
+      tableName: z.string().nullable(),
+      issuedByName: z.string(),
+      promotionName: z.string().nullable(),
+      items: z.array(
+        z.object({
+          orderItemId: z.string(),
+          menuItemId: z.string(),
+          name: z.string(),
+          quantity: z.number().int().positive(),
+          unitPrice: moneySchema,
+          note: z.string().nullable(),
+          selectedOptions: selectedOptionsSchema,
+        })
+      ),
+    })
+    .nullish(),
 })
 
 export const invoicesResponseSchema = z.object({
@@ -183,8 +204,8 @@ export async function getInvoiceById(id: string, signal?: AbortSignal): Promise<
   return apiGet(`/invoices/${id}`, invoiceSchema, signal ?? new AbortController().signal, true)
 }
 
-export async function voidInvoice(id: string): Promise<Invoice> {
-  return apiMutate(`/invoices/${id}/void`, 'POST', invoiceSchema, {})
+export async function voidInvoice(id: string, reason: string): Promise<Invoice> {
+  return apiMutate(`/invoices/${id}/void`, 'POST', invoiceSchema, { reason: reason.trim() })
 }
 
 export async function updateInvoicePayment(
@@ -243,7 +264,12 @@ export function recoverPaymentLink(attemptId: string) {
 
 export async function createUnpaidInvoice(
   orderSessionId: string,
-  options: { orderItemIds?: string[]; promotionId?: string | null } = {}
+  options: {
+    orderItemIds?: string[]
+    promotionId?: string | null
+    quoteFingerprint?: string
+    expectedTotal?: string
+  } = {}
 ): Promise<Invoice> {
   return apiMutate('/invoices', 'POST', invoiceSchema, {
     orderSessionId,

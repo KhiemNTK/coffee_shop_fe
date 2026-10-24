@@ -7,6 +7,7 @@ import {
   TrendingUp,
   Wallet,
 } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import type { DashboardReport } from '../reports.api'
 import { formatPrice } from '../../menu/menu.api'
 import { formatQuantity } from '../../inventory/quantity'
@@ -32,72 +33,73 @@ export function FinancialOverviewTab({
   granularity,
   setGranularity,
 }: FinancialOverviewTabProps) {
+  const { t } = useTranslation()
   if (isError)
     return (
       <div role="alert" className="border-l-4 border-destructive p-5 text-sm">
         <p>{errorMessage(error)}</p>
         <Button variant="outline" onClick={onRefetch} className="mt-3">
-          Thử lại
+          {t('common.retry')}
         </Button>
       </div>
     )
   if (isLoading || !report)
     return (
       <p role="status" className="py-12 text-center text-sm text-muted-foreground">
-        Đang tổng hợp báo cáo tài chính...
+        {t('finance.loading')}
       </p>
     )
   const maxRevenue = Math.max(...report.trend.map((row) => Number(row.netRevenue)), 1)
   const paymentLabels: Record<string, string> = {
-    CASH: 'Tiền mặt',
-    CARD: 'Thẻ ngân hàng (POS)',
-    TRANSFER: 'Chuyển khoản / QR',
+    CASH: t('pos.cash'),
+    CARD: t('pos.card'),
+    TRANSFER: t('pos.bankTransfer'),
   }
   return (
     <div className="admin-finance space-y-5">
       <OperationsSummary
-        label="Tổng quan tài chính"
+        label={t('finance.overview')}
         variant="cards"
         metrics={[
           {
-            label: 'Thực thu thuần',
+            label: t('finance.netRevenue'),
             value: formatPrice(report.summary.netRevenue),
             icon: DollarSign,
-            note: 'Gộp: ' + formatPrice(report.summary.grossSales),
+            note: t('finance.grossSales', { amount: formatPrice(report.summary.grossSales) }),
           },
           {
-            label: 'Lợi nhuận gộp ước tính',
+            label: t('finance.grossProfit'),
             value: formatPrice(report.profitability.estimatedGrossProfit),
             icon: TrendingUp,
-            note: 'Sau trừ NVL & hao hụt',
+            note: t('finance.afterCosts'),
           },
           {
-            label: 'Số đơn đã TT',
+            label: t('finance.paidOrders'),
             value: report.summary.paidInvoiceCount,
             icon: Receipt,
-            note: 'Hóa đơn hoàn tất',
+            note: t('finance.completedInvoices'),
           },
           {
-            label: 'Giá trị đơn TB (AOV)',
+            label: t('finance.averageTicket'),
             value: formatPrice(report.summary.averageTicket),
             icon: CreditCard,
-            note: 'Trung bình / hóa đơn',
+            note: t('finance.perInvoice'),
           },
           {
-            label: 'Giá vốn NVL (COGS)',
+            label: t('finance.ingredientCost'),
             value: formatPrice(report.profitability.ingredientCost),
             icon: PackageX,
-            note: 'Hủy kho: ' + formatPrice(report.profitability.wasteCost),
+            note: t('finance.wasteCost', { amount: formatPrice(report.profitability.wasteCost) }),
           },
           {
-            label: 'Chênh lệch ca',
+            label: t('finance.shiftDiscrepancy'),
             value:
               Number(report.summary.cashShortageAmount) > 0
                 ? '-' + formatPrice(report.summary.cashShortageAmount)
                 : formatPrice('0'),
             icon: Wallet,
             tone: Number(report.summary.cashShortageAmount) > 0 ? 'danger' : undefined,
-            note: report.summary.discrepantShiftCount + ' ca phát sinh lệch',
+            note: t('finance.discrepantShifts', { count: report.summary.discrepantShiftCount }),
           },
         ]}
       />
@@ -105,17 +107,17 @@ export function FinancialOverviewTab({
         <section className="border-y border-border bg-card px-4 py-4">
           <h2 className="mb-4 flex items-center gap-2 text-base font-bold">
             <Wallet size={18} aria-hidden="true" />
-            Rủi ro kiểm soát tiền mặt
+            {t('finance.cashRisk')}
           </h2>
           <dl className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6 text-sm">
             {(
               [
-                ['Thiếu tiền đầu ca', report.cashRisk.overview.openingShortageAmount],
-                ['Chi tiền chờ duyệt', report.cashRisk.overview.currentPendingExpenseRequestAmount],
-                ['Bàn giao chờ duyệt', report.cashRisk.overview.currentPendingHandoverAmount],
-                ['Nộp ngân hàng quá hạn', report.cashRisk.overview.overdueBankSettlementAmount],
+                [t('finance.openingShortage'), report.cashRisk.overview.openingShortageAmount],
+                [t('finance.pendingExpenses'), report.cashRisk.overview.currentPendingExpenseRequestAmount],
+                [t('finance.pendingHandovers'), report.cashRisk.overview.currentPendingHandoverAmount],
+                [t('finance.overdueSettlements'), report.cashRisk.overview.overdueBankSettlementAmount],
                 [
-                  'Sao kê lệch chưa xử lý',
+                  t('finance.mismatchedStatements'),
                   report.cashRisk.overview.currentMismatchedBankStatementEntryAmount,
                 ],
               ] as const
@@ -133,7 +135,7 @@ export function FinancialOverviewTab({
               </div>
             ))}
             <div>
-              <dt className="text-xs text-muted-foreground">Nhân viên thiếu tiền lặp lại</dt>
+              <dt className="text-xs text-muted-foreground">{t('finance.repeatedShortages')}</dt>
               <dd className="mt-1 font-semibold">
                 {report.cashRisk.overview.repeatShortageEmployeeCount ?? '—'}
               </dd>
@@ -141,12 +143,12 @@ export function FinancialOverviewTab({
           </dl>
           {Boolean(report.cashRisk.employees?.length) && (
             <div className="mt-4">
-              <AdminTable label="Nhân viên thiếu tiền lặp lại">
+              <AdminTable label={t('finance.repeatedShortages')}>
                 <thead>
                   <tr>
-                    <th>Nhân viên</th>
-                    <th>Số ca thiếu</th>
-                    <th className="text-right">Tổng thiếu</th>
+                    <th>{t('common.staff')}</th>
+                    <th>{t('finance.shortageShifts')}</th>
+                    <th className="text-right">{t('finance.totalShortage')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -168,7 +170,7 @@ export function FinancialOverviewTab({
       <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1.65fr)_minmax(0,1fr)]">
         <section className="min-w-0 border-y border-border bg-card p-4">
           <header className="mb-5 flex flex-wrap items-center justify-between gap-3">
-            <h2 className="text-base font-bold">Biến động Doanh thu theo thời gian</h2>
+            <h2 className="text-base font-bold">{t('finance.revenueTrend')}</h2>
             <div className="flex rounded-md border border-border p-0.5">
               {(['day', 'hour'] as const).map((value) => (
                 <button
@@ -181,14 +183,14 @@ export function FinancialOverviewTab({
                     granularity === value ? 'bg-primary text-white' : 'hover:bg-muted',
                   )}
                 >
-                  {value === 'day' ? 'Ngày' : 'Giờ'}
+                  {t(value === 'day' ? 'finance.day' : 'finance.hour')}
                 </button>
               ))}
             </div>
           </header>
           {!report.trend.length ? (
             <p className="py-10 text-center text-sm text-muted-foreground">
-              Không có giao dịch trong khoảng thời gian này.
+              {t('finance.noTransactions')}
             </p>
           ) : (
             <>
@@ -207,14 +209,13 @@ export function FinancialOverviewTab({
                         ': ' +
                         formatPrice(row.netRevenue) +
                         ', ' +
-                        row.paidInvoiceCount +
-                        ' đơn'
+                        t('finance.orders', { count: row.paidInvoiceCount })
                       }
                     >
                       <div className="absolute bottom-full z-10 hidden max-w-56 rounded-md bg-foreground p-2 text-xs text-white shadow-sm group-hover:block group-focus:block">
                         {row.bucket}
                         <br />
-                        {formatPrice(row.netRevenue)} · {row.paidInvoiceCount} đơn
+                        {formatPrice(row.netRevenue)} · {t('finance.orders', { count: row.paidInvoiceCount })}
                       </div>
                       <div
                         className="w-full max-w-9 rounded-t bg-primary"
@@ -232,14 +233,14 @@ export function FinancialOverviewTab({
               </div>
               <details className="mt-4 text-sm">
                 <summary className="min-h-10 cursor-pointer text-primary">
-                  Chi tiết doanh thu
+                  {t('finance.revenueDetails')}
                 </summary>
-                <AdminTable label="Chi tiết doanh thu">
+                <AdminTable label={t('finance.revenueDetails')}>
                   <thead>
                     <tr>
-                      <th>Kỳ</th>
-                      <th>Số đơn</th>
-                      <th className="text-right">Thực thu thuần</th>
+                      <th>{t('finance.period')}</th>
+                      <th>{t('finance.orderCount')}</th>
+                      <th className="text-right">{t('finance.netRevenue')}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -257,10 +258,10 @@ export function FinancialOverviewTab({
           )}
         </section>
         <section className="min-w-0 border-y border-border bg-card p-4">
-          <h2 className="mb-5 text-base font-bold">Phương thức thanh toán</h2>
+          <h2 className="mb-5 text-base font-bold">{t('finance.paymentMethods')}</h2>
           {!report.paymentMethods.length && (
             <p className="py-10 text-center text-sm text-muted-foreground">
-              Chưa có giao dịch thanh toán trong kỳ.
+              {t('finance.noPayments')}
             </p>
           )}
           <div className="divide-y divide-border">
@@ -288,7 +289,7 @@ export function FinancialOverviewTab({
                     </span>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    {pm.paidInvoiceCount} giao dịch hoàn tất
+                    {t('finance.completedTransactions', { count: pm.paidInvoiceCount })}
                   </p>
                 </div>
               )
@@ -298,15 +299,15 @@ export function FinancialOverviewTab({
       </div>
       <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
         <section className="min-w-0">
-          <h2 className="mb-3 text-base font-bold">Top 10 Món bán chạy nhất</h2>
-          <AdminTable label="Món bán chạy">
+          <h2 className="mb-3 text-base font-bold">{t('finance.topItems')}</h2>
+          <AdminTable label={t('finance.bestSellers')}>
             <thead>
               <tr>
                 <th>#</th>
-                <th>Tên món</th>
-                <th>Danh mục</th>
-                <th className="text-right">Số lượng bán</th>
-                <th className="text-right">Tổng doanh thu</th>
+                <th>{t('finance.itemName')}</th>
+                <th>{t('finance.category')}</th>
+                <th className="text-right">{t('finance.quantitySold')}</th>
+                <th className="text-right">{t('finance.totalSales')}</th>
               </tr>
             </thead>
             <tbody>
@@ -326,7 +327,7 @@ export function FinancialOverviewTab({
               {!report.topItems.length && (
                 <tr>
                   <td colSpan={5} className="text-center text-muted-foreground">
-                    Chưa có dữ liệu bán hàng trong kỳ này.
+                    {t('finance.noSales')}
                   </td>
                 </tr>
               )}
@@ -336,13 +337,15 @@ export function FinancialOverviewTab({
         <section className="min-w-0">
           <h2 className="mb-3 flex items-center gap-2 text-base font-bold">
             <AlertTriangle size={18} aria-hidden="true" className="text-amber-700" />
-            Nguyên liệu chạm ngưỡng cảnh báo
+            {t('finance.lowStock')}
           </h2>
-          <AdminTable label="Nguyên liệu cảnh báo">
+          <AdminTable label={t('finance.stockAlerts')}>
             <thead>
               <tr>
-                <th>Nguyên liệu</th>
-                <th className="text-right">Tồn kho</th>
+                <th>{t('finance.ingredient')}</th>
+                <th className="text-right">{t('finance.stock')}</th>
+                <th className="text-right">{t('finance.reservedStock')}</th>
+                <th className="text-right">{t('finance.availableStock')}</th>
               </tr>
             </thead>
             <tbody>
@@ -350,16 +353,22 @@ export function FinancialOverviewTab({
                 <tr key={item.id}>
                   <td className="font-semibold">{item.name}</td>
                   <td className="text-right">
+                    {formatQuantity(item.stock)} {item.unitName}
+                  </td>
+                  <td className="text-right">
+                    {formatQuantity(item.reservedStock)} {item.unitName}
+                  </td>
+                  <td className="text-right">
                     <Badge variant="warning">
-                      {formatQuantity(item.stock)} {item.unitName}
+                      {formatQuantity(item.availableStock)} {item.unitName}
                     </Badge>
                   </td>
                 </tr>
               ))}
               {!report.lowStockItems.length && (
                 <tr>
-                  <td colSpan={2} className="text-center text-muted-foreground">
-                    Không có nguyên liệu trong danh sách cảnh báo.
+                  <td colSpan={4} className="text-center text-muted-foreground">
+                    {t('finance.noStockAlerts')}
                   </td>
                 </tr>
               )}

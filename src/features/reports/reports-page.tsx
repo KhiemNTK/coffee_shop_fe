@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useOutletContext } from 'react-router-dom'
 import {
@@ -20,6 +21,7 @@ import {
   getKitchenSlaReport,
 } from './reports.api'
 import { ApiError, errorMessage } from '../../shared/api/client'
+import { formatDateTime } from '../../shared/lib/format'
 import {
   Button,
   Tabs,
@@ -64,6 +66,7 @@ function getTodayDateString() {
 }
 
 export default function ReportsPage() {
+  const { t } = useTranslation()
   const { employee, access } = useOutletContext<Session>()
   const queryClient = useQueryClient()
 
@@ -166,6 +169,18 @@ export default function ReportsPage() {
     },
   })
 
+  function refreshReport() {
+    if (activeTab === 'daily-close') void dailyCloseQuery.refetch()
+    else setDateRange(getPresetDates(preset))
+  }
+
+  const refreshing =
+    activeTab === 'overview'
+      ? dashboardQuery.isFetching
+      : activeTab === 'kitchen'
+        ? kitchenSlaQuery.isFetching || kitchenBottlenecksQuery.isFetching
+        : activeTab === 'daily-close' && dailyCloseQuery.isFetching
+
   // Excel download handler
   async function handleExportExcel() {
     try {
@@ -196,8 +211,8 @@ export default function ReportsPage() {
     <div className="admin-page space-y-5">
       {/* Top Header */}
       <OperationsHeader
-        title="Báo cáo Doanh thu & Vận hành"
-        meta="Doanh thu · Giá vốn · Kiểm soát tiền mặt"
+        title={t('finance.title')}
+        meta={t('finance.meta')}
         actions={
           <>
             {/* Quick preset buttons */}
@@ -213,7 +228,7 @@ export default function ReportsPage() {
                     : 'text-muted-foreground hover:text-foreground',
                 )}
               >
-                Hôm nay
+                {t('finance.today')}
               </button>
               <button
                 type="button"
@@ -226,7 +241,7 @@ export default function ReportsPage() {
                     : 'text-muted-foreground hover:text-foreground',
                 )}
               >
-                7 ngày qua
+                {t('finance.last7Days')}
               </button>
               <button
                 type="button"
@@ -239,7 +254,7 @@ export default function ReportsPage() {
                     : 'text-muted-foreground hover:text-foreground',
                 )}
               >
-                30 ngày qua
+                {t('finance.last30Days')}
               </button>
               <button
                 type="button"
@@ -252,25 +267,21 @@ export default function ReportsPage() {
                     : 'text-muted-foreground hover:text-foreground',
                 )}
               >
-                Tháng này
+                {t('finance.thisMonth')}
               </button>
             </div>
 
             <Button
               variant="outline"
               size="sm"
-              onClick={() => {
-                void dashboardQuery.refetch()
-                void kitchenSlaQuery.refetch()
-                void kitchenBottlenecksQuery.refetch()
-              }}
-              disabled={dashboardQuery.isFetching}
+              onClick={refreshReport}
+              disabled={refreshing}
               className="min-h-10 gap-1.5"
-              title="Làm mới dữ liệu"
-              aria-label="Làm mới dữ liệu"
+              title={t('finance.refreshData')}
+              aria-label={t('finance.refreshData')}
             >
-              <RefreshCw className={cn('h-4 w-4', dashboardQuery.isFetching && 'animate-spin')} />
-              <span className="hidden sm:inline">Làm mới</span>
+              <RefreshCw className={cn('h-4 w-4', refreshing && 'animate-spin')} />
+              <span className="hidden sm:inline">{t('finance.refresh')}</span>
             </Button>
 
             {canExport && (
@@ -279,19 +290,28 @@ export default function ReportsPage() {
                 onClick={() => void handleExportExcel()}
                 disabled={isExporting}
                 className="min-h-10 gap-1.5"
-                title="Xuất bảng tính Excel đa trang"
+                title={t('finance.export')}
               >
                 {isExporting ? (
                   <RefreshCw className="h-4 w-4 animate-spin" />
                 ) : (
                   <FileSpreadsheet className="h-4 w-4" />
                 )}
-                {isExporting ? 'Đang xuất...' : 'Xuất Excel'}
+                {t(isExporting ? 'finance.exporting' : 'finance.export')}
               </Button>
             )}
           </>
         }
       />
+
+      {activeTab !== 'daily-close' && (
+        <p className="text-xs text-muted-foreground">
+          {t('finance.reportWindow', {
+            from: formatDateTime(dateRange.from),
+            to: formatDateTime(dateRange.to),
+          })}
+        </p>
+      )}
 
       {exportError && (
         <div
@@ -307,27 +327,27 @@ export default function ReportsPage() {
         <TabsList className="admin-tabs mb-4">
           <TabsTrigger value="overview" className="gap-2">
             <TrendingUp className="h-4 w-4" />
-            Tổng quan tài chính
+            {t('finance.overview')}
           </TabsTrigger>
           <TabsTrigger value="kitchen" className="gap-2">
             <ChefHat className="h-4 w-4" />
-            Vận hành Bếp & SLA
+            {t('finance.kitchen')}
           </TabsTrigger>
           <TabsTrigger value="daily-close" className="gap-2">
             <CalendarCheck className="h-4 w-4" />
-            Chốt sổ doanh thu ngày
+            {t('finance.dailyClose')}
           </TabsTrigger>
           <TabsTrigger value="online" className="gap-2">
             <TrendingUp className="h-4 w-4" />
-            Hiệu quả đơn online
+            {t('finance.online')}
           </TabsTrigger>
           <TabsTrigger value="feedback" className="gap-2">
             <Star className="h-4 w-4" />
-            Phản hồi khách
+            {t('finance.feedback')}
           </TabsTrigger>
           <TabsTrigger value="insights" className="gap-2 whitespace-normal">
             <Sparkles className="h-4 w-4 shrink-0" aria-hidden="true" />
-            Phân tích kinh doanh
+            {t('finance.insights')}
           </TabsTrigger>
         </TabsList>
         <BusinessInsightsTab
@@ -354,7 +374,7 @@ export default function ReportsPage() {
             isLoading={dashboardQuery.isPending}
             isError={dashboardQuery.isError}
             error={dashboardQuery.error}
-            onRefetch={() => void dashboardQuery.refetch()}
+            onRefetch={refreshReport}
             granularity={granularity}
             setGranularity={setGranularity}
           />
@@ -363,6 +383,7 @@ export default function ReportsPage() {
         {/* TAB 2: KITCHEN SLA & BOTTLENECKS */}
         <TabsContent value="kitchen">
           <KitchenOperationsTab
+            key={`${dateRange.from}:${dateRange.to}`}
             slaStations={kitchenSlaQuery.data?.stations}
             isSlaPending={kitchenSlaQuery.isPending}
             isSlaError={kitchenSlaQuery.isError}
@@ -375,7 +396,7 @@ export default function ReportsPage() {
                     400,
                     undefined,
                     undefined,
-                    'Báo cáo nghẽn bếp chỉ hỗ trợ tối đa 7 ngày. Chọn khoảng thời gian ngắn hơn.',
+                    t('finance.kitchenRange'),
                   )
                 : kitchenBottlenecksQuery.error
             }
@@ -384,7 +405,7 @@ export default function ReportsPage() {
 
         {/* TAB 3: DAILY SALES CLOSE */}
         <TabsContent value="online">
-          <OnlineBusinessTab from={dateRange.from} to={dateRange.to} />
+          <OnlineBusinessTab from={dateRange.from} to={dateRange.to} onRefresh={refreshReport} />
         </TabsContent>
 
         {/* TAB 3: DAILY SALES CLOSE */}

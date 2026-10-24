@@ -185,15 +185,22 @@ export async function transferTable(
   })
 }
 
-export type CheckoutInput = {
-  orderSessionId: string
-  orderItemIds?: string[]
-  promotionId?: string | null
-  paymentMethod?: 'CASH' | 'CARD'
-  amountTendered?: string
-  closeSessionAfterPayment?: boolean
-  idempotencyKey?: string
-}
+export const checkoutInputSchema = z.object({
+  orderSessionId: z.string(),
+  orderItemIds: z.array(z.string()).optional(),
+  promotionId: z.string().nullable().optional(),
+  paymentMethod: z.enum(['CASH', 'CARD']).optional(),
+  amountTendered: moneySchema.optional(),
+  closeSessionAfterPayment: z.boolean().optional(),
+  idempotencyKey: z.uuid().optional(),
+  quoteFingerprint: z
+    .string()
+    .regex(/^[a-f0-9]{64}$/)
+    .optional(),
+  expectedTotal: moneySchema.optional(),
+})
+
+export type CheckoutInput = z.infer<typeof checkoutInputSchema>
 
 export async function checkoutInvoice(input: CheckoutInput): Promise<Invoice> {
   return apiIdempotentMutate('/invoices/checkout', invoiceSchema, {
@@ -204,6 +211,8 @@ export async function checkoutInvoice(input: CheckoutInput): Promise<Invoice> {
     amountTendered: input.amountTendered?.trim() || undefined,
     closeSessionAfterPayment: input.closeSessionAfterPayment ?? true,
     idempotencyKey: input.idempotencyKey,
+    quoteFingerprint: input.quoteFingerprint,
+    expectedTotal: input.expectedTotal,
   })
 }
 
@@ -219,13 +228,14 @@ export function quoteInvoice(
       discountAmount: moneySchema,
       taxAmount: moneySchema,
       totalAmount: moneySchema,
+      quoteFingerprint: z.string().regex(/^[a-f0-9]{64}$/),
     }),
     input
   )
 }
 
-export function cancelSession(id: string) {
-  return apiMutate(`/orders/sessions/${id}`, 'DELETE', z.unknown())
+export function cancelSession(id: string, reason: string) {
+  return apiMutate(`/orders/sessions/${id}`, 'DELETE', z.unknown(), { reason: reason.trim() })
 }
 
 export function completeSession(id: string) {

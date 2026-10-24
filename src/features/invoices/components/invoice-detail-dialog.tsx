@@ -58,6 +58,7 @@ export function InvoiceDetailDialog({ invoiceId, onClose, onUpdated }: InvoiceDe
   const [amountTendered, setAmountTendered] = useState('')
   const [actionError, setActionError] = useState<string | null>(null)
   const [voidConfirmOpen, setVoidConfirmOpen] = useState(false)
+  const [voidReason, setVoidReason] = useState('')
   const [submittedManual, setSubmittedManual] = useState<UpdateInvoicePaymentPayload | null>(null)
   const manualFlight = useRef(false)
   const voidFlight = useRef(false)
@@ -126,7 +127,7 @@ export function InvoiceDetailDialog({ invoiceId, onClose, onUpdated }: InvoiceDe
   })
 
   const voidMutation = useMutation({
-    mutationFn: () => voidInvoice(invoiceId),
+    mutationFn: () => voidInvoice(invoiceId, voidReason),
     onSuccess: () => {
       setVoidConfirmOpen(false)
       void invoiceQuery.refetch()
@@ -143,6 +144,18 @@ export function InvoiceDetailDialog({ invoiceId, onClose, onUpdated }: InvoiceDe
   })
 
   const inv = invoiceQuery.data
+  const operationalItems = new Map(inv?.orderItems.map((item) => [item.id, item]))
+  const documentItems = inv?.documentSnapshot
+    ? inv.documentSnapshot.items.map((item) => ({
+        id: item.orderItemId,
+        quantity: item.quantity,
+        priceAtTime: item.unitPrice,
+        menuItem: { name: item.name },
+        note: item.note,
+        selectedOptions: item.selectedOptions,
+        originalRemake: operationalItems.get(item.orderItemId)?.originalRemake,
+      }))
+    : inv?.orderItems ?? []
   const unresolvedOnline =
     attemptsQuery.data?.list.some((attempt) => isUnresolvedPayment(attempt.status)) ?? false
   const paymentLocked =
@@ -266,7 +279,7 @@ export function InvoiceDetailDialog({ invoiceId, onClose, onUpdated }: InvoiceDe
                 {inv && <PaymentStatusBadge status={inv.paymentStatus} />}
               </div>
               <p className="text-xs text-muted-foreground">
-                Bàn: <strong>{inv?.orderSession?.table?.name ?? 'Mang đi'}</strong> · Thu ngân:{' '}
+                Bàn: <strong>{(inv?.documentSnapshot ? inv.documentSnapshot.tableName : inv?.orderSession?.table?.name) ?? 'Mang đi'}</strong> · Thu ngân:{' '}
                 {inv?.employee?.fullName ?? 'Hệ thống'}
               </p>
               {inv && (
@@ -301,7 +314,7 @@ export function InvoiceDetailDialog({ invoiceId, onClose, onUpdated }: InvoiceDe
                 : 'border-transparent text-muted-foreground hover:text-foreground'
             )}
           >
-            Chi tiết món ({inv?.orderItems.length ?? 0})
+            Chi tiết món ({documentItems.length})
           </button>
           {inv &&
             canAftersales &&
@@ -430,6 +443,9 @@ export function InvoiceDetailDialog({ invoiceId, onClose, onUpdated }: InvoiceDe
 
           {inv && activeTab === 'items' && (
             <div className="space-y-6">
+              {inv.documentSnapshot?.source === 'LEGACY_BACKFILL' && (
+                <p role="status" className="text-sm text-muted-foreground">{translate(documentItems.length ? 'invoice.legacySnapshot' : 'invoice.legacyItemsUnavailable')}</p>
+              )}
               {/* Order items list */}
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[320px] text-left text-xs border-collapse">
@@ -442,7 +458,7 @@ export function InvoiceDetailDialog({ invoiceId, onClose, onUpdated }: InvoiceDe
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border/60">
-                    {inv.orderItems.map((it) => (
+                    {documentItems.map((it) => (
                       <tr key={it.id}>
                         <td className="py-2.5 px-3 font-semibold text-foreground">
                           {it.menuItem?.name ?? 'Món'}
@@ -695,6 +711,10 @@ export function InvoiceDetailDialog({ invoiceId, onClose, onUpdated }: InvoiceDe
             Hóa đơn #{inv?.invoiceNumber} chưa được thanh toán sẽ chuyển sang trạng thái ĐÃ HỦY.
             Hành động này không thể hoàn tác.
           </p>
+          <label className="block space-y-1 text-sm">
+            <span>{translate('invoice.voidReason')}</span>
+            <Input value={voidReason} onChange={(event) => setVoidReason(event.target.value)} minLength={3} maxLength={500} required disabled={voidMutation.isPending} />
+          </label>
           <div className="flex items-center justify-end gap-2.5 pt-2">
             <Button
               type="button"
@@ -709,12 +729,13 @@ export function InvoiceDetailDialog({ invoiceId, onClose, onUpdated }: InvoiceDe
               type="button"
               variant="destructive"
               size="sm"
-              disabled={manualBlocked || inv?.paymentStatus !== 'UNPAID'}
+              disabled={manualBlocked || inv?.paymentStatus !== 'UNPAID' || voidReason.trim().length < 3}
               onClick={() => {
                 if (
                   voidFlight.current ||
                   manualFlight.current ||
                   manualBlocked ||
+                  voidReason.trim().length < 3 ||
                   inv?.paymentStatus !== 'UNPAID'
                 )
                   return
