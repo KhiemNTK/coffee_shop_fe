@@ -13,9 +13,9 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  verify:
+  quality:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -26,22 +26,71 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - run: pnpm audit --prod --audit-level high
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm build
-      - run: pnpm exec playwright install --with-deps chromium
-      - run: pnpm test:e2e --workers=2
-      - run: pnpm test:google --workers=2
-      - uses: actions/upload-artifact@v4
-        if: failure()
+
+  browser:
+    needs: quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    env:
+      PLAYWRIGHT_HTML_OPEN: never
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
         with:
-          name: browser-failures
+          version: 9.15.9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm test:e2e --shard=${{ matrix.shard }}/4 --workers=1 --reporter=line,html
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: browser-shard-${{ matrix.shard }}
           path: |
             test-results/fixtures/
+            playwright-report/
+          retention-days: 7
+
+  google:
+    needs: quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PLAYWRIGHT_HTML_OPEN: never
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm test:google --workers=1 --reporter=line,html
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: google-browser-report
+          path: |
             test-results/google/
+            playwright-report/
           retention-days: 7
 
   integration:
+    needs: quality
     runs-on: ubuntu-latest
     timeout-minutes: 20
     defaults:
@@ -108,3 +157,16 @@ jobs:
           name: real-backend-browser-failures
           path: coffee_shop_fe/test-results/backend/
           retention-days: 3
+
+  verify:
+    if: ${{ !cancelled() }}
+    needs: [quality, browser, google, integration]
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Require every quality gate
+        run: |
+          test "${{ needs.quality.result }}" = success
+          test "${{ needs.browser.result }}" = success
+          test "${{ needs.google.result }}" = success
+          test "${{ needs.integration.result }}" = success

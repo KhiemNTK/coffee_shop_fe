@@ -1139,7 +1139,7 @@ test.describe('real Docker backend contract', () => {
       const codes: number[] = []
       for (const command of [
         () => updateInvoicePayment(id, { paymentStatus: 'PAID', paymentMethod: 'CASH', amountTendered: '50000' }),
-        () => voidInvoice(id),
+        () => voidInvoice(id, 'Reconciliation review blocks invoice voiding'),
         () => createPaymentAttempt(id, { provider: 'VNPAY', locale: 'vn', closeSessionAfterPayment: true }),
       ]) {
         try { await command(); codes.push(200) } catch (error) { codes.push(error instanceof ApiError ? error.status : 0) }

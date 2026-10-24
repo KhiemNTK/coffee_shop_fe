@@ -275,11 +275,11 @@ test('sign in, view protected menu, logout with CSRF, no tokens in storage', asy
     return route.fulfill({ json: envelope({ message: 'Logout success!' }) })
   })
   await page.goto('/sign-in')
-  await fillLogin(page)
   await page.screenshot({
     path: info.outputPath('sign-in.png'),
     fullPage: true,
   })
+  await fillLogin(page)
   await page.getByRole('button', { name: 'Đăng nhập', exact: true }).click()
   await expect(
     page.getByRole('heading', { name: employee.fullName }),

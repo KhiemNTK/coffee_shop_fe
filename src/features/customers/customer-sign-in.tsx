@@ -3,11 +3,13 @@ import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useQueryClient } from '@tanstack/react-query'
 import { z } from 'zod'
-import { ArrowRight, LogOut, ShieldCheck } from 'lucide-react'
+import { ArrowRight, Heart, LogOut, UserRound } from 'lucide-react'
 import { authConfig } from '../auth/auth.config'
 import { GoogleButton } from '../auth/google-button'
 import { Turnstile } from '../auth/turnstile'
 import { SiteHeader } from '../../shared/components/site-header'
+import { SignInScene } from '../auth/sign-in-scene'
+import { buttonVariants } from '../../shared/ui/button-variants'
 import { Button } from '../../shared/ui'
 import { ApiError, errorMessage } from '../../shared/api/client'
 import {
@@ -19,9 +21,11 @@ import {
 } from './customers.api'
 
 const intentSchema = z.object({
-  returnTo: z.string().regex(
-    /^\/(?:[?#].*|(?:menu|wishlist|cart|account|order|reservations|pickup|reorder)(?:[/?#].*)?)?$/,
-  ),
+  returnTo: z
+    .string()
+    .regex(
+      /^\/(?:[?#].*|(?:menu|wishlist|cart|account|order|reservations|pickup|reorder)(?:[/?#].*)?)?$/
+    ),
   favoriteItemId: z.uuid().optional(),
 })
 
@@ -123,11 +127,16 @@ export function CustomerSignIn({ returnTo = '/account' }: { returnTo?: string })
 
   return (
     <section
-      className="mx-auto w-full max-w-md space-y-5 py-6"
+      className="customer-sign-in mx-auto w-full max-w-md space-y-5 py-6"
       aria-label={t('wishlist.customerSignIn')}
     >
-      <ShieldCheck className="h-8 w-8 text-primary" aria-hidden="true" />
-      <h2 className="text-xl font-semibold">{t('wishlist.customerSignIn')}</h2>
+      <div className="flex items-center gap-3">
+        <span className="sign-in-form__icon">
+          <Heart size={21} aria-hidden="true" />
+        </span>
+        <p className="text-xs font-semibold text-muted-foreground">{t('auth.customerHeading')}</p>
+      </div>
+      <h2 className="text-2xl font-bold">{t('wishlist.customerSignIn')}</h2>
       <p className="text-sm leading-relaxed text-muted-foreground">
         {t('customer.signInDescription')}
       </p>
@@ -148,8 +157,11 @@ export function CustomerSignIn({ returnTo = '/account' }: { returnTo?: string })
           {t('common.retry')}
         </Button>
       ) : customer.data ? (
-        <div className="space-y-3">
-          <p className="break-all text-sm">{customer.data.email}</p>
+        <div className="space-y-4">
+          <div className="flex items-center gap-3 border-y border-border py-4">
+            <UserRound size={20} className="shrink-0 text-muted-foreground" aria-hidden="true" />
+            <p className="min-w-0 break-all text-sm font-medium">{customer.data.email}</p>
+          </div>
           <div className="flex flex-wrap gap-3">
             <Button
               isLoading={pending}
@@ -171,7 +183,10 @@ export function CustomerSignIn({ returnTo = '/account' }: { returnTo?: string })
           </div>
         </div>
       ) : !authConfig.googleClientId || configMissing ? (
-        <p role="status" className="border-l-2 border-border pl-3 text-sm text-muted-foreground">
+        <p
+          role="status"
+          className="rounded-lg border border-border bg-surface-muted p-4 text-sm leading-relaxed text-muted-foreground"
+        >
           {t('customer.loginUnavailable')}
         </p>
       ) : (
@@ -200,11 +215,18 @@ export function CustomerSignIn({ returnTo = '/account' }: { returnTo?: string })
           )}
         </div>
       )}
-      <div className="flex flex-wrap gap-x-5 gap-y-3 border-t border-border pt-4 text-sm">
-        <Link to="/menu" className="font-medium text-primary underline">
+      <div className="flex flex-col items-center gap-3 border-t border-border pt-5 text-sm">
+        <Link
+          to="/menu"
+          className={buttonVariants({ variant: 'outline', className: 'min-h-11 w-full gap-2' })}
+        >
           {t('customer.continueGuest')}
+          <ArrowRight size={16} aria-hidden="true" />
         </Link>
-        <Link to="/sign-in" className="text-muted-foreground underline">
+        <Link
+          to="/sign-in"
+          className="inline-flex min-h-11 items-center text-sm text-foreground underline-offset-4 hover:underline"
+        >
           {t('customer.staffPortal')}
         </Link>
       </div>
@@ -215,12 +237,9 @@ export function CustomerSignIn({ returnTo = '/account' }: { returnTo?: string })
 export default function CustomerSignInPage() {
   const { t } = useTranslation()
   return (
-    <div className="min-h-screen bg-background">
-      <SiteHeader />
-      <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6">
-        <h1 className="sr-only">{t('wishlist.customerSignIn')}</h1>
-        <CustomerSignIn />
-      </main>
-    </div>
+    <SignInScene header={<SiteHeader />}>
+      <h1 className="sr-only">{t('wishlist.customerSignIn')}</h1>
+      <CustomerSignIn />
+    </SignInScene>
   )
 }

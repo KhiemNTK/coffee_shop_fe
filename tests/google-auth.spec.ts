@@ -71,7 +71,7 @@ async function staff(context: BrowserContext, linked = false) {
 test('Google login waits for CAPTCHA, submits once and never persists credentials', async ({
   page,
   context,
-}, info) => {
+}) => {
   await staff(context)
   let calls = 0
   await context.route('**/api/v1/auth/google', async (route) => {
@@ -94,10 +94,7 @@ test('Google login waits for CAPTCHA, submits once and never persists credential
   await page.getByRole('button', { name: 'Verify fixture' }).click()
   const button = page.getByRole('button', { name: 'Google fixture' })
   await expect(button).toBeVisible()
-  await page.screenshot({
-    path: info.outputPath('google-login.png'),
-    fullPage: true,
-  })
+  // Provider layout tests take screenshots; viewport changes can reset CAPTCHA.
   await button.evaluate((node) => {
     if (!(node instanceof HTMLButtonElement)) throw new Error('Expected button')
     node.click()

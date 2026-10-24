@@ -176,6 +176,15 @@ the backend revision required by this slice are recorded in [PRODUCTION-ROADMAP.
 Google SDK fixtures run separately with `pnpm test:google`, also enforced by CI.
 This gate never uses a real Google account; see [auth and notification acceptance](docs/AUTH-NOTIFICATION-ACCEPTANCE.md) for provider configuration and external verification.
 
+CI runs lint, typecheck, build and the production dependency audit first. Fixture
+tests run on four independent shards with one worker each; Google fixtures and
+the real-backend contract have separate jobs. The final `verify` check requires
+all jobs to succeed, preserving the required-check name used by branch protection.
+Each browser job uploads its HTML report and available traces/screenshots.
+Run one shard locally with `pnpm test:e2e --shard=1/4 --workers=1`, changing the
+index through `4/4` to cover the suite. Do not combine the Google suite with a
+fixture runner on the same port.
+
 ## API Contract
 
 - `GET /api/v1/menu/public/categories`: envelope `data` contains `{id, name}[]`.

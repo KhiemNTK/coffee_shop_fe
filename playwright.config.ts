@@ -5,7 +5,7 @@ export default defineConfig({
   outputDir: './test-results/fixtures',
   testIgnore: ['**/live-backend.spec.ts', '**/google-auth.spec.ts', '**/customer-google.spec.ts'],
   fullyParallel: true,
-  workers: process.env.CI ? 2 : undefined,
+  workers: 1,
   tsconfig: './tsconfig.app.json',
   forbidOnly: Boolean(process.env.CI),
   retries: 0,
