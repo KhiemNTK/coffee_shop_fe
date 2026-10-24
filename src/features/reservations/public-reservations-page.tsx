@@ -525,12 +525,11 @@ export function PublicReservationsPage() {
           <div className="rounded-[18px] border border-border/80 bg-card overflow-hidden shadow-xs">
             <div className="relative h-60 sm:h-72 w-full overflow-hidden bg-primary/20">
               <img
-                src="/hero-coffee.jpg"
+                src="/hero-coffee-640.webp"
+                srcSet="/hero-coffee-640.webp 640w, /hero-coffee.webp 1376w"
+                sizes="(min-width: 1024px) 50vw, 100vw"
                 alt="Không gian Coffee Homes"
                 className="h-full w-full object-cover"
-                onError={(e) => {
-                  e.currentTarget.src = '/menu-cover.jpg'
-                }}
               />
               <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/40 to-transparent" />
               <div className="absolute bottom-4 left-4 right-4 text-white">

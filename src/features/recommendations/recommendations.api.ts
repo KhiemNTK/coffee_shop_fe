@@ -14,9 +14,9 @@ const onlineRecommendationsSchema = posRecommendationsResponseSchema.extend({
   variant: z.enum(['CONTROL', 'TREATMENT']),
 }).refine(result => result.variant !== 'CONTROL' || result.recommendations.length === 0)
 
-export function getOnlineRecommendations(clientRequestId: string, menuItemIds: string[]) {
+export function getOnlineRecommendations(clientRequestId: string, menuItemIds: string[], signal?: AbortSignal) {
   return apiMutate('/recommendations/online', 'POST', onlineRecommendationsSchema,
-    { clientRequestId, menuItemIds }, undefined, false)
+    { clientRequestId, menuItemIds }, signal, false)
 }
 
 export async function getPosRecommendations(

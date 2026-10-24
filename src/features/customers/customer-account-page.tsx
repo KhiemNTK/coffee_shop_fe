@@ -146,6 +146,7 @@ export default function CustomerAccountPage() {
                   <OrderStatusBadge
                     status={detail.data.status}
                     fulfillmentStatus={detail.data.fulfillmentStatus}
+                    waitingForPreparation={detail.data.orderItems.length > 0 && detail.data.orderItems.every(item => item.serveStatus === 'PENDING')}
                   />
                 </div>
                 {detail.data.pickupAt && (

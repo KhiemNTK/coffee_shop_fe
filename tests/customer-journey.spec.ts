@@ -72,9 +72,10 @@ async function setup(page: Page, context: BrowserContext, signedIn = true) {
       state.customerId = ''
       return route.fulfill({ json: envelope({ success: true }) })
     }
-    if (path === '/customers/orders' && request.method() === 'POST') {
+    if ((path === '/customers/orders' || path === '/customers/orders/recover') && request.method() === 'POST') {
       const payload = request.postDataJSON()
       state.posts.push(payload)
+      if (path.endsWith('/recover')) expect(payload.turnstileToken).toBeUndefined()
       expect(request.headers()['x-csrf-token']).toBe('customer-csrf')
       if (payload.expectedCustomerId !== state.customerId)
         return route.fulfill({ status: 409, json: { code: 'CUSTOMER_SESSION_CHANGED' } })
@@ -253,7 +254,7 @@ test('signed-in checkout retains its customer and request key across an uncertai
   await openCart(page)
   await page.screenshot({ path: info.outputPath('customer-checkout.png'), fullPage: true })
   await page.getByRole('button', { name: 'Gửi đơn mang đi', exact: true }).click()
-  await page.getByRole('button', { name: 'Gửi lại đơn', exact: true }).click()
+  await page.getByRole('button', { name: 'Kiểm tra lại đơn đã gửi', exact: true }).click()
   await expect(page).toHaveURL(new RegExp(`/account/orders/${orderId}$`))
   expect(
     await page.evaluate(() => JSON.stringify({ ...localStorage, ...sessionStorage })),

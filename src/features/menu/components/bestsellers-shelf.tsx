@@ -1,4 +1,5 @@
 import type { MenuItem } from '../menu.api'
+import { useTranslation } from 'react-i18next'
 import { MenuCard } from './menu-card'
 
 export function BestsellersShelf({
@@ -8,6 +9,7 @@ export function BestsellersShelf({
   items: MenuItem[]
   onSelect: (item: MenuItem) => void
 }) {
+  const { t } = useTranslation()
   if (items.length === 0) return null
 
   return (
@@ -16,17 +18,17 @@ export function BestsellersShelf({
         <div className="flex items-baseline justify-between mb-2">
           <div>
             <h2 className="text-xl sm:text-2xl font-extrabold text-foreground">
-              Gợi ý nổi bật
+              {t('storefront.highlights')}
             </h2>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Những món đặc sắc được chuẩn bị bởi Coffee Homes
+              {t('storefront.highlightDescription')}
             </p>
           </div>
           <a
             href="#menu"
             className="text-xs sm:text-sm font-bold text-primary hover:underline flex items-center gap-1"
           >
-            <span>Xem tất cả</span>
+            <span>{t('storefront.viewAll')}</span>
             <span>&rarr;</span>
           </a>
         </div>

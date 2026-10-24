@@ -41,7 +41,7 @@ export function MenuCatalogSidebar({
         {/* Category Filter list */}
         <div>
           <span className="text-xs font-extrabold uppercase tracking-wider text-muted-foreground px-1 block mb-2">
-            Danh mục món
+            {translate('menu.categoryNav')}
           </span>
 
           <nav className="space-y-1" aria-label={translate('menu.categoryNav')}>
@@ -59,7 +59,7 @@ export function MenuCatalogSidebar({
             >
               <div className="flex items-center gap-2.5">
                 <LayoutGrid className="h-4 w-4 shrink-0" />
-                <span>Tất cả</span>
+                <span>{translate('common.all')}</span>
               </div>
               {totalItems !== undefined && !activeCategoryId && (
                 <span className="text-[11px] opacity-80">({totalItems})</span>

@@ -17,9 +17,11 @@ test.beforeEach(async ({ context }) => {
         body: `window.turnstile = {
       render(element, options) {
         const id = crypto.randomUUID(); element.dataset.widget = id;
-        element.style.width = '150px'; element.style.height = '140px';
+        const frame = document.createElement('div'); frame.dataset.testid = 'turnstile-widget';
+        frame.style.width = (options.size === 'compact' ? 150 : 300) + 'px';
+        frame.style.height = (options.size === 'compact' ? 140 : 65) + 'px'; frame.style.flexShrink = '0';
         const button = document.createElement('button'); button.type = 'button'; button.textContent = 'Verify fixture';
-        button.onclick = () => options.callback('captcha-fixture'); element.append(button);
+        button.onclick = () => options.callback('captcha-fixture'); frame.append(button); element.append(frame);
         window.expireFixture = options['expired-callback']; return id;
       }, remove(id) { document.querySelector('[data-widget="' + id + '"]')?.replaceChildren(); }
     };`,
@@ -407,6 +409,10 @@ test('provider widgets fit a 320px viewport without overlapping', async ({
     page.getByRole('button', { name: 'Google fixture' }),
   ).toBeVisible()
   await page.setViewportSize({ width: 320, height: 740 })
+  await expect(page.getByTestId('turnstile-widget')).toHaveCSS('width', '150px')
+  // Resizing replaces the widget and deliberately invalidates its previous token.
+  await page.getByRole('button', { name: 'Verify fixture' }).click()
+  await expect(page.getByRole('button', { name: 'Google fixture' })).toBeVisible()
   expect(
     await page.evaluate(
       () => document.documentElement.scrollWidth <= innerWidth,

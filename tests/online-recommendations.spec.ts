@@ -185,11 +185,55 @@ test('offer failure does not block ordering or trigger automatic retries', async
   expect(offers).toBe(1)
 })
 
-test('uncertain response freezes checkout and explicitly retries the identical payload', async ({
+test('a slow offer does not delay review or submission', async ({ page }) => {
+  let release!: () => void
+  const pending = new Promise<void>(resolve => { release = resolve })
+  let assignment: Record<string, unknown> | undefined
+  let order: Record<string, unknown> | undefined
+  await page.route('**/api/v1/recommendations/online', async route => {
+    assignment = route.request().postDataJSON()
+    await pending
+    await route.fulfill({ json: envelope({ variant: 'CONTROL', recommendations: [] }) }).catch(() => {})
+  })
+  await page.route('**/api/v1/online-orders/requests', route => {
+    order = route.request().postDataJSON()
+    return route.fulfill({ json: envelope(created) })
+  })
+  try {
+    await openCheckout(page)
+    await page.getByRole('button', { name: 'Xem lại đơn', exact: true }).click()
+    await expect(page.getByRole('heading', { name: 'Xem lại đơn', exact: true })).toBeVisible()
+    await expect.poll(() => assignment?.clientRequestId).toBeTruthy()
+    await page.getByRole('button', { name: 'Gửi đơn mang đi', exact: true }).click()
+    await expect.poll(() => order?.clientRequestId).toBe(assignment!.clientRequestId)
+  } finally {
+    release()
+  }
+})
+
+test('a rejected order does not automatically retry a failed offer', async ({ page }) => {
+  let offers = 0
+  await page.route('**/api/v1/recommendations/online', route => {
+    offers++
+    return route.fulfill({ status: 503, json: {} })
+  })
+  await page.route('**/api/v1/online-orders/requests', route =>
+    route.fulfill({ status: 409, json: { message: 'Rejected fixture' } }))
+  await openCheckout(page)
+  await page.getByRole('button', { name: 'Xem lại đơn', exact: true }).click()
+  await expect(page.getByRole('status').filter({ hasText: 'Gợi ý tạm thời' })).toBeVisible()
+  await page.getByRole('button', { name: 'Gửi đơn mang đi', exact: true }).click()
+  await expect(page.getByRole('alert')).toContainText('Rejected fixture')
+  await expect(page.getByRole('button', { name: 'Chỉnh sửa đơn', exact: true })).toBeEnabled()
+  expect(offers).toBe(1)
+})
+
+test('uncertain response freezes checkout and recovers the identical saved request', async ({
   page,
 }) => {
   const orders: Record<string, unknown>[] = []
   let offers = 0
+  const recoveries: Record<string, unknown>[] = []
   await page.route('**/api/v1/recommendations/online', (route) => {
     offers++
     return route.fulfill({ json: envelope({ variant: 'CONTROL', recommendations: [] }) })
@@ -199,6 +243,10 @@ test('uncertain response freezes checkout and explicitly retries the identical p
     return route.fulfill({
       json: envelope(orders.length === 1 ? { ...created, status: 'INVALID' } : created),
     })
+  })
+  await page.route('**/api/v1/online-orders/requests/recover', route => {
+    recoveries.push(route.request().postDataJSON())
+    return route.fulfill({ json: envelope(created) })
   })
   await openCheckout(page)
   await page.getByRole('button', { name: 'Xem lại đơn', exact: true }).click()
@@ -210,10 +258,11 @@ test('uncertain response freezes checkout and explicitly retries the identical p
   await page.keyboard.press('Escape')
   await expect(page.getByRole('dialog')).toBeVisible()
   await page.route('**/api/v1/online-orders/quote', () => { throw new Error('An uncertain retry must not re-quote') })
-  await page.getByRole('button', { name: 'Gửi lại đơn', exact: true }).click()
-  await expect.poll(() => orders.length).toBe(2)
-  expect({ ...orders[1], turnstileToken: orders[0]!.turnstileToken }).toEqual(orders[0])
-  expect(orders[1]!.turnstileToken).not.toBe(orders[0]!.turnstileToken)
+  await page.getByRole('button', { name: 'Kiểm tra lại đơn đã gửi', exact: true }).click()
+  await expect.poll(() => recoveries.length).toBe(1)
+  expect({ ...recoveries[0], turnstileToken: orders[0]!.turnstileToken }).toEqual(orders[0])
+  expect(recoveries[0]!.turnstileToken).toBeUndefined()
+  expect(orders).toHaveLength(1)
   expect(offers).toBe(1)
 })
 
@@ -311,7 +360,10 @@ test('a rejected retry cannot unlock an already uncertain online checkout', asyn
   )
   await page.route('**/api/v1/online-orders/requests', (route) => {
     bodies.push(route.request().postDataJSON())
-    if (bodies.length === 1) return route.abort()
+    return route.abort()
+  })
+  await page.route('**/api/v1/online-orders/requests/recover', (route) => {
+    bodies.push(route.request().postDataJSON())
     if (bodies.length === 2)
       return route.fulfill({ status: 403, json: { message: 'Temporarily rejected' } })
     return route.fulfill({ json: envelope(created) })
@@ -319,7 +371,7 @@ test('a rejected retry cannot unlock an already uncertain online checkout', asyn
   await openCheckout(page)
   await page.getByRole('button', { name: 'Xem lại đơn', exact: true }).click()
   await page.getByRole('button', { name: 'Gửi đơn mang đi', exact: true }).click()
-  const retry = page.getByRole('button', { name: 'Gửi lại đơn', exact: true })
+  const retry = page.getByRole('button', { name: 'Kiểm tra lại đơn đã gửi', exact: true })
   await expect(retry).toBeEnabled()
   await retry.click()
   await expect(page.getByRole('alert')).toContainText('Yêu cầu bị từ chối')

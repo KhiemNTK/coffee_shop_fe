@@ -23,19 +23,44 @@ async function mockCustomer(page: Page, signedIn = true) {
 }
 
 for (const returnTo of ['/reservations?guests=2#request', '/menu?search=latte#drinks']) {
-  test(`public header preserves the complete sign-in destination ${returnTo}`, async ({ page }, info) => {
+  test(`public header preserves the complete sign-in destination ${returnTo}`, async ({ page }) => {
     await mockCustomer(page, false)
     await page.goto(returnTo)
-    if (info.project.name === 'mobile') {
-      await page.getByRole('button', { name: 'Mở menu điều hướng' }).click()
-      await page.locator('#mobile-navigation-menu').getByRole('link', { name: 'Đăng nhập khách hàng', exact: true }).click()
-    } else {
-      await page.getByRole('link', { name: 'Đăng nhập khách hàng', exact: true }).click()
-    }
+    const signIn = page.getByRole('link', { name: 'Đăng nhập khách hàng', exact: true })
+    await expect(signIn).toHaveText(/Đăng nhập/)
+    await signIn.click()
     await expect(page).toHaveURL(/\/customer\/sign-in$/)
     expect(await page.evaluate(() => history.state.usr.returnTo)).toBe(returnTo)
   })
 }
+
+test('customer and staff sign-in have separate, visible entry points', async ({ page }, info) => {
+  await mockCustomer(page, false)
+  await page.goto('/sign-in')
+  await expect(page.getByRole('heading', { name: 'Đăng nhập nhân viên', level: 1 })).toBeVisible()
+  await expect(page.getByLabel('Email', { exact: true })).toBeVisible()
+  await expect(page.locator('input[autocomplete="current-password"]')).toBeVisible()
+  await page.screenshot({ path: info.outputPath('staff-sign-in.png'), fullPage: true })
+  await page.getByRole('link', { name: 'Đăng nhập khách hàng', exact: true }).click()
+  await expect(page).toHaveURL(/\/customer\/sign-in$/)
+  await expect(page.getByRole('region', { name: 'Đăng nhập khách hàng' })).toBeVisible()
+  await expect(page.locator('input[type="password"]')).toHaveCount(0)
+  await page.screenshot({ path: info.outputPath('customer-sign-in.png'), fullPage: true })
+  for (const width of info.project.name === 'mobile' ? [320, 390] : [640, 768, 1024, 1280, 1440]) {
+    await page.setViewportSize({ width, height: 900 })
+    const signIn = page.locator('header').getByRole('link', { name: 'Đăng nhập khách hàng' })
+    await expect(signIn).toBeInViewport()
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+    const brand = await page.locator('header').getByRole('link', { name: 'Coffee Homes', exact: true }).boundingBox()
+    const account = await signIn.boundingBox()
+    expect(brand).not.toBeNull()
+    expect(account).not.toBeNull()
+    expect(brand!.y + brand!.height <= account!.y || brand!.x + brand!.width <= account!.x).toBe(true)
+  }
+  await page.getByRole('link', { name: 'Khu vực nhân viên', exact: true }).click()
+  await expect(page).toHaveURL(/\/sign-in$/)
+  await expect(page.getByRole('heading', { name: 'Đăng nhập nhân viên', level: 1 })).toBeVisible()
+})
 
 for (const [returnTo, destination] of [
   ['/reservations?guests=2#request', '/reservations?guests=2#request'],

@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { Copy, Eye, EyeOff } from 'lucide-react'
 import { Button } from '../../shared/ui'
 import { formatStoreDateTime } from '../../shared/lib/store-time'
+import { PaymentQr } from '../../shared/ui/payment-qr'
 
 export function CustomerPickupCode({ token, expiresAt }: { token: string; expiresAt: string }) {
   const { t } = useTranslation()
@@ -42,7 +43,10 @@ export function CustomerPickupCode({ token, expiresAt }: { token: string; expire
           {t('takeaway.copyAccess')}
         </Button>
       </div>
-      {visible && <code className="block select-all break-all text-sm">{token}</code>}
+      {visible && <>
+        <PaymentQr value={token} label={t('takeaway.pickupQr')} />
+        <code className="block select-all break-all text-sm">{token}</code>
+      </>}
       <p className="text-sm text-muted-foreground">{t('customer.pickupCodePrivacy')}</p>
       <p className="text-xs text-muted-foreground">
         {t('customer.pickupCodeExpiry', { time: formatStoreDateTime(expiresAt) })}

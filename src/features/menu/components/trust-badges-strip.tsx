@@ -1,6 +1,8 @@
 import { Clock, HeartHandshake, Leaf, Zap } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 
 export function TrustBadgesStrip() {
+  const { t } = useTranslation()
   return (
     <section className="border-b border-border/80 bg-card py-6 sm:py-7 shadow-2xs">
       <div className="mx-auto max-w-7xl px-4 sm:px-6">
@@ -11,10 +13,10 @@ export function TrustBadgesStrip() {
             </div>
             <div className="min-w-0">
               <h4 className="text-xs sm:text-sm font-bold text-foreground">
-                Cà phê nguyên chất
+                {t('storefront.coffee')}
               </h4>
               <p className="text-[11px] sm:text-xs text-muted-foreground mt-0.5">
-                100% Arabica
+                {t('storefront.preparedToOrder')}
               </p>
             </div>
           </div>
@@ -25,10 +27,10 @@ export function TrustBadgesStrip() {
             </div>
             <div className="min-w-0">
               <h4 className="text-xs sm:text-sm font-bold text-foreground">
-                Không gian ấm cúng
+                {t('storefront.space')}
               </h4>
               <p className="text-[11px] sm:text-xs text-muted-foreground mt-0.5">
-                Phù hợp làm việc &amp; gặp gỡ
+                {t('storefront.meetings')}
               </p>
             </div>
           </div>
@@ -39,10 +41,10 @@ export function TrustBadgesStrip() {
             </div>
             <div className="min-w-0">
               <h4 className="text-xs sm:text-sm font-bold text-foreground">
-                Đặt hàng nhanh
+                {t('storefront.orderAhead')}
               </h4>
               <p className="text-[11px] sm:text-xs text-muted-foreground mt-0.5">
-                Nhận món trong 5-10 phút
+                {t('storefront.pickupSchedule')}
               </p>
             </div>
           </div>
@@ -53,10 +55,10 @@ export function TrustBadgesStrip() {
             </div>
             <div className="min-w-0">
               <h4 className="text-xs sm:text-sm font-bold text-foreground">
-                Thanh toán tiện lợi
+                {t('storefront.payAtPickup')}
               </h4>
               <p className="text-[11px] sm:text-xs text-muted-foreground mt-0.5">
-                Nhiều hình thức thanh toán
+                {t('storefront.takeawayOrders')}
               </p>
             </div>
           </div>

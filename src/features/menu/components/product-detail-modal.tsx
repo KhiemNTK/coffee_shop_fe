@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import {
   Minus,
   Plus,
@@ -8,6 +9,7 @@ import { formatPrice, type MenuItem } from '../menu.api'
 import { Button, Dialog, cn } from '../../../shared/ui'
 import { type CartItem, decimalAmount, minorAmount } from '../../online-orders/cart'
 import { FavoriteButton } from '../../customers/favorite-button'
+import { ProductImage } from './product-image'
 
 export function ProductDetailModal({
   item,
@@ -18,6 +20,7 @@ export function ProductDetailModal({
   onClose: () => void
   onConfirm: (cartItem: CartItem) => void
 }) {
+  const { t } = useTranslation()
   const [quantity, setQuantity] = useState(1)
   const [note, setNote] = useState('')
 
@@ -54,7 +57,7 @@ export function ProductDetailModal({
   item.optionGroups.forEach((group) => {
     const selected = selectedOptions.get(group.id) ?? []
     if (group.minSelected > 0 && selected.length < group.minSelected) {
-      errors.push(`Vui lòng chọn tối thiểu ${group.minSelected} mục trong ${group.name}`)
+      errors.push(t('storefront.optionMinimum', { count: group.minSelected, group: group.name }))
     }
   })
 
@@ -95,21 +98,22 @@ export function ProductDetailModal({
   }
 
   return (
-    <Dialog open onClose={onClose} maxWidth="xl">
+    <Dialog open onClose={onClose} maxWidth="xl" showCloseButton={false}>
       <div className="relative p-2 sm:p-4">
         {/* Close Button */}
         <button
           type="button"
           onClick={onClose}
           className="absolute right-2 top-2 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-surface-muted text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
-          title="Đóng"
+          aria-label={t('common.close')}
+          title={t('common.close')}
         >
           <X className="h-4 w-4" />
         </button>
 
         {/* Breadcrumbs */}
-        <nav className="mb-4 text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
-          <span>Thực đơn</span>
+        <nav className="mb-4 flex flex-wrap items-center gap-1.5 break-words pr-10 text-xs font-semibold text-muted-foreground">
+          <span>{t('nav.menu')}</span>
           <span>&gt;</span>
           <span>{item.category.name}</span>
           <span>&gt;</span>
@@ -118,77 +122,9 @@ export function ProductDetailModal({
 
         {/* 2-Column Product Detail Layout matching Mockup Panel 3 */}
         <div className="grid grid-cols-1 md:grid-cols-12 gap-6 lg:gap-8 items-start">
-          {/* Left Column: Image Gallery & Nutrition */}
           <div className="md:col-span-6 flex flex-col gap-4">
-            <div className="flex gap-3">
-              {/* Vertical thumbnail previews */}
-              <div className="hidden sm:flex flex-col gap-2 shrink-0">
-                {[0, 1, 2, 3].map((idx) => (
-                  <div
-                    key={idx}
-                    className={cn(
-                      'h-12 w-12 rounded-lg border overflow-hidden cursor-pointer p-0.5',
-                      idx === 0
-                        ? 'border-primary ring-1 ring-primary'
-                        : 'border-border opacity-70 hover:opacity-100',
-                    )}
-                  >
-                    <img
-                      src={item.imageUrl || '/iced-coffee.jpg'}
-                      alt=""
-                      className="h-full w-full object-cover rounded"
-                      onError={(e) => {
-                        e.currentTarget.src = '/iced-coffee.jpg'
-                      }}
-                    />
-                  </div>
-                ))}
-              </div>
-
-              {/* Main 1:1 image */}
-              <div className="relative aspect-square w-full rounded-[14px] border border-border/80 overflow-hidden bg-surface-muted shadow-xs">
-                <img
-                  src={item.imageUrl || '/iced-coffee.jpg'}
-                  alt={item.name}
-                  className="h-full w-full object-cover"
-                  onError={(e) => {
-                    e.currentTarget.src = '/iced-coffee.jpg'
-                  }}
-                />
-              </div>
-            </div>
-
-            {/* Nutrition Facts Table */}
-            <div className="rounded-[12px] border border-border/80 bg-surface-muted/50 p-3.5 text-xs">
-              <h4 className="font-bold text-foreground mb-2">
-                Thông tin dinh dưỡng (ước tính)
-              </h4>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
-                <div className="bg-card p-2 rounded-lg border border-border/60">
-                  <span className="text-[10px] text-muted-foreground block">
-                    Năng lượng
-                  </span>
-                  <strong className="text-foreground font-bold">120 kcal</strong>
-                </div>
-                <div className="bg-card p-2 rounded-lg border border-border/60">
-                  <span className="text-[10px] text-muted-foreground block">
-                    Carbohydrate
-                  </span>
-                  <strong className="text-foreground font-bold">18 g</strong>
-                </div>
-                <div className="bg-card p-2 rounded-lg border border-border/60">
-                  <span className="text-[10px] text-muted-foreground block">
-                    Protein
-                  </span>
-                  <strong className="text-foreground font-bold">2 g</strong>
-                </div>
-                <div className="bg-card p-2 rounded-lg border border-border/60">
-                  <span className="text-[10px] text-muted-foreground block">
-                    Chất béo
-                  </span>
-                  <strong className="text-foreground font-bold">3 g</strong>
-                </div>
-              </div>
+            <div className="relative aspect-square w-full rounded-[14px] border border-border/80 overflow-hidden bg-surface-muted shadow-xs">
+              <ProductImage item={item} />
             </div>
           </div>
 
@@ -206,10 +142,9 @@ export function ProductDetailModal({
                 {formatPrice(unitPrice)}
               </p>
 
-              <p className="mt-2 text-xs sm:text-sm text-muted-foreground leading-relaxed">
-                {item.description ||
-                  'Thức uống nguyên chất pha chế thủ công, đậm đà hương vị mộc nguyên bản đặc trưng của Coffee Shop.'}
-              </p>
+              {item.description && <p className="mt-2 text-xs sm:text-sm text-muted-foreground leading-relaxed">
+                {item.description}
+              </p>}
 
               {/* Option Groups (Size, Sugar, Ice, Toppings) */}
               <div className="mt-5 space-y-4 max-h-[320px] overflow-y-auto pr-1">
@@ -224,7 +159,7 @@ export function ProductDetailModal({
                         </span>
                         {group.minSelected > 0 && (
                           <span className="text-[11px] font-semibold text-accent">
-                            * Bắt buộc
+                            {t('storefront.required')}
                           </span>
                         )}
                       </div>
@@ -238,6 +173,7 @@ export function ProductDetailModal({
                             <button
                               key={opt.id}
                               type="button"
+                              aria-pressed={isSelected}
                               onClick={() =>
                                 toggleOption(group.id, opt.id, group.maxSelected)
                               }
@@ -271,15 +207,16 @@ export function ProductDetailModal({
 
                 {/* Special Note */}
                 <div className="pt-2">
-                  <label className="block text-xs font-bold text-foreground mb-1.5">
-                    Ghi chú đặc biệt (tùy chọn)
+                  <label htmlFor="product-note" className="block text-xs font-bold text-foreground mb-1.5">
+                    {t('storefront.note')}
                   </label>
                   <input
                     type="text"
+                    id="product-note"
                     maxLength={150}
                     value={note}
                     onChange={(e) => setNote(e.target.value)}
-                    placeholder="Ví dụ: ít ngọt, nhiều đá, uống riêng..."
+                    placeholder={t('storefront.notePlaceholder')}
                     className="w-full rounded-[10px] border border-border bg-card px-3 py-2 text-xs text-foreground focus:outline-primary placeholder:text-muted-foreground"
                   />
                 </div>
@@ -293,6 +230,7 @@ export function ProductDetailModal({
                 <button
                   type="button"
                   onClick={() => setQuantity((q) => Math.max(1, q - 1))}
+                  aria-label={t('common.decreaseQuantity')}
                   className="flex h-8 w-8 items-center justify-center rounded-lg text-foreground hover:bg-muted transition-colors disabled:opacity-40"
                   disabled={quantity <= 1}
                 >
@@ -304,6 +242,7 @@ export function ProductDetailModal({
                 <button
                   type="button"
                   onClick={() => setQuantity((q) => Math.min(20, q + 1))}
+                  aria-label={t('common.increaseQuantity')}
                   className="flex h-8 w-8 items-center justify-center rounded-lg text-foreground hover:bg-muted transition-colors disabled:opacity-40"
                   disabled={quantity >= 20}
                 >
@@ -316,11 +255,10 @@ export function ProductDetailModal({
                 type="button"
                 onClick={handleAdd}
                 disabled={errors.length > 0}
-                className="flex-1 h-11 rounded-[10px] bg-primary text-white hover:bg-primary-hover font-bold text-sm shadow-md gap-2"
+                className="min-h-11 h-auto min-w-0 flex-1 flex-col gap-0.5 whitespace-normal rounded-[10px] bg-primary px-3 py-2 text-sm font-bold text-white shadow-md hover:bg-primary-hover sm:flex-row sm:gap-2"
               >
-                <span>Thêm vào giỏ hàng</span>
-                <span>•</span>
-                <span className="tabular-nums">{formatPrice(totalPrice)}</span>
+                <span>{t('storefront.addToCart')}</span>
+                <span className="min-w-0 break-all tabular-nums">{formatPrice(totalPrice)}</span>
               </Button>
             </div>
           </div>

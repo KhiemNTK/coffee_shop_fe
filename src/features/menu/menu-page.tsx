@@ -135,12 +135,13 @@ export function MenuPage() {
         {/* Banner Khám phá thực đơn with Search inside */}
         <div className="relative rounded-[16px] overflow-hidden bg-primary text-white p-6 sm:p-10 mb-8 shadow-md">
           <img
-            src="/menu-banner.jpg"
-            alt="Menu banner"
-            className="absolute inset-0 h-full w-full object-cover opacity-25"
-            onError={(e) => {
-              e.currentTarget.src = '/hero-coffee.jpg'
-            }}
+            src="/hero-coffee.webp"
+            width={1376}
+            height={768}
+            loading="lazy"
+            decoding="async"
+            alt=""
+            className="absolute inset-0 h-full w-full object-cover opacity-20"
           />
           <div className="absolute inset-0 bg-gradient-to-r from-primary via-primary/90 to-primary/60" />
 
@@ -169,7 +170,7 @@ export function MenuPage() {
                 <Input
                   type="search"
                   aria-label={translate('menu.searchLabel')}
-                  placeholder="Tìm món bạn thích..."
+                  placeholder={translate('menu.searchPlaceholder')}
                   maxLength={120}
                   value={draft}
                   onChange={(event) => setDraft(event.target.value)}
@@ -205,7 +206,7 @@ export function MenuPage() {
         {/* Horizontal Category Filter Pills */}
         <div
           role="tablist"
-          aria-label="Bộ lọc nhanh theo danh mục"
+          aria-label={translate('storefront.categoryFilter')}
           className="flex items-center gap-2 overflow-x-auto pb-4 mb-6 scrollbar-none"
         >
           <button
@@ -220,7 +221,7 @@ export function MenuPage() {
                 : 'bg-card border border-border/80 text-foreground hover:bg-muted/70',
             )}
           >
-            Tất cả
+            {translate('common.all')}
           </button>
           {categories.data?.map((cat) => {
             const isSelected = filters.categoryId === cat.id
@@ -267,10 +268,10 @@ export function MenuPage() {
                 <span className="text-base font-extrabold text-foreground">
                   {filters.categoryId
                     ? (categories.data?.find((c) => c.id === filters.categoryId)?.name ??
-                      'Danh mục')
+                      translate('storefront.category'))
                     : filters.keyword
-                      ? `Tìm kiếm: "${filters.keyword}"`
-                      : 'Tất cả món'}
+                      ? translate('storefront.searchResults', { keyword: filters.keyword })
+                      : translate('menu.allItems')}
                 </span>
                 <span className="text-xs font-semibold text-muted-foreground" role="status">
                   (
@@ -408,7 +409,7 @@ export function MenuPage() {
                   {translate('common.previousPage')}
                 </Button>
                 <span className="text-xs font-semibold text-muted-foreground">
-                  Trang {menu.data.currentPage} / {menu.data.totalPages}
+                  {translate('storefront.page', { current: menu.data.currentPage, total: menu.data.totalPages })}
                 </span>
                 <Button
                   type="button"

@@ -22,16 +22,15 @@ export function StoreFooter({
           <div className="space-y-3">
             <div className="flex items-center gap-2 text-primary font-bold text-base">
               <Coffee className="h-5 w-5" />
-              <span>{storeData?.name ?? 'Coffee Shop'}</span>
+              <span>{storeData?.name ?? 'Coffee Homes'}</span>
             </div>
             <p className="text-muted-foreground leading-relaxed">
-              Thương hiệu cà phê mộc đậm đà nguyên bản và thức uống tươi ngon mỗi
-              ngày cho người sành thưởng thức.
+              {translate('storefront.footerDescription')}
             </p>
           </div>
 
-          <div className="space-y-2.5">
-            <h4 className="font-bold text-foreground text-sm">Địa chỉ &amp; Liên hệ</h4>
+          <div id="contact" className="space-y-2.5">
+            <h4 className="font-bold text-foreground text-sm">{translate('storefront.contactHeading')}</h4>
             {storeData?.address && (
               <p className="flex items-start gap-2">
                 <MapPin className="h-4 w-4 shrink-0 text-primary mt-0.5" />
@@ -45,42 +44,42 @@ export function StoreFooter({
               </p>
             )}
             {!storeData?.address && !storeData?.phone && (
-              <p className="text-muted-foreground">Thông tin liên hệ đang cập nhật</p>
+              <p className="text-muted-foreground">{translate('storefront.contactPending')}</p>
             )}
           </div>
 
           <div className="space-y-2.5">
-            <h4 className="font-bold text-foreground text-sm">Giờ phục vụ</h4>
+            <h4 className="font-bold text-foreground text-sm">{translate('storefront.serviceHours')}</h4>
             <p className="flex items-center gap-2">
               <Clock className="h-4 w-4 shrink-0 text-primary" />
-              <span>Mở cửa hàng ngày: 07:00 – 22:00</span>
+              <span>{translate('storefront.dailyHours')}</span>
             </p>
             <p className="text-muted-foreground">
-              Phục vụ tại quán và đặt mang đi giao nhận nhanh chóng.
+              {translate('storefront.footerService')}
             </p>
           </div>
 
           <div className="space-y-2.5">
-            <h4 className="font-bold text-foreground text-sm">Liên kết nhanh</h4>
+            <h4 className="font-bold text-foreground text-sm">{translate('storefront.quickLinks')}</h4>
             <ul className="space-y-1.5 font-medium">
               <li>
                 <a href="#menu" className="hover:text-primary transition-colors">
-                  Thực đơn món uống
+                  {translate('storefront.drinksMenu')}
                 </a>
               </li>
               <li>
                 <Link to="/reservations" className="hover:text-primary transition-colors">
-                  Đặt bàn tại quán
+                  {translate('storefront.reserveAtStore')}
                 </Link>
               </li>
               <li>
                 <Link to="/order" className="hover:text-primary transition-colors">
-                  Theo dõi đơn mang đi
+                  {translate('storefront.trackTakeaway')}
                 </Link>
               </li>
               <li>
                 <Link to="/sign-in" className="hover:text-primary transition-colors">
-                  Dành cho nhân viên
+                  {translate('storefront.staff')}
                 </Link>
               </li>
             </ul>
@@ -90,7 +89,7 @@ export function StoreFooter({
         <div className="border-t border-border pt-6 flex flex-col sm:flex-row items-center justify-between gap-3 text-center sm:text-left">
           <span>{translate('menu.footer', { year: copyrightYear })}</span>
           <span className="text-[11px] text-muted-foreground/80">
-            Chất lượng đỉnh cao · Phục vụ tận tâm
+            {translate('storefront.footerTagline')}
           </span>
         </div>
       </div>

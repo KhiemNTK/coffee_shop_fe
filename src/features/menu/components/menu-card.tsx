@@ -4,7 +4,7 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/shared/ui/card'
 import { Button } from '@/shared/ui/button'
 import { Badge } from '@/shared/ui/badge'
 import { formatPrice, type MenuItem } from '../menu.api'
-import { getProductImage } from '../menu-images'
+import { ProductImage } from './product-image'
 import { FavoriteButton } from '@/features/customers/favorite-button'
 
 export function MenuCard({
@@ -19,31 +19,22 @@ export function MenuCard({
   isHeading?: boolean
 }) {
   const { t: translate } = useTranslation()
-  const imageSrc = getProductImage(item)
 
   return (
     <article className="h-full">
       <Card className="relative group flex flex-col justify-between overflow-hidden rounded-[14px] border border-border/80 bg-card transition-all duration-200 hover:-translate-y-1 hover:border-primary/40 hover:shadow-md h-full">
         {/* 1:1 Image with badging and heart button */}
         <div className="relative aspect-square w-full overflow-hidden bg-surface-muted">
-          <img
-            src={imageSrc}
-            alt={item.name}
-            loading="lazy"
-            decoding="async"
-            referrerPolicy="no-referrer"
+          <ProductImage
+            item={item}
             className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
-            onError={(event) => {
-              // Graceful fallback to neutral brand photography
-              event.currentTarget.src = '/iced-coffee.jpg'
-            }}
           />
 
           {/* Badges */}
           <div className="absolute top-2.5 left-2.5 flex flex-wrap gap-1.5 z-10">
             {isBestseller && (
               <span className="rounded-full bg-amber-500 px-2.5 py-0.5 text-[10px] font-bold text-white shadow-2xs">
-                Bán chạy
+                {translate('storefront.bestseller')}
               </span>
             )}
             <Badge
@@ -82,9 +73,9 @@ export function MenuCard({
           ) : (
             <p className="mt-1 text-xs text-muted-foreground/70 line-clamp-1 min-h-[2rem] flex items-center">
               {item.optionGroups.length > 0 ? (
-                <span>{item.optionGroups.length} nhóm tùy chọn</span>
+                <span>{translate('storefront.optionGroups', { count: item.optionGroups.length })}</span>
               ) : (
-                <span>Thưởng thức tại chỗ hoặc mang đi</span>
+                <span>{translate('storefront.serveOptions')}</span>
               )}
             </p>
           )}
@@ -94,7 +85,7 @@ export function MenuCard({
           <div className="flex flex-wrap items-baseline justify-between gap-2 mt-2">
             <div className="min-w-0 max-w-full">
               <span className="text-[11px] font-medium text-muted-foreground block">
-                Giá món
+                {translate('storefront.price')}
               </span>
               <p className="break-words text-lg font-bold text-primary tabular-nums">
                 {formatPrice(item.price)}
@@ -107,10 +98,10 @@ export function MenuCard({
               variant="default"
               onClick={() => onSelect(item)}
               className="h-9 px-3 gap-1 rounded-[10px] text-xs font-semibold shadow-xs"
-              title={`Thêm ${item.name} vào giỏ`}
+              title={translate('storefront.addItem', { name: item.name })}
             >
               <Plus className="h-3.5 w-3.5" />
-              <span>{item.optionGroups.length > 0 ? 'Tùy chọn' : 'Thêm'}</span>
+              <span>{translate(item.optionGroups.length > 0 ? 'storefront.customize' : 'storefront.add')}</span>
             </Button>
           </div>
 
