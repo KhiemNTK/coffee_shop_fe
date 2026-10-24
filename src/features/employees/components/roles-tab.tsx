@@ -2,7 +2,7 @@ import { useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useOutletContext } from 'react-router-dom'
-import { Pencil, Plus, ShieldCheck, Trash2, RefreshCw } from 'lucide-react'
+import { Copy, Pencil, Plus, ShieldCheck, Trash2, RefreshCw } from 'lucide-react'
 import {
   deleteRole,
   getAllPermissions,
@@ -27,11 +27,15 @@ export function RolesTab({
   canManagePermissions: boolean
   onToast: (message: string) => void
 }) {
+  const { t } = useTranslation()
   const { access } = useOutletContext<Session>()
   const can = access.has
+  const canCopy = can('/roles_create') && can('/roles_read') &&
+    can('/roles_permissions_read') && can('/roles_permissions_update')
   const client = useQueryClient()
   const [permissionsFor, setPermissionsFor] = useState<Role | null>(null)
   const [editing, setEditing] = useState<Role | 'new' | null>(null)
+  const [template, setTemplate] = useState<Role | undefined>()
   const [deleting, setDeleting] = useState<Role | null>(null)
   const remove = useMutation({
     mutationFn: (id: string) => deleteRole(id),
@@ -44,7 +48,10 @@ export function RolesTab({
   return (
     <section className="space-y-4">
       {can('/roles_create') && (
-        <Button onClick={() => setEditing('new')}>
+        <Button onClick={() => {
+          setTemplate(undefined)
+          setEditing('new')
+        }}>
           <Plus size={16} />
           Thêm vai trò
         </Button>
@@ -68,6 +75,19 @@ export function RolesTab({
                 {role.isSystemRole && <Badge variant="outline">Hệ thống</Badge>}
               </div>
               <div className="flex flex-wrap gap-2">
+                {canCopy && (
+                  <Button
+                    variant="outline"
+                    aria-label={t('roles.copyLabel', { name: role.name })}
+                    title={t('roles.copyLabel', { name: role.name })}
+                    onClick={() => {
+                      setTemplate(role)
+                      setEditing('new')
+                    }}
+                  >
+                    <Copy size={16} />
+                  </Button>
+                )}
                 {can('/roles_permissions_read') && (
                   <Button
                     variant="outline"
@@ -86,7 +106,10 @@ export function RolesTab({
                     variant="outline"
                     aria-label={'Sửa vai trò ' + role.name}
                     title="Sửa vai trò"
-                    onClick={() => setEditing(role)}
+                    onClick={() => {
+                      setTemplate(undefined)
+                      setEditing(role)
+                    }}
                   >
                     <Pencil size={16} />
                   </Button>
@@ -109,7 +132,7 @@ export function RolesTab({
           ))}
         </div>
       )}
-      {permissionsFor && (
+      {permissionsFor && can('/roles_permissions_read') && (
         <RolePermissions
           key={permissionsFor.id}
           role={permissionsFor}
@@ -117,15 +140,16 @@ export function RolesTab({
           onToast={onToast}
         />
       )}
-      {editing && (
+      {editing && can(editing === 'new' ? '/roles_create' : '/roles_update') && (!template || canCopy) && (
         <RoleForm
-          key={editing === 'new' ? 'new' : editing.id}
+          key={template?.id ?? (editing === 'new' ? 'new' : editing.id)}
           role={editing === 'new' ? undefined : editing}
+          template={template}
           onClose={() => setEditing(null)}
           onToast={onToast}
         />
       )}
-      {deleting && (
+      {deleting && can('/roles_delete') && (
         <Dialog
           open
           onClose={() => {
@@ -136,8 +160,7 @@ export function RolesTab({
             Xóa vai trò {deleting.name}?
           </h2>
           <p className="my-3 text-sm">
-            Xóa vai trò sẽ gỡ toàn bộ quyền của vai trò và gỡ vai trò này khỏi
-            tất cả nhân viên đang được gán.
+            {t('roles.deleteWarning')}
           </p>
           {remove.isError && <p role="alert">{errorMessage(remove.error)}</p>}
           <Button
@@ -156,19 +179,43 @@ export function RolesTab({
 
 function RoleForm({
   role,
+  template,
   onClose,
   onToast,
 }: {
   role?: Role
+  template?: Role
   onClose: () => void
   onToast: (message: string) => void
 }) {
+  const { t } = useTranslation()
+  const { employee, authorization } = useOutletContext<Session>()
   const client = useQueryClient()
+  const source = useQuery({
+    queryKey: ['private', employee.id, 'role-permissions', template?.id],
+    queryFn: ({ signal }) => getRolePermissions(template!.id, signal),
+    enabled: !!template,
+    retry: false,
+    refetchOnWindowFocus: false,
+  })
+  const [reviewRequired, setReviewRequired] = useState(false)
+  const grants = new Set(authorization.permissionKeys)
+  const withinScope = source.data?.rolePermissions.every(({ permission }) => grants.has(permission.key))
+  const ready = !template || (source.isSuccess && !source.isFetching && withinScope && !reviewRequired)
   const mutation = useMutation({
     mutationFn: (data: { name: string; description: string }) =>
-      saveRole(role?.id, data),
+      saveRole(role?.id, {
+        ...data,
+        ...(template ? {
+          templateRoleId: template.id,
+          expectedPermissionIds: source.data!.rolePermissions.map(({ permission }) => permission.id),
+        } : {}),
+      }),
+    onError: () => {
+      if (template) setReviewRequired(true)
+    },
     onSuccess: () => {
-      void client.invalidateQueries({ queryKey: ['private', 'roles'] })
+      void client.invalidateQueries({ queryKey: ['private'] })
       onToast('Đã lưu vai trò')
       onClose()
     },
@@ -184,7 +231,7 @@ function RoleForm({
         className="space-y-4"
         onSubmit={(event) => {
           event.preventDefault()
-          if (mutation.isPending) return
+          if (mutation.isPending || !ready) return
           const data = new FormData(event.currentTarget)
           mutation.mutate({
             name: String(data.get('name')).trim(),
@@ -193,7 +240,7 @@ function RoleForm({
         }}
       >
         <h2 className="pr-8 text-lg font-semibold">
-          {role ? 'Sửa vai trò' : 'Thêm vai trò'}
+          {template ? t('roles.copyTitle', { name: template.name }) : role ? 'Sửa vai trò' : 'Thêm vai trò'}
         </h2>
         <fieldset disabled={mutation.isPending} className="space-y-3">
           <label className="block">
@@ -209,13 +256,42 @@ function RoleForm({
             Mô tả
             <Input
               name="description"
-              defaultValue={role?.description ?? ''}
+              defaultValue={role?.description ?? template?.description ?? ''}
               maxLength={500}
             />
           </label>
         </fieldset>
+        {template && (
+          <div className="space-y-2">
+            {source.isFetching && <p role="status">{t('roles.loadingTemplate')}</p>}
+            {source.isError && <p role="alert">{errorMessage(source.error)}</p>}
+            {source.data && (
+              <>
+                <h3 className="text-sm font-semibold">{t('roles.copiedPermissions', { count: source.data.rolePermissions.length })}</h3>
+                <ul className="max-h-48 space-y-1 overflow-y-auto text-sm" aria-label={t('roles.templatePermissions')}>
+                  {source.data.rolePermissions.map(({ permission }) => (
+                    <li key={permission.id}>{permissionLabel(permission)}</li>
+                  ))}
+                </ul>
+                {!withinScope && <p role="alert">{t('roles.outsideScope')}</p>}
+              </>
+            )}
+            {(source.isError || reviewRequired) && (
+              <Button variant="outline" type="button" disabled={source.isFetching} onClick={async () => {
+                const result = await source.refetch()
+                if (result.isSuccess) {
+                  setReviewRequired(false)
+                  mutation.reset()
+                }
+              }}>
+                <RefreshCw size={16} />
+                {t('roles.reloadTemplate')}
+              </Button>
+            )}
+          </div>
+        )}
         {mutation.isError && <p role="alert">{errorMessage(mutation.error)}</p>}
-        <Button type="submit" disabled={mutation.isPending}>
+        <Button type="submit" disabled={mutation.isPending || !ready}>
           Lưu vai trò
         </Button>
       </form>

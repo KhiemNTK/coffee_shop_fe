@@ -18,8 +18,10 @@ test.beforeEach(async ({ context }) => {
         expire.onclick = () => options['expired-callback']();
         const timeout = document.createElement('button'); timeout.type = 'button'; timeout.textContent = 'Timeout fixture';
         timeout.onclick = () => options['timeout-callback']();
-        element.style.width = '150px'; element.style.height = '140px';
-        element.append(verify, expire, timeout); return id;
+        const frame = document.createElement('div'); frame.dataset.testid = 'turnstile-widget';
+        frame.style.width = (options.size === 'compact' ? 150 : 300) + 'px';
+        frame.style.height = (options.size === 'compact' ? 140 : 65) + 'px'; frame.style.flexShrink = '0';
+        frame.append(verify, expire, timeout); element.append(frame); return id;
       },
       remove(id) { document.querySelector('[data-widget="' + id + '"]')?.replaceChildren(); }
     };`,
@@ -97,6 +99,53 @@ test('Turnstile timeout clears a previous token and permits a fresh widget', asy
   await page.getByRole('button', { name: 'Verify fixture' }).click()
   await expect(submit).toBeEnabled()
 })
+
+test('Turnstile fits its real widget dimensions on small and large screens', async ({ page }, info) => {
+  await page.goto('/sign-in')
+  for (const width of [320, 360, 768]) {
+    await page.setViewportSize({ width, height: 800 })
+    const widget = page.getByTestId('turnstile-widget')
+    await expect(widget).toHaveCSS('width', width < 400 ? '150px' : '300px')
+    const box = await widget.boundingBox()
+    expect(box!.x).toBeGreaterThanOrEqual(0)
+    expect(box!.x + box!.width).toBeLessThanOrEqual(width)
+    await page.screenshot({ path: info.outputPath(`verification-${width}.png`), fullPage: true })
+  }
+})
+
+for (const status of [200, 403]) {
+  test(`Cloudflare HTML challenge (${status}) preserves a pending write without retrying`, async ({ page }) => {
+    let calls = 0
+    await page.route('**/api/v1/fixture-edge', route => {
+      calls++
+      return route.fulfill({ status, contentType: 'text/html',
+        headers: { 'cf-mitigated': 'challenge', 'cf-ray': 'edge-support-id' }, body: '<h1>Verify</h1>' })
+    })
+    await page.goto('/sign-in')
+    const result = await page.evaluate(async () => {
+      const clientPath = '/src/shared/api/client.ts'
+      const idempotencyPath = '/src/shared/api/idempotency.ts'
+      const schemaPath = '/src/features/inventory/procurement.api.ts'
+      const { ApiError, errorMessage, sessionEvents } = await import(clientPath)
+      const { apiIdempotentMutate, pendingOperationPrefix } = await import(idempotencyPath)
+      const { stocktakeSchema } = await import(schemaPath)
+      let forbidden = false
+      sessionEvents.addEventListener('forbidden', () => { forbidden = true }, { once: true })
+      try {
+        await apiIdempotentMutate('/fixture-edge', stocktakeSchema.pick({ id: true, status: true }), {})
+        throw new Error('Challenge must not be accepted')
+      } catch (error) {
+        if (!(error instanceof ApiError)) throw error
+        const failure = error as { code?: string; requestId?: string }
+        return { code: failure.code, message: errorMessage(error), requestId: failure.requestId, forbidden,
+          pending: Object.keys(sessionStorage).filter(key => key.startsWith(pendingOperationPrefix)).length }
+      }
+    })
+    expect(result).toMatchObject({ code: 'CLOUDFLARE_CHALLENGE', requestId: 'edge-support-id', forbidden: false, pending: 1 })
+    expect(result.message).toContain('tab mới')
+    expect(calls).toBe(1)
+  })
+}
 
 test('late private response cannot repopulate the cache after logout', async ({
   page,
@@ -343,7 +392,7 @@ test('refresh failure goes to sign in without a refresh loop', async ({
   await page.goto('/staff')
   await expect(page).toHaveURL(/\/sign-in$/)
   await expect(
-    page.getByRole('heading', { name: 'Đăng nhập', exact: true }),
+    page.getByRole('heading', { name: 'Đăng nhập nhân viên', exact: true }),
   ).toBeVisible()
   expect(refreshes).toBe(1)
 })

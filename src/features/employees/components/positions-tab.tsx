@@ -23,6 +23,7 @@ import {
 } from '@/shared/ui'
 
 export interface PositionsTabProps {
+  canCreate: boolean
   canUpdate: boolean
   canDelete: boolean
   onToast: (msg: string) => void
@@ -31,6 +32,7 @@ export interface PositionsTabProps {
 }
 
 export function PositionsTab({
+  canCreate,
   canUpdate,
   canDelete,
   onToast,
@@ -213,7 +215,7 @@ export function PositionsTab({
 
       {/* MODAL: POSITION CREATE / EDIT */}
       <Dialog
-        open={isCreateOpen}
+        open={isCreateOpen && (editingPosition ? canUpdate : canCreate)}
         onOpenChange={(open) => {
           setIsCreateOpen(open)
           if (!open) {
@@ -246,6 +248,7 @@ export function PositionsTab({
         <form
           onSubmit={(e) => {
             e.preventDefault()
+            if (editingPosition ? !canUpdate : !canCreate) return
             if (!positionName.trim()) {
               setPositionError('Vui lòng nhập tên vị trí')
               return

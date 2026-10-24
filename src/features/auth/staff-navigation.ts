@@ -90,7 +90,12 @@ export const staffDestinations = [
     path: 'inventory',
     label: 'Kho hàng',
     icon: Boxes,
-    permissions: ['/inventory_read'],
+    permissions: [
+      '/inventory_read',
+      '/inventory_suppliers_read',
+      '/inventory_purchase-receipts_read',
+      '/inventory_stocktakes_read',
+    ],
   },
   {
     path: 'menu',

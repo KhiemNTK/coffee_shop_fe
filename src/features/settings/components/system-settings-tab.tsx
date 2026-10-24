@@ -560,7 +560,7 @@ export function SystemSettingsTab({
       {/* MODALS: EDIT SYSTEM SETTING                         */}
       {/* ==================================================== */}
       <Dialog
-        open={!!editingSetting}
+        open={canUpdate && !!editingSetting}
         onOpenChange={(open) => !open && setEditingSetting(null)}
         className="max-h-[90vh] overflow-y-auto"
       >
@@ -586,6 +586,7 @@ export function SystemSettingsTab({
             <form
               onSubmit={(e) => {
                 e.preventDefault()
+                if (!canUpdate) return
                 let parsedVal: unknown = editSettingValue
                 if (editingSetting.valueType === 'NUMBER') {
                   parsedVal = Number(editSettingValue)

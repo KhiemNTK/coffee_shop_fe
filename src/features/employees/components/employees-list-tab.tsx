@@ -41,6 +41,7 @@ export function EmployeesListTab({
   positionsDropdown,
   roles,
   rolesLoaded,
+  canCreate,
   canUpdate,
   canDelete,
   canManageRoles,
@@ -95,13 +96,14 @@ export function EmployeesListTab({
   const assignment = useQuery({
     queryKey: ['private', employee.id, 'employee-role-assignment', roleAssignEmployee?.id],
     queryFn: ({ signal }) => getEmployeeRoles(roleAssignEmployee!.id, signal),
-    enabled: Boolean(roleAssignEmployee),
+    enabled: Boolean(roleAssignEmployee) && canManageRoles,
     retry: false,
     refetchOnWindowFocus: false,
   })
   const roleIds =
     selectedRoleIds ?? assignment.data?.employeeRoles.map((item) => item.role.id) ?? []
   const assignmentReady =
+    canManageRoles &&
     rolesLoaded &&
     assignment.isSuccess &&
     !assignment.isFetching &&
@@ -428,7 +430,7 @@ export function EmployeesListTab({
 
       {/* Modals */}
       <CreateEmployeeModal
-        isOpen={isCreateOpen}
+        isOpen={canCreate && isCreateOpen}
         onClose={() => setIsCreateOpen(false)}
         positionsDropdown={positionsDropdown}
         formData={createEmployeeData}
@@ -436,11 +438,11 @@ export function EmployeesListTab({
         error={createEmployeeError}
         setError={setCreateEmployeeError}
         isPending={createEmployeeMutation.isPending}
-        onSubmit={() => createEmployeeMutation.mutate(createEmployeeData)}
+        onSubmit={() => { if (canCreate) createEmployeeMutation.mutate(createEmployeeData) }}
       />
 
       <EditEmployeeModal
-        employee={editingEmployee}
+        employee={canUpdate ? editingEmployee : null}
         onClose={() => setEditingEmployee(null)}
         positionsDropdown={positionsDropdown}
         formData={editEmployeeData}
@@ -449,7 +451,7 @@ export function EmployeesListTab({
         isPending={updateEmployeeMutation.isPending}
         onSubmit={(e) => {
           e.preventDefault()
-          if (!editingEmployee) return
+          if (!canUpdate || !editingEmployee) return
           updateEmployeeMutation.mutate({
             id: editingEmployee.id,
             data: editEmployeeData,
@@ -458,7 +460,7 @@ export function EmployeesListTab({
       />
 
       <AssignRolesModal
-        employee={roleAssignEmployee}
+        employee={canManageRoles ? roleAssignEmployee : null}
         onClose={() => setRoleAssignEmployee(null)}
         roles={roles}
         rolesLoaded={rolesLoaded}
@@ -481,7 +483,7 @@ export function EmployeesListTab({
         }}
         isPending={replaceRolesMutation.isPending}
         onSubmit={(ids) => {
-          if (!roleAssignEmployee) return
+          if (!canManageRoles || !roleAssignEmployee) return
           replaceRolesMutation.mutate({
             id: roleAssignEmployee.id,
             roleIds: ids,
@@ -491,12 +493,12 @@ export function EmployeesListTab({
       />
 
       <DeleteEmployeeModal
-        employee={deletingEmployee}
+        employee={canDelete ? deletingEmployee : null}
         onClose={() => setDeletingEmployee(null)}
         error={deleteEmployeeError}
         isPending={deleteEmployeeMutation.isPending}
         onConfirm={() => {
-          if (!deletingEmployee) return
+          if (!canDelete || !deletingEmployee) return
           deleteEmployeeMutation.mutate(deletingEmployee.id)
         }}
       />

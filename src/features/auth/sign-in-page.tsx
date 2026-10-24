@@ -2,10 +2,12 @@ import { useTranslation } from 'react-i18next'
 import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Coffee, Eye, EyeOff, LogIn } from 'lucide-react'
-import { authCommand, ApiError, errorMessage } from '../../shared/api/client'
+import { authCommand } from '../../shared/api/client'
+import { ApiErrorAlert } from '../../shared/ui/api-error-alert'
+import { useRetryAfter } from '../../shared/api/use-retry-after'
 import { announceSessionChange, clearIdentity } from '../../app/query-client'
 import { Turnstile } from './turnstile'
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '../../shared/ui/card'
+import { Card, CardHeader, CardDescription, CardContent } from '../../shared/ui/card'
 import { Button } from '../../shared/ui/button'
 import { buttonVariants } from '../../shared/ui/button-variants'
 import { Input } from '../../shared/ui/input'
@@ -24,6 +26,7 @@ export default function SignInPage() {
   const [pending, setPending] = useState(false)
   const [visible, setVisible] = useState(false)
   const [error, setError] = useState<unknown>()
+  const retryWait = useRetryAfter(error)
   const [token, setToken] = useState('')
   const [attempt, setAttempt] = useState(0)
   const submitting = useRef(false)
@@ -39,7 +42,7 @@ export default function SignInPage() {
   const configMissing = import.meta.env.PROD && !siteKey
 
   async function signInWithGoogle(idToken: string) {
-    if (submitting.current || configMissing) return
+    if (retryWait || submitting.current || configMissing) return
     if (siteKey && !token) {
       setError(new Error(translate('auth.waitGoogleVerification')))
       requestAnimationFrame(() => errorRef.current?.focus())
@@ -74,13 +77,13 @@ export default function SignInPage() {
         <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3.5 sm:px-6">
           <Link to="/" className="flex items-center gap-2 text-base font-bold text-primary">
             <Coffee className="h-6 w-6" />
-            Coffee Shop
+            Coffee Homes
           </Link>
           <Link
-            to="/"
+            to="/menu"
             className={cn(
               buttonVariants({ variant: 'ghost', size: 'sm' }),
-              'flex items-center gap-1.5 text-muted-foreground hover:text-foreground cursor-pointer',
+              'flex items-center gap-1.5 text-muted-foreground hover:text-foreground cursor-pointer'
             )}
           >
             <ArrowLeft className="h-4 w-4" />
@@ -89,50 +92,15 @@ export default function SignInPage() {
         </div>
       </header>
 
-      <main className="flex min-h-[calc(100vh-60px)] items-center justify-center lg:p-0">
-        <div className="flex w-full min-h-[calc(100vh-60px)]">
-          {/* Left Hero Branded Column (Desktop only) */}
-          <div className="hidden lg:flex lg:w-1/2 relative bg-primary flex-col justify-between p-12 text-white overflow-hidden">
-            <img
-              src="/hero-coffee.jpg"
-              alt="Coffee Homes"
-              className="absolute inset-0 h-full w-full object-cover opacity-25 mix-blend-luminosity"
-            />
-            <div className="absolute inset-0 bg-gradient-to-t from-primary via-primary/85 to-primary/50 z-10" />
-
-            <div className="relative z-20">
-              <div className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3.5 py-1 text-xs font-bold uppercase tracking-widest text-accent border border-accent/40 backdrop-blur-xs">
-                <span>COFFEE HOMES · OPERATIONS</span>
-              </div>
-            </div>
-
-            <div className="relative z-20 max-w-md space-y-4">
-              <h2 className="text-3xl font-extrabold tracking-tight leading-tight">
-                Nền tảng Quản lý Vận hành & Bán hàng Chuyên nghiệp.
-              </h2>
-              <p className="text-sm text-emerald-100/90 leading-relaxed font-normal">
-                Đồng bộ hóa thời gian thực giữa quầy thu ngân POS, nhà bếp KDS, quản lý kho nguyên liệu và kiểm toán tài chính.
-              </p>
-            </div>
-
-            <div className="relative z-20 text-xs text-emerald-200/70">
-              © 2026 Coffee Homes. Giải pháp chuyển đổi số cho chuỗi cà phê.
-            </div>
-          </div>
-
-          {/* Right Form Column */}
-          <div className="w-full lg:w-1/2 flex items-center justify-center p-4 sm:p-8 lg:p-12">
-            <Card className="w-full max-w-md shadow-xl border-border bg-card rounded-2xl">
-              <CardHeader className="space-y-1">
-                <p className="text-xs font-bold uppercase tracking-wider text-primary">
-                  {translate('auth.staffHeading')}
-                </p>
-                <CardTitle className="text-2xl font-bold tracking-tight text-foreground">
-                  {translate('auth.signIn')}
-                </CardTitle>
-                <CardDescription>{translate('auth.description')}</CardDescription>
-              </CardHeader>
-
+      <main className="flex min-h-[calc(100vh-64px)] items-center justify-center px-4 py-8 sm:px-6">
+        <Card className="w-full max-w-md border-border bg-card shadow-sm">
+          <CardHeader className="space-y-1">
+            <p className="text-xs font-bold uppercase text-primary">
+              {translate('auth.staffHeading')}
+            </p>
+            <h1 className="text-2xl font-bold text-foreground">{translate('auth.staffSignIn')}</h1>
+            <CardDescription>{translate('auth.description')}</CardDescription>
+          </CardHeader>
           <CardContent>
             {unlinkUncertain && (
               <p role="alert" className="mb-4 text-sm text-destructive">
@@ -143,7 +111,7 @@ export default function SignInPage() {
               className="space-y-4"
               onSubmit={async (event) => {
                 event.preventDefault()
-                if (submitting.current || configMissing) return
+                if (retryWait || submitting.current || configMissing) return
                 if (siteKey && !token) {
                   setError(new Error(translate('auth.waitVerification')))
                   requestAnimationFrame(() => errorRef.current?.focus())
@@ -240,18 +208,8 @@ export default function SignInPage() {
               )}
 
               {error !== undefined && (
-                <div
-                  ref={errorRef}
-                  tabIndex={-1}
-                  className="rounded-md bg-destructive/10 p-3 text-sm text-destructive"
-                  role="alert"
-                >
-                  <p>{errorMessage(error)}</p>
-                  {error instanceof ApiError && error.requestId && (
-                    <small className="block mt-1 text-xs opacity-80">
-                      {translate('common.supportId')} {error.requestId}
-                    </small>
-                  )}
+                <div ref={errorRef} tabIndex={-1}>
+                  <ApiErrorAlert error={error} />
                 </div>
               )}
 
@@ -259,7 +217,7 @@ export default function SignInPage() {
                 type="submit"
                 className="w-full flex items-center justify-center gap-2 font-bold shadow-sm cursor-pointer"
                 isLoading={pending}
-                disabled={pending || configMissing || Boolean(siteKey && !token)}
+                disabled={retryWait > 0 || pending || configMissing || Boolean(siteKey && !token)}
               >
                 <LogIn className="h-4 w-4" />
                 {pending ? translate('auth.signingIn') : translate('auth.signIn')}
@@ -271,12 +229,16 @@ export default function SignInPage() {
               >
                 {translate('auth.forgotPasswordLink')}
               </Link>
-              {authConfig.googleClientId && !pending && !configMissing && (!siteKey || token) && (
-                <GoogleButton
-                  clientId={authConfig.googleClientId}
-                  onCredential={(credential) => void signInWithGoogle(credential)}
-                />
-              )}
+              {authConfig.googleClientId &&
+                !retryWait &&
+                !pending &&
+                !configMissing &&
+                (!siteKey || token) && (
+                  <GoogleButton
+                    clientId={authConfig.googleClientId}
+                    onCredential={(credential) => void signInWithGoogle(credential)}
+                  />
+                )}
               {authConfig.signupEnabled && (
                 <div className="pt-2 text-center text-xs text-muted-foreground">
                   {translate('auth.noAccount')}{' '}
@@ -286,10 +248,16 @@ export default function SignInPage() {
                 </div>
               )}
             </form>
+            <div className="mt-6 border-t border-border pt-4 text-sm">
+              <Link
+                to="/customer/sign-in"
+                className="font-medium text-primary underline underline-offset-4"
+              >
+                {translate('wishlist.customerSignIn')}
+              </Link>
+            </div>
           </CardContent>
         </Card>
-          </div>
-        </div>
       </main>
     </div>
   )

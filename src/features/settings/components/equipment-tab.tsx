@@ -41,6 +41,7 @@ export interface EquipmentTabProps {
 }
 
 export function EquipmentTab({
+  canCreate,
   canUpdate,
   canTransition,
   onToast,
@@ -449,7 +450,7 @@ export function EquipmentTab({
 
       {/* Modals */}
       <CreateEquipmentModal
-        isOpen={isCreateOpen}
+        isOpen={canCreate && isCreateOpen}
         onClose={() => setIsCreateOpen(false)}
         formData={createEquipmentData}
         setFormData={setCreateEquipmentData}
@@ -457,6 +458,7 @@ export function EquipmentTab({
         isPending={createEquipmentMutation.isPending}
         onSubmit={(e) => {
           e.preventDefault()
+          if (!canCreate) return
           createEquipmentMutation.mutate({
             ...createEquipmentData,
             assetCode: createEquipmentData.assetCode.toUpperCase().trim(),
@@ -466,7 +468,7 @@ export function EquipmentTab({
       />
 
       <EditEquipmentModal
-        equipment={editingEquipment}
+        equipment={canUpdate ? editingEquipment : null}
         onClose={() => setEditingEquipment(null)}
         formData={editEquipmentData}
         setFormData={setEditEquipmentData}
@@ -474,7 +476,7 @@ export function EquipmentTab({
         isPending={updateEquipmentMutation.isPending}
         onSubmit={(e) => {
           e.preventDefault()
-          if (!editingEquipment) return
+          if (!canUpdate || !editingEquipment) return
           updateEquipmentMutation.mutate({
             id: editingEquipment.id,
             data: editEquipmentData,
@@ -483,7 +485,7 @@ export function EquipmentTab({
       />
 
       <TransitionEquipmentModal
-        equipment={transitioningEquipment}
+        equipment={canTransition ? transitioningEquipment : null}
         onClose={() => setTransitioningEquipment(null)}
         formData={transitionData}
         setFormData={setTransitionData}
@@ -491,7 +493,7 @@ export function EquipmentTab({
         isPending={transitionEquipmentMutation.isPending}
         onSubmit={(e) => {
           e.preventDefault()
-          if (!transitioningEquipment) return
+          if (!canTransition || !transitioningEquipment) return
           transitionEquipmentMutation.mutate({
             id: transitioningEquipment.id,
             data: transitionData,

@@ -418,7 +418,12 @@ export async function getAllPermissions(signal?: AbortSignal) {
 
 export function saveRole(
   id: string | undefined,
-  data: { name: string; description?: string | null },
+  data: {
+    name: string
+    description?: string | null
+    templateRoleId?: string
+    expectedPermissionIds?: string[]
+  },
 ) {
   return apiMutate(
     id ? `/roles/${id}` : '/roles',

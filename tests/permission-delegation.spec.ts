@@ -122,8 +122,9 @@ test('permission workflow shows business labels and hides technical keys by defa
   await page.screenshot({ path: info.outputPath('permission-labels.png') })
 })
 
-async function staff(page: Page) {
+async function staff(page: Page, extraKeys: string[] = []) {
   const keys = [
+    ...extraKeys,
     '/employees_read',
     '/employees_roles_read',
     '/employees_roles_update',
@@ -157,6 +158,69 @@ async function staff(page: Page) {
     route.fulfill({ json: envelope(paged(permissions)) }),
   )
 }
+
+test('copies a role only after reviewing its grants and reconciles a changed template', async ({ page }, info) => {
+  await staff(page, ['/roles_create'])
+  const writes: unknown[] = []
+  await page.route('**/api/v1/roles/*/permissions', (route) => route.fulfill({ json: envelope({
+    ...detail,
+    rolePermissions: (writes.length ? permissions.slice(0, 2) : permissions.slice(0, 1)).map((permission) => ({ permission })),
+  }) }))
+  await page.route('**/api/v1/roles', (route) => {
+    writes.push(route.request().postDataJSON())
+    return writes.length === 1
+      ? route.fulfill({ status: 409, json: { code: 'AUTHORIZATION_CHANGED' } })
+      : route.fulfill({ json: envelope({ id: 'new-role', name: 'Thu ngân ca tối', isSystemRole: false }) })
+  })
+  await page.goto('/staff/employees')
+  await page.getByRole('button', { name: /Vai trò & Quyền hạn/ }).click()
+  await page.getByRole('button', { name: 'Tạo từ mẫu Trưởng ca', exact: true }).click()
+  const dialog = page.getByRole('dialog')
+  await expect(dialog.getByRole('list', { name: 'Quyền của mẫu' })).toContainText('Xem thực đơn')
+  await dialog.getByLabel('Tên vai trò', { exact: true }).fill('Thu ngân ca tối')
+  await expect(dialog.getByRole('button', { name: 'Lưu vai trò', exact: true })).toBeEnabled()
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+  await page.screenshot({ path: info.outputPath('role-template.png') })
+  await dialog.getByRole('button', { name: 'Lưu vai trò', exact: true }).click()
+  await expect(dialog.getByRole('alert')).toContainText('Phân quyền đã thay đổi')
+  await expect(dialog.getByRole('button', { name: 'Lưu vai trò', exact: true })).toBeDisabled()
+  expect(writes).toEqual([{ name: 'Thu ngân ca tối', description: '', templateRoleId: roleId, expectedPermissionIds: ['menu'] }])
+  await dialog.getByRole('button', { name: 'Đối chiếu quyền mẫu' }).click()
+  await expect(dialog.getByRole('list', { name: 'Quyền của mẫu' })).toContainText('Xem tồn kho')
+  await dialog.getByRole('button', { name: 'Lưu vai trò', exact: true }).click()
+  await expect(dialog).not.toBeVisible()
+  expect(writes[1]).toEqual({ name: 'Thu ngân ca tối', description: '', templateRoleId: roleId, expectedPermissionIds: ['menu', 'inventory'] })
+})
+
+test('does not offer copying without delegation authority or copy outside the actor scope', async ({ page }) => {
+  await staff(page)
+  await page.goto('/staff/employees')
+  await page.getByRole('button', { name: /Vai trò & Quyền hạn/ }).click()
+  await expect(page.getByRole('button', { name: 'Tạo từ mẫu Trưởng ca', exact: true })).toHaveCount(0)
+  await staff(page, ['/roles_create'])
+  await page.route('**/api/v1/roles/*/permissions', (route) => route.fulfill({ json: envelope({
+    ...detail,
+    rolePermissions: [{ permission: { id: 'unowned', name: 'Xóa món', key: '/menu_delete' } }],
+  }) }))
+  await page.reload()
+  await page.getByRole('button', { name: /Vai trò & Quyền hạn/ }).click()
+  await page.getByRole('button', { name: 'Tạo từ mẫu Trưởng ca', exact: true }).click()
+  const dialog = page.getByRole('dialog')
+  await expect(dialog.getByRole('alert')).toContainText('vượt phạm vi')
+  await expect(dialog.getByRole('button', { name: 'Lưu vai trò', exact: true })).toBeDisabled()
+})
+
+test('explains assigned-role deletion conflicts without hiding or deleting the role', async ({ page }) => {
+  await staff(page, ['/roles_delete'])
+  await page.route(`**/api/v1/roles/${roleId}`, (route) => route.fulfill({ status: 409, json: { code: 'ROLE_IN_USE' } }))
+  await page.goto('/staff/employees')
+  await page.getByRole('button', { name: /Vai trò & Quyền hạn/ }).click()
+  await page.getByRole('button', { name: 'Xóa vai trò Trưởng ca', exact: true }).click()
+  const dialog = page.getByRole('dialog')
+  await dialog.getByRole('button', { name: 'Xác nhận xóa' }).click()
+  await expect(dialog.getByRole('alert')).toContainText('Gán lại vai trò trước khi xóa')
+  await expect(page.getByRole('heading', { name: 'Trưởng ca', exact: true })).toBeVisible()
+})
 
 test('role assignment respects server-grantable IDs, not the actor role name', async ({
   page,

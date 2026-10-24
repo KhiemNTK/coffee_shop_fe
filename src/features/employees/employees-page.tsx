@@ -34,9 +34,14 @@ export function EmployeesPage() {
     access.has('/roles_permissions_update')
 
   // Active Tab
-  const [activeTab, setActiveTab] = useState<'employees' | 'positions' | 'roles'>(
-    canReadEmployees ? 'employees' : canReadPositions ? 'positions' : 'roles',
-  )
+  const tabs = [
+    { id: 'employees', allowed: canReadEmployees },
+    { id: 'positions', allowed: canReadPositions },
+    { id: 'roles', allowed: canReadRoles },
+  ] as const
+  const [selectedTab, setActiveTab] = useState<(typeof tabs)[number]['id']>('employees')
+  const activeTab = tabs.find((tab) => tab.id === selectedTab && tab.allowed)?.id
+    ?? tabs.find((tab) => tab.allowed)?.id
 
   // Notification Toast
   const [toastMessage, setToastMessage] = useState<string | null>(null)
@@ -70,8 +75,8 @@ export function EmployeesPage() {
   })
 
   const stats = {
-    total: employeesData?.totalItems ?? '—',
-    positionsCount: positionsLoaded ? positionsDropdown.length : '—',
+    total: canReadEmployees ? employeesData?.totalItems ?? '—' : '—',
+    positionsCount: canReadPositions && positionsLoaded ? positionsDropdown.length : '—',
   }
 
   const handleRefresh = () => {
@@ -202,22 +207,23 @@ export function EmployeesPage() {
       {/* Tab Panels */}
       {activeTab === 'employees' && canReadEmployees && (
         <EmployeesListTab
-          positionsDropdown={positionsDropdown}
-          roles={rolesData ?? []}
-          rolesLoaded={Boolean(rolesData) && !isLoadingRoles}
+          positionsDropdown={canReadPositions ? positionsDropdown : []}
+          roles={canReadRoles ? rolesData ?? [] : []}
+          rolesLoaded={canReadRoles && Boolean(rolesData) && !isLoadingRoles}
           canCreate={canCreateEmployee}
           canUpdate={canUpdateEmployee}
           canDelete={canDeleteEmployee}
           canManageRoles={canManageEmployeeRoles}
           onToast={(msg) => setToastMessage(msg)}
-          isCreateOpen={isCreateEmployeeOpen}
+          isCreateOpen={canCreateEmployee && isCreateEmployeeOpen}
           setIsCreateOpen={setIsCreateEmployeeOpen}
         />
       )}
 
-      {activeTab === 'positions' && (
+      {activeTab === 'positions' && canReadPositions && (
         <PositionsTab
           canUpdate={canUpdatePosition}
+          canCreate={canCreatePosition}
           canDelete={canDeletePosition}
           onToast={(msg) => setToastMessage(msg)}
           isCreateOpen={isCreatePositionOpen}
@@ -225,7 +231,7 @@ export function EmployeesPage() {
         />
       )}
 
-      {activeTab === 'roles' && (
+      {activeTab === 'roles' && canReadRoles && (
         <RolesTab
           roles={rolesData ?? []}
           isLoadingRoles={isLoadingRoles}

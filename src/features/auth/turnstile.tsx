@@ -63,7 +63,7 @@ export function Turnstile({
   siteKey,
   onToken,
   action = 'login',
-  size = 'normal',
+  size,
 }: {
   siteKey: string
   onToken: (token: string) => void
@@ -75,6 +75,18 @@ export function Turnstile({
   const container = useRef<HTMLDivElement>(null)
   const [failed, setFailed] = useState(false)
   const [attempt, setAttempt] = useState(0)
+  const [responsiveSize, setResponsiveSize] = useState<'compact' | 'flexible'>('compact')
+  const widgetSize = size ?? responsiveSize
+
+  useEffect(() => {
+    const element = container.current
+    if (!element || size) return
+    const observer = new ResizeObserver(([entry]) => {
+      if (entry) setResponsiveSize(entry.contentRect.width < 300 ? 'compact' : 'flexible')
+    })
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [size])
 
   useEffect(() => {
     let cancelled = false
@@ -94,7 +106,7 @@ export function Turnstile({
         widget = api.render(container.current, {
           sitekey: siteKey,
           action,
-          size,
+          size: widgetSize,
           theme: resolvedTheme,
           language: i18n.resolvedLanguage,
           callback: (token) => {
@@ -115,7 +127,7 @@ export function Turnstile({
       cancelled = true
       if (widget !== undefined) api?.remove(widget)
     }
-  }, [siteKey, onToken, attempt, action, size, i18n.resolvedLanguage, resolvedTheme])
+  }, [siteKey, onToken, attempt, action, widgetSize, i18n.resolvedLanguage, resolvedTheme])
 
   return (
     <div className="verification space-y-2">
@@ -128,7 +140,7 @@ export function Turnstile({
 
       <div
         ref={container}
-        className="min-h-[70px] flex items-center justify-center rounded-xl border border-border/50 bg-muted/20 p-1 transition-all"
+        className={`flex items-center justify-center rounded-lg border border-border/50 bg-muted/20 p-1 ${widgetSize === 'compact' ? 'min-h-[150px]' : 'min-h-[75px]'}`}
       />
 
       {failed && (
@@ -142,7 +154,7 @@ export function Turnstile({
           </div>
           <button
             type="button"
-            className="flex items-center gap-1 font-semibold text-destructive underline hover:opacity-80 cursor-pointer text-button shrink-0"
+            className="flex min-h-11 items-center gap-1 px-2 font-semibold text-destructive underline hover:opacity-80 cursor-pointer text-button shrink-0"
             onClick={() => {
               setFailed(false)
               setAttempt((value) => value + 1)

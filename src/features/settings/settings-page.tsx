@@ -38,11 +38,14 @@ export function SettingsPage() {
   const canReadExceptions = access.has('/management-exceptions_read')
 
   // Active Tab
-  const [activeTab, setActiveTab] = useState<'equipment' | 'settings' | 'exceptions'>(() => {
-    if (canReadEquipment) return 'equipment'
-    if (canReadSettings) return 'settings'
-    return 'exceptions'
-  })
+  const tabs = [
+    { id: 'equipment', allowed: canReadEquipment },
+    { id: 'settings', allowed: canReadSettings },
+    { id: 'exceptions', allowed: canReadExceptions },
+  ] as const
+  const [selectedTab, setActiveTab] = useState<(typeof tabs)[number]['id']>('equipment')
+  const activeTab = tabs.find((tab) => tab.id === selectedTab && tab.allowed)?.id
+    ?? tabs.find((tab) => tab.allowed)?.id
 
   // Toast feedback
   const [toastMessage, setToastMessage] = useState<string | null>(null)
@@ -231,7 +234,7 @@ export function SettingsPage() {
           canUpdate={canUpdateEquipment}
           canTransition={canTransitionEquipment}
           onToast={(msg) => setToastMessage(msg)}
-          isCreateOpen={isCreateEquipmentOpen}
+          isCreateOpen={canCreateEquipment && isCreateEquipmentOpen}
           setIsCreateOpen={setIsCreateEquipmentOpen}
         />
       )}
@@ -241,7 +244,7 @@ export function SettingsPage() {
           canUpdate={canUpdateSettings}
           canDelete={canDeleteSettings}
           onToast={(msg) => setToastMessage(msg)}
-          isCreateOpen={isCreateSettingOpen}
+          isCreateOpen={canCreateSettings && isCreateSettingOpen}
           setIsCreateOpen={setIsCreateSettingOpen}
         />
       )}

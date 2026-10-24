@@ -17,6 +17,21 @@ const screens = [
   ['inventory', 'Quản lý Kho & Nguyên vật liệu'],
 ] as const
 
+test('financial overview localizes labels without changing figures or business data', async ({ page }, info) => {
+  await page.addInitScript(() => localStorage.setItem('coffee_shop_language', 'en'))
+  await fixture(page)
+  await page.goto('/staff/reports')
+  await expect(page.getByRole('heading', { name: 'Sales & Operations Reports' })).toBeVisible()
+  await expect(page.getByRole('tab', { name: 'Financial overview', exact: true })).toBeVisible()
+  await expect(page.getByText('Estimated gross profit', { exact: true })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Payment methods' })).toBeVisible()
+  await expect(page.getByText('105,000.75 ₫', { exact: true }).first()).toBeVisible()
+  await expect(page.locator('header').first()).not.toContainText('Chi nhánh trung tâm')
+  await expect(page.locator('[title="Thông báo"]')).toHaveCount(0)
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+  await page.screenshot({ path: info.outputPath('financial-overview-english.png'), fullPage: true })
+})
+
 async function fixture(page: Page, state: 'data' | 'empty' | 'error' = 'data') {
   await page.clock.setFixedTime(new Date(date))
   const permissions = [
@@ -205,7 +220,7 @@ async function fixture(page: Page, state: 'data' | 'empty' | 'error' = 'data') {
           },
         ]),
         promotions: [],
-        lowStockItems: rows([{ id, name: item.name, stock: item.stock, unitName: 'kg' }]),
+        lowStockItems: rows([{ id, name: item.name, stock: item.stock, reservedStock: '0', availableStock: item.stock, unitName: 'kg' }]),
         cashRisk: {
           overview: {
             openingShortageAmount: '0',
@@ -360,10 +375,73 @@ test('operations keeps pending semantics and raw payment detail', async ({ page 
   await expect(dialog.getByRole('button', { name: 'Đánh dấu đã xử lý' })).toHaveCount(0)
 })
 
+test('sidebar stays full height while its menu scrolls independently', async ({ page }, info) => {
+  test.skip(info.project.name !== 'desktop', 'Desktop sidebar only')
+  await fixture(page)
+  await page.route('**/api/v1/auth/me/permissions', (route) =>
+    route.fulfill({
+      json: envelope(defaultMockAdminAuth([
+        '/dining-tables_read', '/kitchen-tickets_read', '/online-orders_read',
+        '/cashier-shifts_read', '/invoices_read', '/payment-reconciliation_read',
+        '/reservations_read', '/inventory_read', '/menu_read', '/promotions_read',
+        '/reports_read', '/employees_read', '/management-exceptions_read',
+        '/audit-logs_read', '/print-devices_read',
+      ])),
+    }),
+  )
+  await page.goto('/staff/reports')
+  await expect(page.getByRole('heading', { name: screens[0][1], exact: true })).toBeVisible()
+  const sidebar = page.locator('.staff-sidebar')
+  const account = sidebar.getByRole('link', { name: 'Tài khoản', exact: true })
+
+  for (const [width, height] of [[1440, 1000], [1440, 640], [2560, 1000]] as const) {
+    await page.setViewportSize({ width, height })
+    await page.evaluate(() => window.scrollTo(0, 0))
+    await expect.poll(() => sidebar.evaluate((element) => {
+      const bounds = element.getBoundingClientRect()
+      const content = document.querySelector('main')!.getBoundingClientRect()
+      return Math.abs(bounds.bottom - content.bottom) < 1 && bounds.left === 0
+    })).toBe(true)
+    await expect(sidebar).toHaveCSS('background-color', 'rgb(6, 47, 41)')
+    await page.screenshot({ path: info.outputPath(`sidebar-${width}-${height}.png`), fullPage: true })
+
+    await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight))
+    await expect.poll(() => account.evaluate((element) => {
+      const bounds = element.getBoundingClientRect()
+      return bounds.top >= 56 && bounds.bottom <= innerHeight
+    })).toBe(true)
+    const lastMenuItem = sidebar.getByRole('link', { name: 'Máy in & Lệnh in', exact: true })
+    await account.focus()
+    await page.keyboard.press('Shift+Tab')
+    await expect(lastMenuItem).toBeFocused()
+    await expect(lastMenuItem).toBeInViewport()
+    await expect(account).toBeInViewport()
+    await expect(sidebar.getByRole('button', { name: 'Thu gọn thanh điều hướng' })).toBeInViewport()
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+    await page.screenshot({ path: info.outputPath(`sidebar-scrolled-${width}-${height}.png`) })
+  }
+  await page.setViewportSize({ width: 1440, height: 640 })
+  await sidebar.getByRole('button', { name: 'Thu gọn thanh điều hướng' }).click()
+  const menu = sidebar.locator('nav > div').first()
+  expect(await menu.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true)
+  await account.focus()
+  await page.keyboard.press('Shift+Tab')
+  await expect(sidebar.getByRole('link', { name: 'Máy in & Lệnh in', exact: true })).toBeInViewport()
+  await expect.poll(() => page.locator('.staff-workspace > header').evaluate((element) =>
+    Math.round(element.getBoundingClientRect().top),
+  )).toBe(0)
+  await page.screenshot({ path: info.outputPath('sidebar-short-collapsed.png') })
+})
+
 test('sidebar collapse preserves accessible navigation', async ({ page }, info) => {
   test.skip(info.project.name !== 'desktop', 'Desktop sidebar only')
   await fixture(page)
   await page.goto('/staff/employees')
+  const sidebar = page.locator('.staff-sidebar')
+  await expect(sidebar).toHaveCSS('width', '240px')
+  await expect.poll(() => sidebar.evaluate((element) =>
+    element.getBoundingClientRect().height >= innerHeight - 56,
+  )).toBe(true)
   const toggle = page.getByRole('button', { name: 'Thu gọn thanh điều hướng', exact: true })
   await toggle.focus()
   await page.keyboard.press('Enter')
@@ -371,6 +449,8 @@ test('sidebar collapse preserves accessible navigation', async ({ page }, info) 
     'aria-expanded',
     'false',
   )
+  await expect(sidebar).toHaveCSS('width', '68px')
+  await page.screenshot({ path: info.outputPath('sidebar-collapsed.png'), fullPage: true })
   await page
     .getByRole('navigation', { name: 'Nhân viên', exact: true })
     .getByRole('link', { name: 'Thực đơn', exact: true })
