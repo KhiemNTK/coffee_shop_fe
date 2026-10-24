@@ -19,6 +19,7 @@ const PaymentReturnPage = lazy(() => import('../features/invoices/payment-return
 const ReorderPage = lazy(() => import('../features/online-orders/reorder-page'))
 const PickupPage = lazy(() => import('../features/online-orders/pickup-page'))
 const CartPage = lazy(() => import('../features/online-orders/cart-page'))
+const OnlineOrderRecoveryGate = lazy(() => import('../features/online-orders/online-order-recovery-gate'))
 const WishlistPage = lazy(() => import('../features/customers/wishlist-page'))
 const CustomerSignInPage = lazy(() => import('../features/customers/customer-sign-in'))
 const CustomerAccountPage = lazy(() => import('../features/customers/customer-account-page'))
@@ -111,14 +112,16 @@ export function AppRouter() {
         <Routes>
           <Route path="/" element={<MenuPage />} />
           <Route path="/menu" element={<MenuPage />} />
-          <Route path="/cart" element={<CartPage />} />
           <Route path="/wishlist" element={<WishlistPage />} />
           <Route path="/customer/sign-in" element={<CustomerSignInPage />} />
           <Route path="/account" element={<CustomerAccountPage />} />
           <Route path="/account/orders/:orderId" element={<CustomerAccountPage />} />
-          <Route path="/account/orders/:orderId/reorder" element={<ReorderPage />} />
-          <Route path="/order" element={<OnlineOrderPage />} />
-          <Route path="/reorder" element={<ReorderPage />} />
+          <Route element={<OnlineOrderRecoveryGate />}>
+            <Route path="/cart" element={<CartPage />} />
+            <Route path="/account/orders/:orderId/reorder" element={<ReorderPage />} />
+            <Route path="/order" element={<OnlineOrderPage />} />
+            <Route path="/reorder" element={<ReorderPage />} />
+          </Route>
           <Route path="/pickup" element={<PickupPage />} />
           <Route path="/reservations" element={<PublicReservationsPage />} />
           <Route path="/sign-in" element={<SignInPage />} />

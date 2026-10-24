@@ -21,6 +21,9 @@ async function staff(page: Page, permissions: string[]) {
   )
 }
 async function pos(page: Page) {
+  await page.route('**/api/v1/invoices/quote', (route) => route.fulfill({ json: envelope({
+    orderItemIds: [itemId, otherId], subTotal: '55000', discountAmount: '0', taxAmount: '0', totalAmount: '55000', quoteFingerprint: 'a'.repeat(64),
+  }) }))
   await page.route('**/api/v1/dining-tables', (route) => route.fulfill({ json: envelope([]) }))
   await page.route('**/api/v1/orders/sessions', (route) => route.fulfill({ json: envelope([]) }))
   await page.route('**/api/v1/orders/takeaway/handoff?*', (route) =>
@@ -208,6 +211,7 @@ test('partial checkout and promotion use a server quote and selected line IDs', 
         discountAmount: input.promotionId ? '3500' : '0',
         taxAmount: '0',
         totalAmount: input.promotionId ? '31500' : '35000',
+        quoteFingerprint: 'a'.repeat(64),
       }),
     })
   })
@@ -254,6 +258,7 @@ test('an uncertain promoted checkout freezes its quote and retries the same inte
         discountAmount: '5500',
         taxAmount: '0',
         totalAmount: '49500',
+        quoteFingerprint: 'a'.repeat(64),
       }),
     })
   })
@@ -329,6 +334,7 @@ test('session cancellation needs confirmation and does not write on opening the 
   })
   await page.getByRole('button', { name: 'Hủy phiên', exact: true }).click()
   expect(deletes).toBe(0)
+  await page.getByLabel('Lý do hủy phiên').fill('Khách đổi ý')
   await page.getByRole('button', { name: 'Xác nhận hủy phiên' }).click()
   await expect(page).toHaveURL(/\/staff\/pos$/)
   expect(deletes).toBe(1)

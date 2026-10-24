@@ -20,6 +20,36 @@ prices and availability on the server. Google customer registration does not gra
 staff roles or permissions. Password-based customer auth and loyalty are not part
 of this slice.
 
+## Cloudflare And Order Recovery
+
+Deploy backend migration `20261024000000_allow_asap_order_no_show` and the matching
+`/online-orders/requests/recover-by-key` and `/customers/orders/recover-by-key`
+routes before this frontend. Reloaded checkout/reorder blocks new intents while
+an earlier write is unknown. Its tab-scoped proof and frozen basket do not store
+recipient name, phone or CAPTCHA. A read-only recovery can run while intake is
+paused; only a missing result enables explicit same-key resend with matching
+re-entered contacts and fresh CAPTCHA. The customer account must match; a guest
+intent is never transferred into a signed-in customer's history.
+
+Online sessions use the online collection screen, not generic POS checkout or
+per-line cancellation. Accepted pending items display awaiting preparation.
+Private pickup QR supports keyboard scanners and compatible browser cameras;
+scanning never submits cash collection. Unsupported/denied cameras retain manual
+entry. Camera tracks stop on close, scan, navigation, backgrounding or timeout.
+
+Deploy the matching backend's read-only `/online-orders/requests/recover` and
+`/customers/orders/recover` routes before this frontend. Checkout and reorder use
+these routes after an unknown result; a lookup cannot create an order. Only an
+explicit resend after `ONLINE_ORDER_RECOVERY_NOT_FOUND` uses the original create
+route, unchanged payload/key and a fresh CAPTCHA. Recovery does not store recipient
+name, phone or CAPTCHA, and never transfers a guest order to a customer account.
+
+Turnstile adapts to the container width and app theme/language. WAF challenge
+responses are separate from permission errors and never trigger automatic writes.
+For production Caddy behind Cloudflare, configure `CADDY_TRUSTED_PROXY_CIDRS` in
+the backend deployment environment, not `VITE_*`. The direct-VPS default trusts
+loopback only; never trust arbitrary visitor forwarding headers.
+
 ## payOS Payments
 
 payOS shares the existing staff invoice gateway with VNPay/MoMo. Provider availability
@@ -222,3 +252,16 @@ native controls and Zod boundary validation. No extra form/state framework is ne
 
 Cover image: [Unsplash coffee photo](https://images.unsplash.com/photo-1509042239860-f550ce710b93).
 The cover is decorative; product names, prices and options always come from the API.
+
+## Invoice Contract Release
+
+Deploy the backend and its `20261024100000_invoice_document_snapshot` migration
+before this frontend. POS quotes require the backend's `quoteFingerprint` field;
+update the FE integration workflow's `BACKEND_REF` to the corresponding pushed
+backend commit, not a commit that predates this contract.
+
+Invoice history and printing use immutable item/table snapshots. Cash/card
+checkout recovery keeps the original command in the same tab across reloads;
+never collect money again while its result remains unknown. Recovery older than
+23 hours requires invoice/shift reconciliation. Void and session cancellation
+require an explicit reason; no sample reason is submitted automatically.

@@ -188,6 +188,11 @@ test('switching languages never resubmits an uncertain order and keeps the same 
     languages.push(route.request().headers()['accept-language'] ?? '')
     return bodies.length === 1 ? route.abort() : route.fulfill({ json: envelope(created) })
   })
+  await page.route('**/api/v1/online-orders/requests/recover', (route) => {
+    bodies.push(route.request().postDataJSON())
+    languages.push(route.request().headers()['accept-language'] ?? '')
+    return route.fulfill({ json: envelope(created) })
+  })
   await page.route('**/api/v1/online-orders/requests/status', (route) =>
     route.fulfill({ json: envelope({ ...created, isPaid: false, orderItems: [] }) }),
   )

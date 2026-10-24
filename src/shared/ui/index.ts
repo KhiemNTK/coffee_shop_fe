@@ -7,4 +7,4 @@ export * from './input'
 export * from './dialog'
 export * from './tabs'
 export * from './operations'
-
+export * from './api-error-alert'

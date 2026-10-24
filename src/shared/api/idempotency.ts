@@ -24,6 +24,13 @@ export async function findPendingOperationKey(path: string, payload: Record<stri
   return sessionStorage.getItem(await pendingStorageKey(path, payload, authenticated))
 }
 
+export function clearPendingOperationByKey(path: string, key: string, authenticated = true) {
+  const prefix = `${pendingOperationPrefix}${authenticated ? 'private' : 'public'}:${path}:`
+  for (const storageKey of Object.keys(sessionStorage))
+    if (storageKey.startsWith(prefix) && sessionStorage.getItem(storageKey) === key)
+      sessionStorage.removeItem(storageKey)
+}
+
 // Store only a payload digest and key; uncertain writes survive a modal close or reload.
 export async function apiIdempotentMutate<T>(
   path: string,

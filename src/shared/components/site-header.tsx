@@ -33,16 +33,16 @@ export function SiteHeader({
   })
 
   const navLinks = [
-    { href: '/', label: 'Trang chủ', isRoute: true },
-    { href: '/menu', label: 'Menu', isRoute: true },
-    { href: '/#bestsellers', label: 'Ưu đãi', isRoute: false },
-    { href: '/#about', label: 'Câu chuyện', isRoute: false },
-    { href: '/#contact', label: 'Liên hệ', isRoute: false },
+    { href: '/', label: translate('storefront.home'), isRoute: true },
+    { href: '/menu', label: translate('storefront.menu'), isRoute: true },
+    { href: '/#bestsellers', label: translate('storefront.offers'), isRoute: false },
+    { href: '/#about', label: translate('storefront.about'), isRoute: false },
+    { href: '/#contact', label: translate('storefront.contact'), isRoute: false },
   ]
 
   return (
     <header className="sticky top-0 z-40 border-b border-border/80 bg-card/95 backdrop-blur-md shadow-xs">
-      <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 sm:px-6">
+      <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-y-2 px-4 py-3 sm:flex-nowrap sm:gap-x-4 sm:px-6">
         {/* Left: Mobile Hamburger & Brand Logo */}
         <div className="flex min-w-0 items-center gap-2">
           <button
@@ -50,8 +50,8 @@ export function SiteHeader({
             onClick={() => setMobileMenuOpen((open) => !open)}
             aria-expanded={mobileMenuOpen}
             aria-controls="mobile-navigation-menu"
-            aria-label={mobileMenuOpen ? 'Đóng menu điều hướng' : 'Mở menu điều hướng'}
-            className="lg:hidden p-2 -ml-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors cursor-pointer"
+            aria-label={translate(mobileMenuOpen ? 'storefront.closeNavigation' : 'storefront.openNavigation')}
+            className="xl:hidden p-2 -ml-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors cursor-pointer"
           >
             {mobileMenuOpen ? (
               <X className="h-5 w-5" aria-hidden="true" />
@@ -74,7 +74,7 @@ export function SiteHeader({
         </div>
 
         {/* Desktop Nav Links */}
-        <nav className="hidden lg:flex items-center gap-6" aria-label={translate('menu.mainNav')}>
+        <nav className="hidden xl:flex items-center gap-6" aria-label={translate('menu.mainNav')}>
           {navLinks.map((link) =>
             link.isRoute ? (
               <Link
@@ -102,7 +102,7 @@ export function SiteHeader({
         </nav>
 
         {/* Right Actions */}
-        <div className="flex items-center gap-1.5 sm:gap-2.5">
+        <div className="flex w-full items-center gap-1.5 sm:w-auto sm:shrink-0 sm:gap-2.5">
           <ThemeToggle />
 
           <Link
@@ -120,8 +120,8 @@ export function SiteHeader({
               type="button"
               onClick={onSearchClick}
               className="p-2 text-muted-foreground hover:text-foreground rounded-lg hover:bg-muted/60 transition-colors hidden sm:flex cursor-pointer"
-              title="Tìm kiếm món"
-              aria-label="Tìm kiếm món"
+              title={translate('storefront.search')}
+              aria-label={translate('storefront.search')}
             >
               <Search className="h-4 w-4" />
             </button>
@@ -129,8 +129,8 @@ export function SiteHeader({
             <Link
               to="/menu"
               className="p-2 text-muted-foreground hover:text-foreground rounded-lg hover:bg-muted/60 transition-colors hidden sm:flex"
-              title="Tìm kiếm món"
-              aria-label="Tìm kiếm món"
+              title={translate('storefront.search')}
+              aria-label={translate('storefront.search')}
             >
               <Search className="h-4 w-4" />
             </Link>
@@ -145,7 +145,7 @@ export function SiteHeader({
             )}
           >
             <CalendarDays className="h-3.5 w-3.5" />
-            <span>Đặt bàn</span>
+            <span>{translate('storefront.reserve')}</span>
           </Link>
 
           {/* Cart Icon with Accessible Badge */}
@@ -158,8 +158,8 @@ export function SiteHeader({
               }
             }}
             className="relative p-2 rounded-lg text-foreground hover:bg-muted/80 transition-colors cursor-pointer"
-            title="Giỏ hàng của bạn"
-            aria-label={`Giỏ hàng của bạn, ${totalCount} món`}
+            title={translate('storefront.cart')}
+            aria-label={translate('storefront.cartLabel', { count: totalCount })}
           >
             <ShoppingBag className="h-5 w-5 text-primary" />
             <span
@@ -175,11 +175,14 @@ export function SiteHeader({
             state={signInState}
             aria-label={translate(customer.data ? 'customer.account' : 'wishlist.customerSignIn')}
             title={translate(customer.data ? 'customer.account' : 'wishlist.customerSignIn')}
-            className="inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center gap-2 rounded-md px-2 text-primary hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            className="ml-auto inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center gap-2 rounded-md px-2 text-primary hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary sm:ml-0"
           >
             <UserRound className="h-5 w-5" aria-hidden="true" />
-            <span className="hidden xl:inline text-sm font-semibold">
+            <span className="text-sm font-semibold xl:hidden">
               {translate(customer.data ? 'customer.account' : 'auth.signIn')}
+            </span>
+            <span className="hidden text-sm font-semibold xl:inline">
+              {translate(customer.data ? 'customer.account' : 'wishlist.customerSignIn')}
             </span>
           </Link>
         </div>
@@ -189,7 +192,7 @@ export function SiteHeader({
       {mobileMenuOpen && (
         <div
           id="mobile-navigation-menu"
-          className="lg:hidden border-t border-border bg-card/98 px-4 py-4 backdrop-blur-lg shadow-lg animate-in slide-in-from-top-2 duration-200"
+          className="xl:hidden border-t border-border bg-card/98 px-4 py-4 backdrop-blur-lg shadow-lg animate-in slide-in-from-top-2 duration-200"
         >
           <nav className="flex flex-col space-y-1">
             {navLinks.map((link) =>
@@ -244,7 +247,7 @@ export function SiteHeader({
                 )}
               >
                 <CalendarDays className="h-4 w-4" />
-                <span>Đặt bàn trực tuyến</span>
+                <span>{translate('storefront.reserveOnline')}</span>
               </Link>
             </div>
           </nav>

@@ -2,17 +2,22 @@ import { z } from 'zod'
 import { i18n, currentLanguage } from '../i18n/index.js'
 
 export class ApiError extends Error {
+  readonly receivedAt = Date.now()
   readonly status: number
   readonly code?: string
   readonly requestId?: string
   readonly serverMessage?: string
   readonly validationIssues?: string[]
+  readonly retryAt?: number
+  readonly details?: unknown
   constructor(
     status: number,
     code?: string,
     requestId?: string,
     serverMessage?: string,
     validationIssues?: string[],
+    retryAt?: number,
+    details?: unknown
   ) {
     super(serverMessage || 'API request failed')
     this.status = status
@@ -20,7 +25,17 @@ export class ApiError extends Error {
     this.requestId = requestId
     this.serverMessage = serverMessage
     this.validationIssues = validationIssues
+    this.retryAt = retryAt
+    this.details = details
   }
+}
+
+function retryDeadline(value: string | null) {
+  if (!value?.trim()) return undefined
+  const now = Date.now()
+  const delay = /^\d+$/.test(value.trim()) ? Number(value) * 1000 : Date.parse(value) - now
+  if (!Number.isFinite(delay) || delay <= 0) return undefined
+  return now + Math.min(delay, 3_600_000)
 }
 
 let sessionRequests = new AbortController()
@@ -57,7 +72,7 @@ async function http(
   method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE',
   signal: AbortSignal,
   body?: unknown,
-  timeoutMs = 10_000,
+  timeoutMs = 10_000
 ) {
   const headers = new Headers({ Accept: 'application/json', 'Accept-Language': currentLanguage() })
   const multipart = body instanceof FormData
@@ -73,6 +88,9 @@ async function http(
     signal: AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]),
     body: body === undefined ? undefined : multipart ? body : JSON.stringify(body),
   })
+  if (response.headers.get('cf-mitigated') === 'challenge') {
+    throw new ApiError(503, 'CLOUDFLARE_CHALLENGE', response.headers.get('cf-ray') ?? undefined)
+  }
   if (!response.ok) {
     const error = z
       .object({
@@ -80,6 +98,7 @@ async function http(
         requestId: z.string().optional(),
         message: z.string().optional(),
         errors: z.array(z.object({ message: z.string() })).nullish(),
+        details: z.unknown().optional(),
       })
       .safeParse(await response.json().catch(() => null))
     const serverMessage = error.success
@@ -91,6 +110,9 @@ async function http(
       error.success ? error.data.code : undefined,
       response.headers.get('x-request-id') ?? (error.success ? error.data.requestId : undefined),
       serverMessage,
+      undefined,
+      retryDeadline(response.headers.get('retry-after')),
+      error.success ? error.data.details : undefined
     )
   }
   return response
@@ -122,7 +144,7 @@ async function requestResponse(
   signal: AbortSignal | undefined,
   authenticated: boolean,
   body?: unknown,
-  timeoutMs = 10_000,
+  timeoutMs = 10_000
 ): Promise<{ response: Response; signal: AbortSignal }> {
   const sessionSignal = sessionRequests.signal
   const activeSignal = signal ?? new AbortController().signal
@@ -165,7 +187,7 @@ async function request<T>(
   signal: AbortSignal | undefined,
   authenticated: boolean,
   body?: unknown,
-  timeoutMs = 10_000,
+  timeoutMs = 10_000
 ): Promise<T> {
   const result = await requestResponse(path, method, signal, authenticated, body, timeoutMs)
   const parsed = z
@@ -177,7 +199,7 @@ async function request<T>(
       'CLIENT_RESPONSE_INVALID',
       result.response.headers.get('x-request-id') ?? undefined,
       'Phản hồi không hợp lệ. Vui lòng kiểm tra trạng thái giao dịch trước khi thử lại.',
-      parsed.error.issues.map((issue) => `${issue.path.join('.') || '<root>'}: ${issue.code}`),
+      parsed.error.issues.map((issue) => `${issue.path.join('.') || '<root>'}: ${issue.code}`)
     )
   }
   result.signal.throwIfAborted()
@@ -195,7 +217,7 @@ export function apiGet<T>(
   path: string,
   schema: z.ZodType<T>,
   signal?: AbortSignal,
-  authenticated = false,
+  authenticated = false
 ): Promise<T> {
   return request(path, 'GET', schema, signal, authenticated)
 }
@@ -207,7 +229,7 @@ export function apiMutate<T>(
   body?: unknown,
   signal?: AbortSignal,
   authenticated = true,
-  timeoutMs = 10_000,
+  timeoutMs = 10_000
 ): Promise<T> {
   return request(path, method, schema, signal, authenticated, body, timeoutMs)
 }
@@ -222,7 +244,7 @@ export async function authCommand(
     | '/auth/google/link'
     | '/auth/google/unlink',
   body: unknown,
-  schema: z.ZodType = z.unknown(),
+  schema: z.ZodType = z.unknown()
 ) {
   const accountMutation = path === '/auth/google/link' || path === '/auth/google/unlink'
   const observedCsrf = csrfToken()
@@ -239,7 +261,7 @@ export async function authCommand(
       throw new ApiError(
         502,
         'CLIENT_RESPONSE_INVALID',
-        response.headers.get('x-request-id') ?? undefined,
+        response.headers.get('x-request-id') ?? undefined
       )
     }
   })
@@ -254,8 +276,19 @@ export function errorMessage(error: unknown) {
     return translate('error.connection')
   if (error instanceof Error && !(error instanceof ApiError) && error.message) return error.message
   if (!(error instanceof ApiError)) return translate('error.connection')
+  if (error.code === 'CLOUDFLARE_CHALLENGE') return translate('error.cloudflareChallenge')
+  if (error.code === 'TURNSTILE_REQUIRED') return translate('auth.verificationRequired')
+  if (error.code === 'TURNSTILE_EXPIRED') return translate('auth.verificationExpired')
+  if (error.code === 'TURNSTILE_INVALID') return translate('auth.verificationFailed')
+  if (error.code === 'TURNSTILE_UNAVAILABLE') return translate('auth.verificationUnavailable')
+  if (error.code === 'ONLINE_ORDER_RECOVERY_NOT_FOUND')
+    return translate('takeaway.recoveryNotFound')
+  if (error.code === 'ONLINE_ORDER_PICKUP_REQUIRED') return translate('takeaway.posManaged')
+  if (error.code === 'ONLINE_ORDER_PENDING_RECOVERY')
+    return translate('takeaway.pendingRecoveryInfo')
   if (error.code === 'CLIENT_RESPONSE_INVALID') return translate('error.invalidResponse')
   if (error.code === 'AUTHORIZATION_CHANGED') return translate('permissions.changed')
+  if (error.code === 'ROLE_IN_USE') return translate('roles.inUse')
   if (error.code === 'IMAGE_UPLOAD_DISABLED') return translate('menu.image.disabled')
   if (error.code === 'IMAGE_STORAGE_UNAVAILABLE') return translate('menu.image.unavailable')
   if (error.code === 'IMAGE_UPLOAD_INVALID') return translate('menu.image.invalid')
@@ -269,11 +302,17 @@ export function errorMessage(error: unknown) {
   if (error.code === 'ONLINE_INTAKE_PAUSED') return translate('takeaway.intakePaused')
   if (error.code === 'ONLINE_INTAKE_CHANGED') return translate('intake.changed')
   if (error.code === 'INVENTORY_STOCKTAKE_COUNTS_CHANGED') return translate('error.countsChanged')
+  if (error.code === 'INVENTORY_PURCHASE_RECEIPT_CHANGED') return translate('error.receiptChanged')
+  if (error.code === 'INVENTORY_STOCKTAKE_RESERVED_STOCK')
+    return translate('error.reservedStockCount')
   if (error.code === 'INVENTORY_STOCKTAKE_SNAPSHOT_STALE') return translate('error.snapshotStale')
   if (error.code === 'INVENTORY_INSUFFICIENT_STOCK') return translate('error.insufficientStock')
   if (error.status === 401) return translate('error.unauthorized')
   if (error.status === 403) return translate('error.forbidden')
-  if (error.status === 429) return translate('error.rateLimit')
+  if (error.status === 429) {
+    const seconds = Math.max(0, Math.ceil(((error.retryAt ?? 0) - Date.now()) / 1000))
+    return seconds ? translate('error.rateLimitWait', { seconds }) : translate('error.rateLimit')
+  }
   if (error.serverMessage && (error.status === 400 || error.status === 404 || error.status === 409))
     return error.serverMessage
   if (error.status === 400) return translate('error.badRequest')

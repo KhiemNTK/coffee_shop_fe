@@ -615,12 +615,13 @@ test.describe('real Docker backend contract', () => {
         items: [{ inventoryItemId: input.itemId, quantity: '0.0005', unitPrice: '200.75' }] }
       const receipts = await Promise.all([api.saveReceipt(payload), api.saveReceipt(payload)])
       const receipt = receipts[0]!
-      const posts = await Promise.all([api.postDocument('purchase-receipts', receipt.id), api.postDocument('purchase-receipts', receipt.id)])
+      const review = { expectedUpdatedAt: receipt.updatedAt }
+      const posts = await Promise.all([api.postDocument('purchase-receipts', receipt.id, review), api.postDocument('purchase-receipts', receipt.id, review)])
       const rejected = async (operation: () => Promise<unknown>) => {
         try { await operation(); return 0 } catch (error) { return (error as { status: number }).status }
       }
       return { ids: receipts.map(row => row.id), posts: posts.map(row => row.status),
-        newPost: await rejected(() => api.postDocument('purchase-receipts', receipt.id)),
+        newPost: await rejected(() => api.postDocument('purchase-receipts', receipt.id, review)),
         update: await rejected(() => api.saveReceipt({ ...payload, note: 'Changed' }, receipt.id)),
         cancel: await rejected(() => api.cancelDocument('purchase-receipts', receipt.id, 'Cannot cancel posted receipt')) }
     }, { supplierId: ids.supplier, itemId: item.id, note: prefix + '-receipt-race' })
@@ -659,10 +660,10 @@ test.describe('real Docker backend contract', () => {
       return api.saveReceipt({ supplierId: input.supplierId, items: input.itemIds.map(inventoryItemId => ({ inventoryItemId, quantity: '1', unitPrice: '20' })) })
     }, { supplierId: ids.supplier, itemIds: [firstId, lastId] })
     await prisma.inventoryItem.update({ where: { id: lastId }, data: { deletedAt: new Date() } })
-    const post = () => page.evaluate(async id => {
+    const post = () => page.evaluate(async input => {
       const { postDocument } = await import('/src/features/inventory/procurement.api.ts')
-      try { await postDocument('purchase-receipts', id); return 0 } catch (error) { return (error as { status: number }).status }
-    }, receipt.id)
+      try { await postDocument('purchase-receipts', input.id, { expectedUpdatedAt: input.updatedAt }); return 0 } catch (error) { return (error as { status: number }).status }
+    }, { id: receipt.id, updatedAt: receipt.updatedAt })
     expect(await post()).toBe(409)
     expect((await prisma.purchaseReceipt.findUniqueOrThrow({ where: { id: receipt.id } })).status).toBe('DRAFT')
     const stock = await prisma.inventoryItem.findMany({ where: { id: { in: [firstId, lastId] } } })
@@ -672,7 +673,7 @@ test.describe('real Docker backend contract', () => {
     expect(await prisma.actionLog.count({ where: { employeeId: ids.employee, actionType: 'INVENTORY_PURCHASE_RECEIPT_POSTED',
       details: { path: ['purchaseReceiptId'], equals: receipt.id } } })).toBe(0)
     expect(await prisma.idempotencyRequest.count({ where: { employeeId: ids.employee, operation: 'inventory.purchase-receipt.post',
-      requestHash: createHash('sha256').update(JSON.stringify({ id: receipt.id })).digest('hex') } })).toBe(0)
+      requestHash: createHash('sha256').update(JSON.stringify({ id: receipt.id, expectedUpdatedAt: receipt.updatedAt })).digest('hex') } })).toBe(0)
     await prisma.inventoryItem.update({ where: { id: lastId }, data: { deletedAt: null } })
     expect(await post()).toBe(0)
     expect(await prisma.inventoryTransaction.count({ where: { purchaseReceiptItem: { purchaseReceiptId: receipt.id } } })).toBe(2)
@@ -790,9 +791,9 @@ test.describe('real Docker backend contract', () => {
       await api.saveCounts(draft.id, [{ inventoryItemId: itemId, countedQuantity: '1.2345' }])
       const review = await api.getStocktake(draft.id)
       await api.saveCounts(draft.id, [{ inventoryItemId: itemId, countedQuantity: '1.1111' }])
-      try { await api.postDocument('stocktakes', draft.id, review.items.map(line => ({
+      try { await api.postDocument('stocktakes', draft.id, { expectedCounts: review.items.map(line => ({
         inventoryItemId: line.inventoryItemId, countedQuantity: line.countedQuantity!,
-      }))); return { id: draft.id, status: 0, code: '' } }
+      })) }); return { id: draft.id, status: 0, code: '' } }
       catch (error) { const failure = error as { status: number; code: string }; return { id: draft.id, status: failure.status, code: failure.code } }
     }, item.id)
     expect(result.status).toBe(409)
@@ -804,7 +805,7 @@ test.describe('real Docker backend contract', () => {
     await page.evaluate(async id => {
       const api = await import('/src/features/inventory/procurement.api.ts')
       const refreshed = await api.getStocktake(id)
-      await api.postDocument('stocktakes', id, refreshed.items.map(line => ({ inventoryItemId: line.inventoryItemId, countedQuantity: line.countedQuantity! })))
+      await api.postDocument('stocktakes', id, { expectedCounts: refreshed.items.map(line => ({ inventoryItemId: line.inventoryItemId, countedQuantity: line.countedQuantity! })) })
     }, result.id)
     expect((await prisma.inventoryItem.findUniqueOrThrow({ where: { id: item.id } })).stock.toString()).toBe('1.1111')
     expect(await prisma.inventoryTransaction.count({ where: { stocktakeItem: { stocktakeId: result.id } } })).toBe(1)

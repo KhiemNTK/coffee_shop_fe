@@ -121,6 +121,12 @@ html.dark body:has(.staff-workspace) > dialog {
   background: var(--color-background);
 }
 
+/* Clip sideways overflow without turning the page into a sticky scroll container. */
+html:has(.staff-workspace),
+body:has(.staff-workspace) {
+  overflow-x: clip;
+}
+
 .staff-sidebar {
   background: #062f29;
   border-color: #0a433a;
@@ -447,44 +453,6 @@ h3,
 p {
   margin: 0;
   overflow-wrap: anywhere;
-}
-
-/* Playwright Menu Cover Selector & Layout Requirements */
-.menu-cover {
-  position: relative;
-  height: 224px;
-  background: #344941;
-  color: white;
-}
-
-.menu-cover img {
-  position: absolute;
-  inset: 0;
-  height: 100%;
-  width: 100%;
-  object-fit: cover;
-  object-position: 50% 53%;
-}
-
-.menu-cover::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: #10231c75;
-}
-
-.cover-content {
-  position: relative;
-  z-index: 1;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-}
-
-.cover-content p {
-  font-size: 12px;
-  font-weight: 600;
 }
 
 /* Loading & Suspense feedback */

@@ -12,12 +12,14 @@ test('coalesces a burst of KDS events into one refresh and cancels scheduled wor
   await page.addInitScript(() => {
     class FixtureEventSource extends EventTarget {
       static latest: FixtureEventSource
+      static connections: FixtureEventSource[] = []
       onopen: (() => void) | null = null
       onerror: (() => void) | null = null
       closed = false
       constructor() {
         super()
         FixtureEventSource.latest = this
+        FixtureEventSource.connections.push(this)
         setTimeout(() => this.onopen?.(), 0)
       }
       close() {
@@ -61,6 +63,21 @@ test('coalesces a burst of KDS events into one refresh and cancels scheduled wor
   await page.clock.runFor(10)
   await expect.poll(() => tickets).toBe(before.tickets + 1)
   await expect.poll(() => workloads).toBe(before.workloads + 1)
+  const connectionCount = await page.evaluate(() =>
+    (window.EventSource as unknown as { connections: unknown[] }).connections.length
+  )
+  await page.evaluate(() => {
+    const source = (window.EventSource as unknown as { latest: EventTarget }).latest
+    source.dispatchEvent(new MessageEvent('kitchen.renew'))
+  })
+  await page.clock.runFor(10)
+  await expect.poll(() => page.evaluate((previousCount) => {
+    const sources = (window.EventSource as unknown as { connections: Array<{ closed: boolean }> }).connections
+    return { count: sources.length, previousClosed: sources[previousCount - 1]?.closed }
+  }, connectionCount)).toEqual({ count: connectionCount + 1, previousClosed: true })
+  await expect(page.getByText('Realtime Live')).toBeVisible()
+  await expect.poll(() => tickets).toBeGreaterThan(before.tickets + 1)
+  await expect.poll(() => workloads).toBeGreaterThan(before.workloads + 1)
   await page.evaluate(() => {
     const source = (window.EventSource as unknown as { latest: EventTarget }).latest
     source.dispatchEvent(new MessageEvent('kitchen.refresh'))
