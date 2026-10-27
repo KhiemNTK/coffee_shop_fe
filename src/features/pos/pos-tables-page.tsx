@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useOutletContext } from 'react-router-dom'
 import {
@@ -11,11 +11,12 @@ import {
   Users,
   UtensilsCrossed,
 } from 'lucide-react'
-import { errorMessage } from '../../shared/api/client'
+import { ApiError, errorMessage } from '../../shared/api/client'
+import { pendingIntentKey, readPendingIntent, writePendingIntent, isPendingIntentExpired, type PendingIntent } from '../../shared/api/pending-intent'
 import { type Session } from '../auth/session'
 import { getCurrentShift } from '../cashier-shifts/cashier-shifts.api'
 import { ShiftRequiredLink } from '../cashier-shifts/components/shift-required-link'
-import { getDiningTables, getActiveSessions, openOrderSession, type DiningTable } from './pos.api'
+import { getDiningTables, getActiveSessions, openOrderSession, openSessionPayloadSchema, type OpenSessionPayload, type DiningTable } from './pos.api'
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '../../shared/ui/card'
 import { Button } from '../../shared/ui/button'
 import { Badge } from '../../shared/ui/badge'
@@ -40,6 +41,13 @@ export default function PosTablesPage() {
   const [openingTableId, setOpeningTableId] = useState<string | null>(null)
   const [guestCount, setGuestCount] = useState<number>(2)
   const [actionError, setActionError] = useState<string | null>(null)
+  const recoveryKey = pendingIntentKey(employee.id, 'orders.sessions.open')
+  const [recovery] = useState(() => {
+    try { return { intent: readPendingIntent(recoveryKey, openSessionPayloadSchema), error: false } }
+    catch { return { intent: null, error: true } }
+  })
+  const [pendingOpen, setPendingOpen] = useState(recovery.intent)
+  const openFlight = useRef(false)
 
   const can = access.has
   const canReadTables = can('/dining-tables_read')
@@ -69,11 +77,14 @@ export default function PosTablesPage() {
   })
 
   const openSessionMutation = useMutation({
-    mutationFn: async (tableId: string | null) => {
+    retry: false,
+    mutationFn: async (intent: PendingIntent<OpenSessionPayload>) => {
       setActionError(null)
-      return openOrderSession(tableId, tableId ? guestCount : undefined)
+      return openOrderSession(intent.payload.tableId, intent.payload.guestCount, intent.idempotencyKey)
     },
     onSuccess: (session) => {
+      sessionStorage.removeItem(recoveryKey)
+      setPendingOpen(null)
       void queryClient.invalidateQueries({
         queryKey: posKeys.tables(employee.id),
       })
@@ -82,10 +93,38 @@ export default function PosTablesPage() {
       })
       navigate(`/staff/pos/sessions/${session.id}`)
     },
-    onError: (err) => {
+    onError: (err, intent) => {
       setActionError(errorMessage(err))
+      if (!intent.uncertain && err instanceof ApiError && err.status >= 400 && err.status < 500 && ![408, 429].includes(err.status)) {
+        sessionStorage.removeItem(recoveryKey)
+        setPendingOpen(null)
+      } else {
+        const uncertain = { ...intent, uncertain: true }
+        setPendingOpen(uncertain)
+        try { writePendingIntent(recoveryKey, uncertain) }
+        catch { setActionError(translate('pos.storageUncertain')) }
+      }
     },
+    onSettled: () => { openFlight.current = false },
   })
+
+  function openSession(tableId: string | null) {
+    if (!canCreateSession || openFlight.current || recovery.error) return
+    if (pendingOpen && isPendingIntentExpired(pendingOpen)) {
+      setActionError(translate('pos.openExpired'))
+      return
+    }
+    const intent = pendingOpen ?? {
+      payload: { tableId, ...(tableId ? { guestCount } : {}) },
+      idempotencyKey: crypto.randomUUID(), createdAt: Date.now(),
+    }
+    try { writePendingIntent(recoveryKey, { ...intent, uncertain: true }) }
+    catch { setActionError(translate('pos.openStorageFailed')); return }
+    openFlight.current = true
+    setPendingOpen(intent)
+    setOpeningTableId(null)
+    openSessionMutation.mutate(intent)
+  }
 
   if (
     (canReadTables && tablesQuery.isPending) ||
@@ -162,6 +201,7 @@ export default function PosTablesPage() {
       setActionError(translate('pos.noCreatePermission'))
       return
     }
+    if (pendingOpen || recovery.error) return
     setOpeningTableId(table.id)
   }
 
@@ -180,7 +220,8 @@ export default function PosTablesPage() {
         {canCreateSession && (
           <Button
             type="button"
-            onClick={() => openSessionMutation.mutate(null)}
+            onClick={() => openSession(null)}
+            disabled={Boolean(pendingOpen) || recovery.error}
             isLoading={openSessionMutation.isPending}
             className="flex items-center gap-2 self-start sm:self-auto"
           >
@@ -189,6 +230,17 @@ export default function PosTablesPage() {
           </Button>
         )}
       </div>
+
+      {(pendingOpen || recovery.error) && (
+        <div role="alert" className="space-y-2 border-l-2 border-destructive p-3 text-sm">
+          <p>{translate(recovery.error ? 'pos.openCorrupt' : isPendingIntentExpired(pendingOpen!) ? 'pos.openExpired' : 'pos.openUncertain')}</p>
+          {pendingOpen && canCreateSession && (
+            <Button variant="outline" disabled={openSessionMutation.isPending || isPendingIntentExpired(pendingOpen)} onClick={() => openSession(pendingOpen.payload.tableId)}>
+              {translate('pos.recoverOpen')}
+            </Button>
+          )}
+        </div>
+      )}
 
       {canReadShift && shiftQuery.isSuccess && !currentShift && (
         <div
@@ -302,9 +354,9 @@ export default function PosTablesPage() {
             type="button"
             onClick={() => {
               const id = openingTableId
-              setOpeningTableId(null)
-              openSessionMutation.mutate(id)
+              if (id) openSession(id)
             }}
+            disabled={Boolean(pendingOpen) || recovery.error}
             isLoading={openSessionMutation.isPending}
             className="flex-2"
           >

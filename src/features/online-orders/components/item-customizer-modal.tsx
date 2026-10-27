@@ -150,6 +150,13 @@ export function ItemCustomizerModal({
                 </div>
 
                 <div className="grid grid-cols-1 gap-2">
+                  {group.minSelected === 0 && isSingle && (
+                    <button type="button" aria-pressed={selected.length === 0}
+                      onClick={() => setSelectedOptions(prev => new Map(prev).set(group.id, []))}
+                      className={cn('rounded-lg border p-3 text-left text-sm', selected.length === 0 ? 'border-primary bg-primary/10 text-primary font-semibold' : 'border-border bg-card text-foreground')}>
+                      {translate('common.noExtras')}
+                    </button>
+                  )}
                   {group.options.map((opt) => {
                     const isChecked = selected.includes(opt.id)
                     return (

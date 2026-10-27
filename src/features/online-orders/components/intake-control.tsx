@@ -1,4 +1,4 @@
-import { useId, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { Pause, Play, RefreshCw } from 'lucide-react'
@@ -23,7 +23,17 @@ export function IntakeControl({ employeeId }: { employeeId: string }) {
     queryFn: ({ signal }) => getOnlineIntake(signal),
     retry: false,
     staleTime: 0,
+    refetchInterval: query => query.state.error ? false : 15_000,
   })
+  const { data: intake, isError: intakeError, refetch: refetchIntake } = status
+  useEffect(() => {
+    if (intakeError || intake?.acceptingOrders !== false || !intake.pausedUntil) return
+    const timer = window.setTimeout(
+      () => void refetchIntake(),
+      Math.max(0, Date.parse(intake.pausedUntil) - Date.now()) + 100,
+    )
+    return () => window.clearTimeout(timer)
+  }, [intake, intakeError, refetchIntake])
   const mutation = useMutation({
     mutationFn: updateOnlineIntake,
     retry: false,

@@ -152,14 +152,20 @@ export function CartCheckoutDrawer({
     queryKey: ['online-recommendations', review?.payload.clientRequestId],
     queryFn: ({ signal }) =>
       getOnlineRecommendations(review!.payload.clientRequestId!, recommendationItemIds, signal),
-    enabled: Boolean(review?.allowRecommendations) && recommendationItemIds.length <= 10,
+    enabled: query =>
+      Boolean(review?.allowRecommendations) &&
+      recommendationItemIds.length <= 10 &&
+      !locked &&
+      query.state.status !== 'error' &&
+      query.state.data?.variant !== 'CONTROL',
     retry: false,
-    staleTime: Infinity,
+    staleTime: 30_000,
     gcTime: 0,
-    refetchOnWindowFocus: false,
-    refetchOnReconnect: false,
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
   })
-  const recommendations = offers.data?.recommendations ?? []
+  const recommendations = offers.isError ? [] : offers.data?.recommendations ?? []
 
   // Fetch slots if scheduled pickup is selected
   const slotsQuery = useQuery({
@@ -789,6 +795,7 @@ export function CartCheckoutDrawer({
                               aria-label={`${translate('common.add')} ${item.name}`}
                               disabled={
                                 submitMutation.isPending ||
+                                offers.isFetching ||
                                 checkingQuote ||
                                 checkoutCart.length >= 20 ||
                                 checkoutCart.reduce((sum, line) => sum + line.quantity, 0) >= 50

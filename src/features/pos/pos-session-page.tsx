@@ -141,6 +141,7 @@ function PosSessionPage() {
     queryKey: posKeys.tables(employee.id),
     queryFn: ({ signal }) => getDiningTables(signal),
     enabled: showTransferModal && access.hasAll(...WorkflowPermissions.transferTable),
+    refetchInterval: showTransferModal ? 10_000 : false,
   })
 
   const recommendationsQuery = useQuery({
@@ -213,6 +214,8 @@ function PosSessionPage() {
   const submitDraft = useCallback(() => {
     if (
       orderFlight.current ||
+      checkoutRecovery ||
+      showCheckoutModal ||
       !sessionId ||
       !access.has('/orders_items_create') ||
       (!submittedItems && draftItems.length === 0)
@@ -255,6 +258,8 @@ function PosSessionPage() {
     sessionId,
     access,
     submittedItems,
+    checkoutRecovery,
+    showCheckoutModal,
     draftItems,
     addItemsMutation,
     submissionKey,
@@ -326,7 +331,7 @@ function PosSessionPage() {
           setConfiguringItem(null)
           return
         }
-        if (showTransferModal) {
+        if (showTransferModal && !transferMutation.isPending) {
           e.preventDefault()
           setShowTransferModal(false)
           return
@@ -349,6 +354,7 @@ function PosSessionPage() {
           isSessionOpen &&
           hasUnpaid &&
           !orderWriteLocked &&
+          draftItems.length === 0 &&
           !showCheckoutModal
         ) {
           e.preventDefault()
@@ -376,6 +382,7 @@ function PosSessionPage() {
   }, [
     configuringItem,
     showTransferModal,
+    transferMutation.isPending,
     showCheckoutModal,
     sessionQuery.data,
     access,
@@ -580,7 +587,7 @@ function PosSessionPage() {
             <Button
               type="button"
               size="default"
-              disabled={orderWriteLocked}
+              disabled={orderWriteLocked || draftItems.length > 0}
               onClick={() => setShowCheckoutModal(true)}
               className="flex items-center gap-1.5 shadow-sm cursor-pointer"
             >
@@ -741,6 +748,11 @@ function PosSessionPage() {
                 </span>
               </div>
 
+              {draftItems.length > 0 && (
+                <p role="status" className="mb-3 text-sm text-muted-foreground">
+                  {translate('pos.sendBeforeCheckout')}
+                </p>
+              )}
               {canCheckout &&
                 !isOnlineOrder &&
                 !isCompleted &&
@@ -749,7 +761,7 @@ function PosSessionPage() {
                   <Button
                     type="button"
                     size="lg"
-                    disabled={orderWriteLocked}
+                    disabled={orderWriteLocked || draftItems.length > 0}
                     onClick={() => setShowCheckoutModal(true)}
                     className="w-full min-h-[44px] flex items-center justify-center gap-2 font-bold shadow-sm cursor-pointer"
                   >
@@ -773,15 +785,19 @@ function PosSessionPage() {
       />
 
       {/* Modal chuyển bàn */}
-      <PosTransferDialog
+      {showTransferModal && <PosTransferDialog
+        key={session.table?.id}
         open={showTransferModal}
         currentTableName={session.table?.name}
         currentTableId={session.table?.id}
         tables={tablesQuery.data}
-        onClose={() => setShowTransferModal(false)}
+        onClose={() => { if (!transferMutation.isPending) setShowTransferModal(false) }}
         onConfirm={(targetId) => transferMutation.mutate(targetId)}
         isPending={transferMutation.isPending}
-      />
+        isFetching={tablesQuery.isFetching}
+        error={tablesQuery.error ?? transferMutation.error}
+        onRetry={() => { transferMutation.reset(); void tablesQuery.refetch() }}
+      />}
 
       {/* Modal thanh toán tiền mặt */}
       {showCheckoutModal && !isOnlineOrder && (
@@ -795,11 +811,6 @@ function PosSessionPage() {
           }}
           onCompleted={() => {
             setCheckoutRecovery(false)
-            try {
-              if (sessionId) sessionStorage.removeItem(draftKey)
-            } catch {
-              // Ignore
-            }
             void queryClient.invalidateQueries({
               queryKey: posKeys.session(employee.id, sessionId),
             })

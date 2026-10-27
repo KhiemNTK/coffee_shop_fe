@@ -23,17 +23,17 @@ export function PosRecommendationsStrip({
         <span>{translate('pos.suggestions')}</span>
       </div>
 
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+      <div className="grid grid-cols-1 items-stretch gap-2 sm:grid-cols-3">
         {recommendations.map((item) => (
           <button
             key={item.id}
             type="button"
             disabled={disabled}
             onClick={() => onSelectItem(item)}
-            className="flex items-center justify-between rounded-lg border border-primary/20 bg-card p-2 text-left text-xs transition-colors hover:border-primary hover:bg-primary/5 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 min-w-0"
+            className="flex min-h-16 items-center justify-between gap-2 rounded-lg border border-primary/20 bg-card p-2 text-left text-xs transition-colors hover:border-primary hover:bg-primary/5 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 min-w-0"
           >
-            <div className="truncate mr-1 min-w-0 flex-1">
-              <span className="font-semibold text-foreground truncate block" title={item.name}>
+            <div className="min-w-0 flex-1 space-y-1">
+              <span className="block break-words font-semibold text-foreground" title={item.name}>
                 {item.name}
               </span>
               <span className="font-bold text-primary text-[11px] tabular-nums">

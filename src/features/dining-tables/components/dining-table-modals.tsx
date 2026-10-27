@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { AlertCircle, ArrowRightLeft, RotateCcw, Trash2 } from 'lucide-react'
 import { type UseMutationResult } from '@tanstack/react-query'
 import { type DiningTableAdmin } from '../dining-tables.api'
@@ -286,7 +287,7 @@ export function DeleteTableModal({
 interface ClearTableModalProps {
   table: DiningTableAdmin | null
   onClose: () => void
-  clearMutation: UseMutationResult<unknown, Error, string>
+  clearMutation: UseMutationResult<unknown, Error, { id: string; reason: string }>
   clearError: string | null
 }
 
@@ -296,10 +297,12 @@ export function ClearTableModal({
   clearMutation,
   clearError,
 }: ClearTableModalProps) {
+  const { t } = useTranslation()
+  const [reason, setReason] = useState('')
   if (!table) return null
 
   return (
-    <Dialog open={!!table} onOpenChange={onClose}>
+    <Dialog open={!!table} onOpenChange={(open) => !open && !clearMutation.isPending && onClose()}>
       <DialogContent className="max-w-md">
         <DialogHeader>
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/10 text-amber-600 mb-2">
@@ -311,17 +314,29 @@ export function ClearTableModal({
           <DialogDescription className="text-sm text-muted-foreground">
             Xác nhận giải phóng bàn{' '}
             <span className="font-semibold text-foreground">{table.name}</span> về trạng
-            thái <span className="font-semibold text-emerald-600">Trống</span>. Nếu có món chưa
-            nấu hoặc chưa thanh toán, hệ thống sẽ tự động hủy phiên an toàn.
+            thái <span className="font-semibold text-emerald-600">Trống</span>. Phiên chỉ được hủy nếu
+            không có món đã chế biến, đã thanh toán hoặc đã lập hóa đơn.
           </DialogDescription>
         </DialogHeader>
 
         {clearError && (
-          <div className="flex items-start gap-2 rounded-xl border border-destructive/20 bg-destructive/5 p-3 text-xs text-destructive">
+          <div role="alert" className="flex items-start gap-2 rounded-xl border border-destructive/20 bg-destructive/5 p-3 text-xs text-destructive">
             <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
             <span>{clearError}</span>
           </div>
         )}
+
+        <label className="block space-y-2 text-sm">
+          <span>{t('common.reason')}</span>
+          <Input
+            value={reason}
+            onChange={event => setReason(event.target.value)}
+            minLength={3}
+            maxLength={500}
+            required
+            disabled={clearMutation.isPending}
+          />
+        </label>
 
         <DialogFooter className="mt-6 flex justify-end gap-2">
           <Button
@@ -336,8 +351,8 @@ export function ClearTableModal({
           <Button
             type="button"
             size="sm"
-            onClick={() => clearMutation.mutate(table.id)}
-            disabled={clearMutation.isPending}
+            onClick={() => clearMutation.mutate({ id: table.id, reason: reason.trim() })}
+            disabled={clearMutation.isPending || reason.trim().length < 3}
             className="bg-amber-600 hover:bg-amber-700 text-white"
           >
             {clearMutation.isPending ? 'Đang xử lý...' : 'Xác nhận dọn bàn'}
@@ -371,7 +386,7 @@ export function TransferTableModal({
   if (!table) return null
 
   return (
-    <Dialog open={!!table} onOpenChange={onClose}>
+    <Dialog open={!!table} onOpenChange={(open) => !open && !transferMutation.isPending && onClose()}>
       <DialogContent className="max-w-md">
         <DialogHeader>
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/10 text-amber-600 mb-2">
@@ -434,7 +449,7 @@ export function TransferTableModal({
               type="button"
               size="sm"
               onClick={() => {
-                if (!targetTableId) {
+                if (!availableTargetTables.some(target => target.id === targetTableId)) {
                   setTransferError('Vui lòng chọn bàn đích')
                   return
                 }
@@ -443,7 +458,7 @@ export function TransferTableModal({
                   toId: targetTableId,
                 })
               }}
-              disabled={transferMutation.isPending || !targetTableId}
+              disabled={transferMutation.isPending || !availableTargetTables.some(target => target.id === targetTableId)}
               className="bg-amber-600 hover:bg-amber-700 text-white"
             >
               {transferMutation.isPending ? 'Đang chuyển...' : 'Xác nhận chuyển'}

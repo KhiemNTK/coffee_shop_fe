@@ -24,6 +24,7 @@ import {
 } from './dining-tables.api'
 import { errorMessage } from '../../shared/api/client'
 import type { Session } from '../auth/session'
+import { formatDateTime } from '../../shared/lib/format'
 import { Button, Card, CardContent, Input } from '../../shared/ui'
 import { DiningTableKpis } from './components/dining-table-kpis'
 import { DiningTablesGrid } from './components/dining-tables-grid'
@@ -83,9 +84,13 @@ export function DiningTablesPage() {
     isRefetching,
     refetch,
     error: fetchError,
+    dataUpdatedAt,
   } = useQuery({
-    queryKey: ['private', 'dining-tables-admin'],
+    queryKey: ['private', 'dining-tables-admin', employee.id],
     queryFn: ({ signal }) => getDiningTablesAdmin(signal),
+    staleTime: 0,
+    refetchInterval: 15_000,
+    enabled: access.has('/dining-tables_read'),
   })
 
   // Invalidate related caches
@@ -146,7 +151,8 @@ export function DiningTablesPage() {
 
   // Clear table mutation
   const clearMutation = useMutation({
-    mutationFn: (id: string) => clearDiningTable(id, clearingTable?.orderSessions?.[0]?.id ?? null),
+    mutationFn: ({ id, reason }: { id: string; reason: string }) =>
+      clearDiningTable(id, clearingTable?.orderSessions?.[0]?.id ?? null, reason),
     onSuccess: () => {
       invalidateTableQueries()
       setActionSuccess('Đã dọn bàn và giải phóng trạng thái thành công')
@@ -192,7 +198,7 @@ export function DiningTablesPage() {
 
     if (deferredSearchQuery.trim()) {
       const q = deferredSearchQuery.toLowerCase().trim()
-      result = result.filter((t) => t.name.toLowerCase().includes(q))
+      result = result.filter((t) => t.name.toLowerCase().includes(q) || t.id.toLowerCase().includes(q))
     }
 
     if (statusFilter !== 'ALL') {
@@ -276,11 +282,12 @@ export function DiningTablesPage() {
               <LayoutGrid className="h-6 w-6" />
             </div>
             <div>
-              <h1 className="text-2xl sm:text-[26px] font-bold tracking-tight text-[#101D38]">
+              <h1 className="text-2xl sm:text-[26px] font-bold text-foreground">
                 Sơ đồ & Quản lý Bàn ăn
               </h1>
-              <p className="text-sm text-[#66768B] mt-0.5">
-                Theo dõi tình trạng bàn thời gian thực, quản lý phân bổ và điều phối phục vụ
+              <p className="text-sm text-muted-foreground mt-0.5" role="status">
+                {fetchError ? 'Không cập nhật được tình trạng bàn.' : dataUpdatedAt
+                  ? `Cập nhật: ${formatDateTime(new Date(dataUpdatedAt))}` : 'Đang tải tình trạng bàn…'}
               </p>
             </div>
           </div>
@@ -291,6 +298,8 @@ export function DiningTablesPage() {
             variant="outline"
             size="sm"
             onClick={() => void refetch()}
+            aria-label="Làm mới danh sách bàn"
+            title="Làm mới danh sách bàn"
             disabled={isLoading || isRefetching}
             className="gap-2 h-9 px-3.5 border-border/80 bg-card text-foreground/80 hover:bg-muted"
           >
@@ -312,7 +321,7 @@ export function DiningTablesPage() {
       </div>
 
       {/* KPI Metric Cards */}
-      <DiningTableKpis stats={stats} />
+      {!isLoading && !fetchError && <DiningTableKpis stats={stats} />}
 
       {/* Filter and Control Bar */}
       <Card className="border border-border/80 bg-card shadow-xs rounded-xl">
@@ -322,6 +331,7 @@ export function DiningTablesPage() {
             <div className="relative flex-1">
               <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
+                aria-label="Tìm bàn theo tên hoặc ID"
                 type="text"
                 placeholder="Tìm kiếm bàn theo tên hoặc ID (ví dụ: Bàn 01, VIP, Tầng 2...)"
                 value={searchQuery}
@@ -346,6 +356,8 @@ export function DiningTablesPage() {
                     key={tab.key}
                     type="button"
                     onClick={() => setStatusFilter(tab.key)}
+                    aria-pressed={statusFilter === tab.key}
+                    disabled={isLoading || Boolean(fetchError)}
                     className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
                       statusFilter === tab.key
                         ? 'bg-[#062F29] text-white shadow-xs font-semibold'
@@ -357,7 +369,7 @@ export function DiningTablesPage() {
                     )}
                     <span>{tab.label}</span>
                     <span className={statusFilter === tab.key ? 'text-white/80' : 'text-muted-foreground'}>
-                      ({tab.count})
+                      ({isLoading || fetchError ? '—' : tab.count})
                     </span>
                   </button>
                 ))}
@@ -508,6 +520,7 @@ export function DiningTablesPage() {
       />
 
       <ClearTableModal
+        key={`clear:${clearingTable?.id ?? 'closed'}`}
         table={clearingTable}
         onClose={() => setClearingTable(null)}
         clearMutation={clearMutation}
@@ -515,6 +528,7 @@ export function DiningTablesPage() {
       />
 
       <TransferTableModal
+        key={`transfer:${transferringTable?.id ?? 'closed'}`}
         table={transferringTable}
         onClose={() => setTransferringTable(null)}
         transferMutation={transferMutation}

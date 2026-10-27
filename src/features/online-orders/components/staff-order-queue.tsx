@@ -23,11 +23,10 @@ export function StaffOrderQueue<T extends QueueOrder>({
   children: (order: T) => ReactNode
 }) {
   const { t: translate } = useTranslation()
-  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [selectedId, setSelectedId] = useState<string | null>(() => orders[0]?.id ?? null)
   const detail = useRef<HTMLElement>(null)
   // Keep only the ID; polling must supply the current fulfillment/payment state.
-  const selected = orders.find((order) => order.id === selectedId) ?? orders[0]
-  if (!selected) return null
+  const selected = orders.find((order) => order.id === selectedId)
   return (
     <div className="grid min-w-0 gap-5 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
       <section aria-label={translate('ops.queue.title')} className="min-w-0">
@@ -39,7 +38,7 @@ export function StaffOrderQueue<T extends QueueOrder>({
               <li key={order.id}>
                 <button
                   type="button"
-                  aria-pressed={selected.id === order.id}
+                  aria-pressed={selected?.id === order.id}
                   aria-label={translate('ops.queue.view', { name: order.pickupName, code })}
                   onClick={() => {
                     setSelectedId(order.id)
@@ -48,7 +47,7 @@ export function StaffOrderQueue<T extends QueueOrder>({
                   }}
                   className={cn(
                     'flex min-h-24 w-full items-start gap-3 border-l-3 px-4 py-4 text-left transition-colors focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring',
-                    selected.id === order.id
+                    selected?.id === order.id
                       ? 'border-l-primary bg-primary-light/40'
                       : 'border-l-transparent hover:bg-muted/40',
                   )}
@@ -91,7 +90,11 @@ export function StaffOrderQueue<T extends QueueOrder>({
         aria-label={translate('ops.queue.detail')}
         className="min-w-0 scroll-mt-28 border-t border-border bg-card p-4 xl:sticky xl:top-20 xl:self-start xl:border-l xl:border-t-0 xl:p-5"
       >
-        {children(selected)}
+        {selected ? children(selected) : (
+          <p role="status" className="text-sm text-muted-foreground">
+            {translate('ops.queue.selectionChanged')}
+          </p>
+        )}
       </aside>
     </div>
   )

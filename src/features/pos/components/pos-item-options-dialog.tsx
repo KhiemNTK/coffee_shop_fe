@@ -84,8 +84,16 @@ function PosItemOptionsContent({ item, onClose, onConfirm }: PosItemOptionsConte
                 : `(Tối đa ${group.maxSelected})`}
             </span>
             <div className="space-y-1.5">
+              {group.minSelected === 0 && group.maxSelected === 1 && (
+                <label className="flex min-h-11 cursor-pointer items-center gap-2.5 rounded-lg border border-border px-3.5 py-2.5 text-sm">
+                  <input type="radio" name={`option-group-${group.id}`} checked={!configuredOptions[group.id]?.length}
+                    onChange={() => setConfiguredOptions(prev => ({ ...prev, [group.id]: [] }))}
+                    className="h-4 w-4 accent-primary" />
+                  {translate('common.noExtras')}
+                </label>
+              )}
               {group.options.map((opt) => {
-                const isSelected = configuredOptions[group.id]?.includes(opt.id)
+                const isSelected = configuredOptions[group.id]?.includes(opt.id) ?? false
                 return (
                   <label
                     key={opt.id}

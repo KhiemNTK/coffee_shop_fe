@@ -76,10 +76,12 @@ export async function deleteDiningTable(id: string): Promise<TableActionResponse
 
 export async function clearDiningTable(
   id: string,
-  expectedOrderSessionId: string | null
+  expectedOrderSessionId: string | null,
+  reason: string
 ): Promise<TableActionResponse> {
   return apiMutate(`/orders/tables/${id}/clear`, 'POST', tableActionResponseSchema, {
     expectedOrderSessionId,
+    reason: reason.trim(),
   })
 }
 

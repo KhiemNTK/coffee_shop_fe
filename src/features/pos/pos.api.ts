@@ -106,13 +106,21 @@ export async function getSessionDetail(id: string, signal: AbortSignal): Promise
 
 export async function openOrderSession(
   tableId: string | null,
-  guestCount?: number
+  guestCount?: number,
+  idempotencyKey: string = crypto.randomUUID(),
 ): Promise<SessionDetail> {
-  return apiMutate('/orders/sessions', 'POST', sessionDetailSchema, {
+  return apiIdempotentMutate('/orders/sessions', sessionDetailSchema, {
+    idempotencyKey,
     tableId: tableId ?? null,
     guestCount: guestCount && guestCount > 0 ? guestCount : undefined,
   })
 }
+
+export const openSessionPayloadSchema = z.object({
+  tableId: z.uuid().nullable(),
+  guestCount: z.number().int().positive().optional(),
+}).strict()
+export type OpenSessionPayload = z.infer<typeof openSessionPayloadSchema>
 
 export const orderItemPayloadSchema = z.object({
   menuItemId: z.uuid(),
