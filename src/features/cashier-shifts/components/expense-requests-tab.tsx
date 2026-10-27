@@ -1,4 +1,9 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import { useOutletContext } from 'react-router-dom'
+import type { Session } from '../../auth/session'
+import { Pagination } from '../../../shared/ui/pagination'
+import { formatDateTime } from '../../../shared/lib/format'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Ban, Check, RefreshCw } from 'lucide-react'
 import { errorMessage } from '../../../shared/api/client'
@@ -30,6 +35,9 @@ interface ExpenseRequestsTabProps {
 
 export function ExpenseRequestsTab({ onError, onSuccess }: ExpenseRequestsTabProps) {
   const queryClient = useQueryClient()
+  const { employee } = useOutletContext<Session>()
+  const { t } = useTranslation()
+  const [page, setPage] = useState(1)
 
   const [expenseStatusFilter, setExpenseStatusFilter] = useState<'ALL' | 'PENDING' | 'APPROVED' | 'REJECTED'>('ALL')
   const [selectedExpense, setSelectedExpense] = useState<CashExpenseRequest | null>(null)
@@ -39,11 +47,11 @@ export function ExpenseRequestsTab({ onError, onSuccess }: ExpenseRequestsTabPro
   const [expenseRejectReason, setExpenseRejectReason] = useState('')
 
   const expensesQuery = useQuery({
-    queryKey: ['private', 'expense-requests', expenseStatusFilter],
+    queryKey: ['private', employee.id, 'expense-requests', expenseStatusFilter, page],
     queryFn: ({ signal }) =>
       getExpenseRequests(
         {
-          page: 1,
+          page,
           itemPerPage: 50,
           status: expenseStatusFilter === 'ALL' ? (undefined as CashExpenseRequestStatus | undefined) : (expenseStatusFilter as CashExpenseRequestStatus),
         },
@@ -63,7 +71,7 @@ export function ExpenseRequestsTab({ onError, onSuccess }: ExpenseRequestsTabPro
       setIsApproveExpenseModalOpen(false)
       setSelectedExpense(null)
       setExpenseReviewNote('')
-      void queryClient.invalidateQueries({ queryKey: ['private', 'expense-requests'] })
+      void queryClient.invalidateQueries({ queryKey: ['private', employee.id, 'expense-requests'] })
       void queryClient.invalidateQueries({ queryKey: ['management-exceptions-summary'] })
       void queryClient.invalidateQueries({ queryKey: ['management-exceptions-list'] })
       void queryClient.invalidateQueries({ queryKey: ['private', 'funds'] })
@@ -83,7 +91,7 @@ export function ExpenseRequestsTab({ onError, onSuccess }: ExpenseRequestsTabPro
       setIsRejectExpenseModalOpen(false)
       setSelectedExpense(null)
       setExpenseRejectReason('')
-      void queryClient.invalidateQueries({ queryKey: ['private', 'expense-requests'] })
+      void queryClient.invalidateQueries({ queryKey: ['private', employee.id, 'expense-requests'] })
       void queryClient.invalidateQueries({ queryKey: ['management-exceptions-summary'] })
       void queryClient.invalidateQueries({ queryKey: ['management-exceptions-list'] })
     },
@@ -100,7 +108,8 @@ export function ExpenseRequestsTab({ onError, onSuccess }: ExpenseRequestsTabPro
         </h2>
         <select
           value={expenseStatusFilter}
-          onChange={(e) => setExpenseStatusFilter(e.target.value as 'ALL' | 'PENDING' | 'APPROVED' | 'REJECTED')}
+          aria-label={t('cash.expenseStatus')}
+          onChange={(e) => { setExpenseStatusFilter(e.target.value as 'ALL' | 'PENDING' | 'APPROVED' | 'REJECTED'); setPage(1) }}
           className="px-3 py-1.5 text-xs rounded-lg border border-input bg-background"
         >
           <option value="ALL">Tất cả trạng thái</option>
@@ -109,6 +118,11 @@ export function ExpenseRequestsTab({ onError, onSuccess }: ExpenseRequestsTabPro
           <option value="REJECTED">Đã từ chối (REJECTED)</option>
         </select>
       </div>
+
+      {expensesQuery.isError && <div role="alert" className="flex flex-wrap items-center gap-3 border-l-4 border-destructive p-3 text-sm">
+        <p>{errorMessage(expensesQuery.error)}</p>
+        <Button variant="outline" disabled={expensesQuery.isFetching} onClick={() => void expensesQuery.refetch()}>{t('common.retry')}</Button>
+      </div>}
 
       <Card>
         <CardContent className="p-0 overflow-x-auto">
@@ -133,7 +147,7 @@ export function ExpenseRequestsTab({ onError, onSuccess }: ExpenseRequestsTabPro
                     Đang tải danh sách yêu cầu chi tiền...
                   </td>
                 </tr>
-              ) : expensesList.length === 0 ? (
+              ) : expensesList.length === 0 && !expensesQuery.isError ? (
                 <tr>
                   <td colSpan={8} className="px-4 py-8 text-center text-muted-foreground">
                     Không có yêu cầu chi tiền nào.
@@ -150,7 +164,7 @@ export function ExpenseRequestsTab({ onError, onSuccess }: ExpenseRequestsTabPro
                     </td>
                     <td className="px-4 py-3 text-muted-foreground max-w-xs truncate">{exp.description}</td>
                     <td className="px-4 py-3 text-muted-foreground">
-                      {new Date(exp.createdAt).toLocaleString('vi-VN')}
+                      {formatDateTime(exp.createdAt)}
                     </td>
                     <td className="px-4 py-3 text-center">
                       <Badge
@@ -170,7 +184,7 @@ export function ExpenseRequestsTab({ onError, onSuccess }: ExpenseRequestsTabPro
                       </Badge>
                     </td>
                     <td className="px-4 py-3 text-right">
-                      {exp.status === 'PENDING' && (
+                      {exp.status === 'PENDING' && exp.requestedById !== employee.id && (
                         <div className="flex items-center justify-end gap-1">
                           <Button
                             variant="outline"
@@ -206,6 +220,7 @@ export function ExpenseRequestsTab({ onError, onSuccess }: ExpenseRequestsTabPro
           </table>
         </CardContent>
       </Card>
+      {expensesQuery.data && <Pagination page={page} totalPages={expensesQuery.data.totalPages} onPage={setPage} disabled={expensesQuery.isFetching} />}
 
       {/* 7. APPROVE EXPENSE REQUEST MODAL */}
       <Dialog

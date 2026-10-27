@@ -19,6 +19,7 @@ import {
   createCashHandover,
   getAllCashHandovers,
   getFunds,
+  getMyClosedShifts,
   getMyCashHandovers,
   getOverdueCashHandovers,
   registerBankDeposit,
@@ -40,6 +41,7 @@ import {
   Textarea,
   cn,
 } from '../../../shared/ui'
+import { Pagination } from '../../../shared/ui/pagination'
 
 const EMPTY_HANDOVERS: CashHandover[] = []
 const EMPTY_FUNDS: Fund[] = []
@@ -47,6 +49,8 @@ const EMPTY_FUNDS: Fund[] = []
 interface CashHandoversTabProps {
   employeeId: string
   canCreateHandover: boolean
+  canReadHandovers: boolean
+  canReadFunds: boolean
   canReviewHandover: boolean
   canSettleHandover: boolean
   isCreateModalOpen: boolean
@@ -61,6 +65,8 @@ interface CashHandoversTabProps {
 export function CashHandoversTab({
   employeeId,
   canCreateHandover,
+  canReadHandovers,
+  canReadFunds,
   canReviewHandover,
   canSettleHandover,
   isCreateModalOpen,
@@ -71,10 +77,13 @@ export function CashHandoversTab({
   onSuccess,
   nowTimestamp,
 }: CashHandoversTabProps) {
-  useTranslation()
+  const { t } = useTranslation()
   const queryClient = useQueryClient()
 
-  const [handoverViewMode, setHandoverViewMode] = useState<'ALL' | 'MINE' | 'OVERDUE'>('ALL')
+  const [requestedView, setHandoverViewMode] = useState<'ALL' | 'MINE' | 'OVERDUE'>(canReadHandovers ? 'ALL' : 'MINE')
+  const handoverViewMode = !canReadHandovers ? 'MINE' : requestedView === 'MINE' && !canCreateHandover ? 'ALL' : requestedView
+  const [page, setPage] = useState(1)
+  const [closedShiftPage, setClosedShiftPage] = useState(1)
   const [handoverStatusFilter, setHandoverStatusFilter] = useState<CashHandoverStatus | 'ALL'>('ALL')
   const [selectedHandover, setSelectedHandover] = useState<CashHandover | null>(null)
 
@@ -98,17 +107,17 @@ export function CashHandoversTab({
 
   // Queries
   const handoversQuery = useQuery({
-    queryKey: ['private', 'cash-handovers', handoverViewMode, handoverStatusFilter],
+    queryKey: ['private', employeeId, 'cash-handovers', handoverViewMode, handoverStatusFilter, page],
     queryFn: ({ signal }) => {
       if (handoverViewMode === 'MINE') {
-        return getMyCashHandovers({ page: 1, itemPerPage: 50 }, signal)
+        return getMyCashHandovers({ page, itemPerPage: 50, status: handoverStatusFilter === 'ALL' ? undefined : handoverStatusFilter }, signal)
       }
       if (handoverViewMode === 'OVERDUE') {
-        return getOverdueCashHandovers({ page: 1, itemPerPage: 50 }, signal)
+        return getOverdueCashHandovers({ page, itemPerPage: 50 }, signal)
       }
       return getAllCashHandovers(
         {
-          page: 1,
+          page,
           itemPerPage: 50,
           status: handoverStatusFilter === 'ALL' ? undefined : handoverStatusFilter,
         },
@@ -118,12 +127,19 @@ export function CashHandoversTab({
   })
 
   const fundsQuery = useQuery({
-    queryKey: ['private', 'funds', 'all-for-selection'],
+    queryKey: ['private', 'funds', 'all-for-selection', employeeId],
     queryFn: ({ signal }) => getFunds({ page: 1, itemPerPage: 100 }, signal),
+    enabled: isCreateModalOpen && canReadFunds,
+  })
+  const closedShiftsQuery = useQuery({
+    queryKey: ['private', employeeId, 'cashier-shifts', 'mine-closed', closedShiftPage],
+    queryFn: ({ signal }) => getMyClosedShifts(closedShiftPage, signal),
+    enabled: isCreateModalOpen && canCreateHandover,
   })
 
   const handoversList = handoversQuery.data?.list ?? EMPTY_HANDOVERS
   const fundsList = fundsQuery.data?.list ?? EMPTY_FUNDS
+  const selectedClosedShift = closedShiftsQuery.data?.list.find(shift => shift.id === createHandoverShiftId)
 
   // KPI Metrics
   const handoverKpi = useMemo(() => {
@@ -169,7 +185,7 @@ export function CashHandoversTab({
       setCreateHandoverDestFundId('')
       setCreateHandoverRetained('0')
       setCreateHandoverNote('')
-      void queryClient.invalidateQueries({ queryKey: ['private', 'cash-handovers'] })
+      void queryClient.invalidateQueries({ queryKey: ['private', employeeId, 'cash-handovers'] })
       void queryClient.invalidateQueries({ queryKey: ['management-exceptions-summary'] })
       void queryClient.invalidateQueries({ queryKey: ['management-exceptions-list'] })
       void queryClient.invalidateQueries({ queryKey: ['private', 'funds'] })
@@ -189,7 +205,7 @@ export function CashHandoversTab({
       setIsApproveModalOpen(false)
       setSelectedHandover(null)
       setApproveNote('')
-      void queryClient.invalidateQueries({ queryKey: ['private', 'cash-handovers'] })
+      void queryClient.invalidateQueries({ queryKey: ['private', employeeId, 'cash-handovers'] })
       void queryClient.invalidateQueries({ queryKey: ['management-exceptions-summary'] })
       void queryClient.invalidateQueries({ queryKey: ['management-exceptions-list'] })
       void queryClient.invalidateQueries({ queryKey: ['private', 'funds'] })
@@ -209,7 +225,7 @@ export function CashHandoversTab({
       setIsRejectModalOpen(false)
       setSelectedHandover(null)
       setRejectReason('')
-      void queryClient.invalidateQueries({ queryKey: ['private', 'cash-handovers'] })
+      void queryClient.invalidateQueries({ queryKey: ['private', employeeId, 'cash-handovers'] })
       void queryClient.invalidateQueries({ queryKey: ['management-exceptions-summary'] })
       void queryClient.invalidateQueries({ queryKey: ['management-exceptions-list'] })
     },
@@ -237,7 +253,7 @@ export function CashHandoversTab({
       setSelectedHandover(null)
       setSettleBankRef('')
       setSettleEvidenceRef('')
-      void queryClient.invalidateQueries({ queryKey: ['private', 'cash-handovers'] })
+      void queryClient.invalidateQueries({ queryKey: ['private', employeeId, 'cash-handovers'] })
       void queryClient.invalidateQueries({ queryKey: ['management-exceptions-summary'] })
       void queryClient.invalidateQueries({ queryKey: ['management-exceptions-list'] })
       void queryClient.invalidateQueries({ queryKey: ['private', 'funds'] })
@@ -251,7 +267,7 @@ export function CashHandoversTab({
     mutationFn: (id: string) => cancelCashHandover(id),
     onSuccess: () => {
       onSuccess('Đã hủy biên bản bàn giao thành công!')
-      void queryClient.invalidateQueries({ queryKey: ['private', 'cash-handovers'] })
+      void queryClient.invalidateQueries({ queryKey: ['private', employeeId, 'cash-handovers'] })
       void queryClient.invalidateQueries({ queryKey: ['management-exceptions-summary'] })
       void queryClient.invalidateQueries({ queryKey: ['management-exceptions-list'] })
     },
@@ -311,8 +327,9 @@ export function CashHandoversTab({
       {/* CONTROLS & SUB-TABS */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
         <div className="flex items-center gap-1.5 bg-muted/50 p-1 rounded-xl">
-          <button
-            onClick={() => setHandoverViewMode('ALL')}
+          {canReadHandovers && <button
+            onClick={() => { setHandoverViewMode('ALL'); setPage(1) }}
+            aria-pressed={handoverViewMode === 'ALL'}
             className={cn(
               'px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors',
               handoverViewMode === 'ALL'
@@ -321,9 +338,10 @@ export function CashHandoversTab({
             )}
           >
             Tất cả biên bản
-          </button>
-          <button
-            onClick={() => setHandoverViewMode('MINE')}
+          </button>}
+          {canCreateHandover && <button
+            onClick={() => { setHandoverViewMode('MINE'); setPage(1) }}
+            aria-pressed={handoverViewMode === 'MINE'}
             className={cn(
               'px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors',
               handoverViewMode === 'MINE'
@@ -332,9 +350,10 @@ export function CashHandoversTab({
             )}
           >
             Của tôi
-          </button>
-          <button
-            onClick={() => setHandoverViewMode('OVERDUE')}
+          </button>}
+          {canReadHandovers && <button
+            onClick={() => { setHandoverViewMode('OVERDUE'); setPage(1) }}
+            aria-pressed={handoverViewMode === 'OVERDUE'}
             className={cn(
               'px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors',
               handoverViewMode === 'OVERDUE'
@@ -343,13 +362,14 @@ export function CashHandoversTab({
             )}
           >
             Quá hạn SLA
-          </button>
+          </button>}
         </div>
 
-        {handoverViewMode === 'ALL' && (
+        {handoverViewMode !== 'OVERDUE' && (
           <select
             value={handoverStatusFilter}
-            onChange={(e) => setHandoverStatusFilter(e.target.value as CashHandoverStatus | 'ALL')}
+            aria-label={t('cash.handoverStatus')}
+            onChange={(e) => { setHandoverStatusFilter(e.target.value as CashHandoverStatus | 'ALL'); setPage(1) }}
             className="px-3 py-1.5 text-xs rounded-lg border border-input bg-background"
           >
             <option value="ALL">Tất cả trạng thái</option>
@@ -360,6 +380,12 @@ export function CashHandoversTab({
           </select>
         )}
       </div>
+
+      <p className="text-xs text-muted-foreground">{t('cash.pageOnly')}</p>
+      {handoversQuery.isError && <div role="alert" className="flex flex-wrap items-center gap-3 border-l-4 border-destructive p-3 text-sm">
+        <p>{errorMessage(handoversQuery.error)}</p>
+        <Button variant="outline" disabled={handoversQuery.isFetching} onClick={() => void handoversQuery.refetch()}>{t('common.retry')}</Button>
+      </div>}
 
       {/* TABLE OF CASH HANDOVERS */}
       <Card>
@@ -386,7 +412,7 @@ export function CashHandoversTab({
                     Đang tải danh sách biên bản bàn giao...
                   </td>
                 </tr>
-              ) : handoversList.length === 0 ? (
+              ) : handoversList.length === 0 && !handoversQuery.isError ? (
                 <tr>
                   <td colSpan={9} className="px-4 py-8 text-center text-muted-foreground">
                     Không có biên bản bàn giao nào phù hợp với bộ lọc.
@@ -456,7 +482,7 @@ export function CashHandoversTab({
                         </Badge>
                       </td>
                       <td className="px-4 py-3 text-center">
-                        {h.destinationFund?.type === 'BANK' ? (
+                        {h.settlementStatus !== 'NOT_REQUIRED' ? (
                           <Badge
                             variant={
                               h.settlementStatus === 'SETTLED'
@@ -473,7 +499,7 @@ export function CashHandoversTab({
                                 : 'Chờ nộp NH'}
                           </Badge>
                         ) : (
-                          <span className="text-muted-foreground text-[11px]">—</span>
+                          <span className="text-muted-foreground text-[11px]">{t('cash.notRequired')}</span>
                         )}
                       </td>
                       <td className="px-4 py-3 text-right">
@@ -562,6 +588,7 @@ export function CashHandoversTab({
           </table>
         </CardContent>
       </Card>
+      {handoversQuery.data && <Pagination page={page} totalPages={handoversQuery.data.totalPages} onPage={setPage} disabled={handoversQuery.isFetching} />}
 
       {/* ========================================================================= */}
       {/* HANDOVER MODALS */}
@@ -587,33 +614,48 @@ export function CashHandoversTab({
           className="flex flex-col gap-4 mt-2"
         >
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium">Mã ca thu ngân cần bàn giao *</label>
-            <Input
+            <label htmlFor="handover-shift" className="text-sm font-medium">{t('cash.closedShifts')}</label>
+            <select
+              id="handover-shift"
               value={createHandoverShiftId}
-              onChange={(e) => setCreateHandoverShiftId(e.target.value)}
-              placeholder="UUID ca làm việc..."
+              onChange={(e) => { setCreateHandoverShiftId(e.target.value); setCreateHandoverDestFundId('') }}
+              disabled={closedShiftsQuery.isPending || closedShiftsQuery.isError}
+              className="h-10 w-full rounded-lg border border-input bg-background px-3 text-sm"
               required
-            />
+            >
+              <option value="">{t('cash.selectClosedShift')}</option>
+              {closedShiftsQuery.data?.list.map(shift => <option key={shift.id} value={shift.id}>
+                {formatDateTime(shift.closedAt ?? shift.openedAt, { seconds: true })}
+              </option>)}
+            </select>
+            {selectedClosedShift && <p className="break-words text-sm text-foreground">{selectedClosedShift.fund?.name} · {formatPrice(selectedClosedShift.reportedEndingCash ?? '0')}</p>}
+            {closedShiftsQuery.isError && <p role="alert">{errorMessage(closedShiftsQuery.error)} <Button type="button" variant="outline" onClick={() => void closedShiftsQuery.refetch()}>{t('common.retry')}</Button></p>}
+            {closedShiftsQuery.isSuccess && !closedShiftsQuery.data.list.length && <p role="status">{t('cash.noClosedShifts')}</p>}
+            {closedShiftsQuery.data && closedShiftsQuery.data.totalPages > 1 && <Pagination page={closedShiftPage} totalPages={closedShiftsQuery.data.totalPages} disabled={closedShiftsQuery.isFetching} onPage={next => { setClosedShiftPage(next); setCreateHandoverShiftId('') }} />}
             <span className="text-xs text-muted-foreground">
-              Mẹo: Ca phải ở trạng thái ĐÃ ĐÓNG (CLOSED) và khớp sổ.
+              {t('cash.closedShiftHint')}
             </span>
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium">Quỹ tiếp nhận bàn giao *</label>
+            <label htmlFor="handover-fund" className="text-sm font-medium">Quỹ tiếp nhận bàn giao *</label>
             <select
+              id="handover-fund"
+              disabled={!canReadFunds || fundsQuery.isPending || fundsQuery.isError}
               value={createHandoverDestFundId}
               onChange={(e) => setCreateHandoverDestFundId(e.target.value)}
               className="w-full px-3 py-2 text-sm rounded-lg border border-input bg-background"
               required
             >
               <option value="">-- Chọn quỹ đích (Két an toàn / Ngân hàng) --</option>
-              {fundsList.map((f) => (
+              {fundsList.filter(f => f.id !== selectedClosedShift?.fundId).map((f) => (
                 <option key={f.id} value={f.id}>
                   {f.name} ({f.type === 'CASH' ? 'Két an toàn/Quầy' : 'Tài khoản Ngân hàng'})
                 </option>
               ))}
             </select>
+            {!canReadFunds && <p role="alert">{t('cash.fundsPermissionRequired')}</p>}
+            {fundsQuery.isError && <p role="alert">{errorMessage(fundsQuery.error)} <Button type="button" variant="outline" onClick={() => void fundsQuery.refetch()}>{t('common.retry')}</Button></p>}
           </div>
 
           <div className="flex flex-col gap-1.5">
@@ -653,7 +695,7 @@ export function CashHandoversTab({
             <Button
               type="submit"
               variant="default"
-              disabled={createHandoverMutation.isPending}
+              disabled={createHandoverMutation.isPending || !canReadFunds || fundsQuery.isPending || fundsQuery.isError || closedShiftsQuery.isPending || closedShiftsQuery.isError || !selectedClosedShift || !createHandoverDestFundId}
             >
               {createHandoverMutation.isPending ? 'Đang tạo...' : 'Xác nhận gửi biên bản'}
             </Button>

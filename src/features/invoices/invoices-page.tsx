@@ -1,4 +1,4 @@
-import { useState, useMemo, useDeferredValue } from 'react'
+import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useOutletContext } from 'react-router-dom'
 import type { Session } from '../auth/session'
@@ -13,11 +13,13 @@ import { InvoicesKpis } from './components/invoices-kpis'
 import { InvoicesListTable } from './components/invoices-list-table'
 import { InvoiceDetailDialog } from './components/invoice-detail-dialog'
 import { decimalAmount, minorAmount } from '../../shared/lib/money'
+import { useDebouncedSearch } from '../../shared/lib/use-debounced-search'
+import { getCurrentShift } from '../cashier-shifts/cashier-shifts.api'
 
 const EMPTY_INVOICES: Invoice[] = []
 
 export default function InvoicesPage() {
-  const { employee } = useOutletContext<Session>()
+  const { employee, access } = useOutletContext<Session>()
   const queryClient = useQueryClient()
 
   // Filters state
@@ -28,15 +30,22 @@ export default function InvoicesPage() {
     paymentMethod: '',
   })
   const [searchKeyword, setSearchKeyword] = useState('')
-  const deferredSearchKeyword = useDeferredValue(searchKeyword)
+  const keyword = useDebouncedSearch(searchKeyword)
+  const dateRangeInvalid = !!filters.createdFrom && !!filters.createdTo && filters.createdFrom > filters.createdTo
+  const currentShift = useQuery({
+    queryKey: ['private', employee.id, 'cashier-shift', 'current'],
+    queryFn: ({ signal }) => getCurrentShift(signal),
+    enabled: access.has('/cashier-shifts_current'),
+  })
 
   // Detail Modal state
   const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(null)
 
   // Query Invoices
   const invoicesQuery = useQuery({
-    queryKey: ['private', employee.id, 'invoices', filters],
-    queryFn: ({ signal }) => getInvoices(filters, signal),
+    queryKey: ['private', employee.id, 'invoices', { ...filters, keyword }],
+    queryFn: ({ signal }) => getInvoices({ ...filters, keyword: keyword || undefined }, signal),
+    enabled: !dateRangeInvalid && keyword === searchKeyword.trim(),
   })
 
   // Quick statistics calculation from current page/data
@@ -46,17 +55,6 @@ export default function InvoicesPage() {
     .reduce((sum, inv) => sum + minorAmount(inv.totalAmount), 0n)
   const unpaidCount = invoices.filter((inv) => inv.paymentStatus === 'UNPAID').length
   const voidedCount = invoices.filter((inv) => ['VOIDED', 'PARTIALLY_REFUNDED', 'REFUNDED'].includes(inv.paymentStatus)).length
-
-  // Filtered by client search keyword if provided
-  const displayList = useMemo(() => {
-    if (!deferredSearchKeyword.trim()) return invoices
-    const kw = deferredSearchKeyword.trim().toLowerCase()
-    return invoices.filter((inv) => (
-      inv.invoiceNumber.toLowerCase().includes(kw) ||
-      (inv.documentSnapshot ? inv.documentSnapshot.tableName : inv.orderSession?.table?.name)?.toLowerCase().includes(kw) ||
-      inv.employee?.fullName.toLowerCase().includes(kw)
-    ))
-  }, [invoices, deferredSearchKeyword])
 
   return (
     <div className="space-y-6">
@@ -106,8 +104,18 @@ export default function InvoicesPage() {
         filters={filters}
         setFilters={setFilters}
         searchKeyword={searchKeyword}
-        setSearchKeyword={setSearchKeyword}
-        displayList={displayList}
+        setSearchKeyword={(value) => { setSearchKeyword(value); setFilters(previous => ({ ...previous, page: 1 })) }}
+        displayList={invoices}
+        dateRangeInvalid={dateRangeInvalid}
+        shiftFilter={access.has('/cashier-shifts_current') && <div className="grid gap-2">
+          <label className="flex min-h-10 items-center gap-2 text-sm">
+            <input type="checkbox" className="size-4 accent-primary" checked={!!filters.shiftId}
+              disabled={!filters.shiftId && (!currentShift.data || currentShift.isFetching || currentShift.isError)}
+              onChange={event => setFilters(previous => ({ ...previous, shiftId: event.target.checked ? currentShift.data?.id : undefined, page: 1 }))} />
+            Ca hiện tại của tôi
+          </label>
+          {currentShift.isError && <Button type="button" variant="outline" size="sm" onClick={() => void currentShift.refetch()}>Tải lại ca đang mở</Button>}
+        </div>}
         data={invoicesQuery.data}
         isLoading={invoicesQuery.isLoading}
         isError={invoicesQuery.isError}

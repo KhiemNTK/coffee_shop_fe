@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 import { useOutletContext, useSearchParams } from 'react-router-dom'
 import {
@@ -25,6 +26,7 @@ import { ShiftHistoryTab } from './components/shift-history-tab'
 type MainTab = 'current' | 'handovers' | 'expenses' | 'funds' | 'history'
 
 export default function CashierShiftPage() {
+  const { t } = useTranslation()
   const { employee, access } = useOutletContext<Session>()
 
   // Permissions
@@ -112,11 +114,10 @@ export default function CashierShiftPage() {
             </div>
             <div>
               <h1 className="text-2xl font-bold tracking-tight text-foreground">
-                Quản lý Ca & Quỹ tiền mặt
+                {t('cash.page.title')}
               </h1>
               <p className="text-sm text-muted-foreground mt-0.5">
-                Vận hành két thu ngân, lập biên bản bàn giao, duyệt phiếu chi và
-                kiểm soát số dư két an toàn
+                {t('cash.page.description')}
               </p>
             </div>
           </div>
@@ -129,16 +130,14 @@ export default function CashierShiftPage() {
               variant="outline"
               size="sm"
               onClick={() => {
-                if (currentShiftQuery.data?.id) {
-                  setCreateHandoverShiftId(currentShiftQuery.data.id)
-                }
+                setCreateHandoverShiftId('')
                 setIsCreateHandoverModalOpen(true)
                 setActiveTab('handovers')
               }}
               className="gap-2"
             >
               <Send className="w-4 h-4 text-emerald-500" />
-              Lập biên bản bàn giao
+              {t('cash.page.createHandover')}
             </Button>
           )}
           {canManageFunds && (
@@ -152,7 +151,7 @@ export default function CashierShiftPage() {
               className="gap-2"
             >
               <PlusCircle className="w-4 h-4" />
-              Thêm quỹ mới
+              {t('cash.page.createFund')}
             </Button>
           )}
         </div>
@@ -192,7 +191,7 @@ export default function CashierShiftPage() {
             )}
           >
             <Lock className="w-4 h-4" />
-            Ca làm việc của tôi
+            {t('cash.page.current')}
             {currentShiftQuery.data?.status === 'OPEN' && (
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
             )}
@@ -210,7 +209,7 @@ export default function CashierShiftPage() {
             )}
           >
             <Send className="w-4 h-4" />
-            Bàn giao két & Nộp tiền
+            {t('cash.page.handovers')}
           </button>
         )}
 
@@ -225,7 +224,7 @@ export default function CashierShiftPage() {
             )}
           >
             <Wallet className="w-4 h-4" />
-            Duyệt phiếu chi tiền
+            {t('cash.page.expenses')}
           </button>
         )}
 
@@ -240,7 +239,7 @@ export default function CashierShiftPage() {
             )}
           >
             <Building2 className="w-4 h-4" />
-            Danh mục Quỹ két
+            {t('cash.page.funds')}
           </button>
         )}
 
@@ -255,12 +254,12 @@ export default function CashierShiftPage() {
             )}
           >
             <History className="w-4 h-4" />
-            Lịch sử ca thu ngân
+            {t('cash.page.history')}
           </button>
         )}
       </div>
 
-      {!availableTabs.length && <p role="alert">Cần quyền đọc ca hoặc quỹ tương ứng để mở nghiệp vụ.</p>}
+      {!availableTabs.length && <p role="alert">{t('cash.page.accessRequired')}</p>}
 
       {/* ACTIVE TAB CONTENT */}
       {activeTab === 'current' && canReadCurrent && (
@@ -290,6 +289,8 @@ export default function CashierShiftPage() {
         <CashHandoversTab
           employeeId={employee.id}
           canCreateHandover={canCreateHandover}
+          canReadHandovers={canReadHandovers}
+          canReadFunds={canReadFunds}
           canReviewHandover={canReviewHandover}
           canSettleHandover={canSettleHandover}
           isCreateModalOpen={isCreateHandoverModalOpen}

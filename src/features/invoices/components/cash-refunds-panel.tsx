@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 import { useOutletContext } from 'react-router-dom'
 import { Banknote, CheckCircle2, RefreshCw } from 'lucide-react'
@@ -17,6 +18,7 @@ import { Pagination } from '../../../shared/ui/pagination'
 export function CashRefundsPanel({ invoice, active, blocked, onUpdated, onLockChange }: {
   invoice: Invoice; active: boolean; blocked: boolean; onUpdated: () => void; onLockChange: (locked: boolean) => void
 }) {
+  const { t } = useTranslation()
   const { employee, access } = useOutletContext<Session>()
   const canRead = access.has('/payment-refunds_read')
   const canCreate = access.has('/cash-refunds_create')
@@ -38,7 +40,7 @@ export function CashRefundsPanel({ invoice, active, blocked, onUpdated, onLockCh
     employeeId: employee.id, operation: `cash-refund:${invoice.id}`, schema: cashRefundInputSchema,
     execute: (payload, key) => createCashRefund(invoice.id, payload, key),
     onSuccess: () => { setConfirmation(null); setAmount(''); setReason('') },
-    onUpdated: () => { if (canRead) void refunds.refetch(); onUpdated() },
+    onUpdated: () => { if (canRead) void refunds.refetch(); if (canReadShift) void shift.refetch(); onUpdated() },
   })
   useEffect(() => { onLockChange(command.locked); return () => onLockChange(false) }, [command.locked, onLockChange])
   const paid = invoice.paymentStatus === 'PAID' || invoice.paymentStatus === 'PARTIALLY_REFUNDED'
@@ -68,7 +70,7 @@ export function CashRefundsPanel({ invoice, active, blocked, onUpdated, onLockCh
       <form className="grid gap-3 sm:grid-cols-[160px_minmax(0,1fr)]" onSubmit={event => {
         event.preventDefault()
         if (!canStart || command.locked) return
-        const parsed = cashRefundInputSchema.safeParse({ amount: amount.trim(), reason })
+        const parsed = cashRefundInputSchema.safeParse({ amount: amount.trim(), reason, expectedShiftId: shift.data?.id })
         if (!parsed.success) { setFormError('Nhập số tiền dương, tối đa 2 chữ số thập phân và lý do từ 3 đến 500 ký tự.'); return }
         if (minorAmount(parsed.data.amount) > (remaining ?? minorAmount(invoice.totalAmount))) { setFormError('Số tiền vượt mức có thể hoàn.'); return }
         if (shift.data?.fund && minorAmount(parsed.data.amount) > minorAmount(shift.data.fund.balance)) { setFormError('Số dư quỹ không đủ để chi hoàn tiền.'); return }
@@ -82,7 +84,8 @@ export function CashRefundsPanel({ invoice, active, blocked, onUpdated, onLockCh
     </>}
     {command.submitted && <div role="status" className="border-l-2 border-amber-500 pl-3 text-sm">
       <p>Chưa xác nhận kết quả · {formatPrice(command.submitted.payload.amount)}</p>
-      <Button className="mt-2" variant="outline" size="sm" disabled={!canCreate || !command.canRecover} onClick={() => command.submit(command.submitted!.payload)}><RefreshCw size={16} aria-hidden="true" />Kiểm tra lại cùng yêu cầu</Button>
+      {!command.submitted.payload.expectedShiftId && <p role="alert">{t('error.legacyCashCommand')}</p>}
+      <Button className="mt-2" variant="outline" size="sm" disabled={!canCreate || !command.canRecover || !command.submitted.payload.expectedShiftId} onClick={() => command.submit(command.submitted!.payload)}><RefreshCw size={16} aria-hidden="true" />Kiểm tra lại cùng yêu cầu</Button>
     </div>}
     {command.error && <p role="alert" className="text-sm text-destructive">{command.error}</p>}
     {command.mutation.data && !command.submitted && <p role="status" className="flex gap-2 text-sm text-emerald-800"><CheckCircle2 size={16} aria-hidden="true" />Đã ghi nhận hoàn {formatPrice(command.mutation.data.amount)}.</p>}

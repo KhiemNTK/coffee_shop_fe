@@ -154,6 +154,7 @@ export function getPaymentProviders(signal: AbortSignal) {
 }
 
 export interface InvoicesFilters {
+  keyword?: string
   page?: number
   itemPerPage?: number
   paymentStatus?: PaymentStatus | ''
@@ -185,6 +186,7 @@ export async function getInvoices(
   signal?: AbortSignal
 ): Promise<InvoicesResponse> {
   const params = new URLSearchParams()
+  if (filters.keyword) params.set('keyword', filters.keyword)
   if (filters.page) params.set('page', String(filters.page))
   if (filters.itemPerPage) params.set('itemPerPage', String(filters.itemPerPage))
   if (filters.paymentStatus) params.set('paymentStatus', filters.paymentStatus)

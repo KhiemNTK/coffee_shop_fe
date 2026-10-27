@@ -343,17 +343,19 @@ export function InvoiceDetailDialog({ invoiceId, onClose, onUpdated }: InvoiceDe
                 {can('/payment-attempts_read') && (
                   <button
                     type="button"
+                    aria-label={translate('payment.gatewayTab')}
+                    title={translate('payment.gatewayTab')}
                     disabled={paymentLocked}
                     onClick={() => setActiveTab('gateway')}
                     className={cn(
                       'px-4 py-2.5 text-xs font-semibold border-b-2 transition-colors flex items-center gap-1.5',
                       activeTab === 'gateway'
-                        ? 'border-brand-800 text-brand-900'
+                        ? 'border-primary text-foreground'
                         : 'border-transparent text-muted-foreground hover:text-foreground'
                     )}
                   >
-                    <QrCode className="h-3.5 w-3.5" />
-                    {translate('payment.gatewayTab')}
+                    <QrCode className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                    {translate('payment.gatewayTabShort')}
                   </button>
                 )}
                 {can('/invoices_pay') && (

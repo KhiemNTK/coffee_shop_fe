@@ -1,10 +1,21 @@
 import { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 import { Link, useLocation, useParams } from 'react-router-dom'
 import { z } from 'zod'
-import { CheckCircle2, Clock, Coffee, RefreshCw, XCircle } from 'lucide-react'
+import {
+  ArrowRight,
+  CheckCircle2,
+  Clock3,
+  Coffee,
+  RefreshCw,
+  TriangleAlert,
+  XCircle,
+} from 'lucide-react'
 import { apiGet, errorMessage } from '../../shared/api/client'
-import { Button, buttonVariants, Card, CardContent, Badge, cn } from '../../shared/ui'
+import { Button, buttonVariants, Card, CardContent, cn } from '../../shared/ui'
+import { PaymentProviderMark } from './components/payment-provider-mark'
+import { paymentProviderNames } from './payment-status'
 
 const resultSchema = z.object({
   signatureValid: z.boolean(),
@@ -18,6 +29,7 @@ const resultSchema = z.object({
 })
 
 export default function PaymentReturnPage() {
+  const { t } = useTranslation()
   const { provider } = useParams<{ provider: string }>()
   const { search, pathname } = useLocation()
   const incomingState = new URLSearchParams(search).get('state')
@@ -29,7 +41,7 @@ export default function PaymentReturnPage() {
     window.history.replaceState(
       { ...window.history.state, payosReturnState: payosState },
       '',
-      pathname
+      pathname,
     )
   }, [provider, payosState, pathname])
   const returnQuery =
@@ -50,117 +62,139 @@ export default function PaymentReturnPage() {
   })
   const status = result.data?.attempt?.status
   const message = !supported
-    ? 'Cổng thanh toán không hợp lệ.'
+    ? t('payment.return.unsupported')
     : result.isPending
-      ? 'Đang kiểm tra giao dịch…'
+      ? t('payment.return.checking')
       : result.isError
         ? errorMessage(result.error)
         : !result.data.signatureValid
-          ? 'Không xác minh được liên kết thanh toán.'
+          ? t('payment.return.unverified')
           : !result.data.attempt
-            ? 'Không tìm thấy giao dịch.'
+            ? t('payment.return.notFound')
             : status === 'SUCCEEDED'
-              ? 'Server đã ghi nhận thanh toán thành công.'
+              ? t('payment.return.succeeded')
               : status === 'PENDING'
-                ? 'Đang chờ ngân hàng xác nhận. Chưa cần thanh toán lại.'
+                ? t('payment.return.pending')
                 : status === 'EXPIRED'
-                  ? 'Liên kết đã hết hạn nhưng kết quả thanh toán chưa được xác minh. Liên hệ cửa hàng để đối soát, không thanh toán lại ngay.'
+                  ? t('payment.return.expired')
                   : status === 'REQUIRES_REVIEW'
-                    ? 'Giao dịch cần được cửa hàng đối soát.'
-                    : 'Phiên thanh toán đã kết thúc. Vui lòng liên hệ cửa hàng để kiểm tra.'
+                    ? t('payment.return.review')
+                    : t('payment.return.ended')
 
-  const isSuccess = status === 'SUCCEEDED'
-  const isPending = status === 'PENDING' || result.isPending
-  const isError =
-    result.isError || !result.data?.signatureValid || status === 'FAILED' || status === 'EXPIRED'
+  const isSuccess = result.data?.signatureValid === true && status === 'SUCCEEDED'
+  const isPending =
+    supported &&
+    (result.isPending || (result.data?.signatureValid === true && status === 'PENDING'))
+  const isReview = result.data?.signatureValid === true && status === 'REQUIRES_REVIEW'
+  const gateway =
+    provider === 'vnpay'
+      ? 'VNPAY'
+      : provider === 'momo'
+        ? 'MOMO'
+        : provider === 'payos'
+          ? 'PAYOS'
+          : null
+  const StatusIcon = isSuccess
+    ? CheckCircle2
+    : isPending
+      ? Clock3
+      : isReview
+        ? TriangleAlert
+        : XCircle
+  const statusTone = isSuccess
+    ? 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300'
+    : isPending || isReview
+      ? 'border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200'
+      : 'border-rose-200 bg-rose-50 text-rose-800 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-300'
 
   return (
-    <div className="min-h-screen bg-background text-foreground flex flex-col justify-between">
-      <header className="border-b border-border bg-card/90 backdrop-blur-md sticky top-0 z-10">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3.5 flex items-center justify-between">
-          <Link to="/" className="flex items-center gap-2 text-base font-bold text-primary">
-            <Coffee className="h-5 w-5" />
-            <span>Coffee Shop</span>
+    <div className="flex min-h-dvh flex-col bg-background text-foreground">
+      <header className="border-b border-border bg-card">
+        <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-3 px-4 py-4 sm:px-6">
+          <Link to="/" className="flex items-center gap-2 text-base font-bold text-foreground">
+            <Coffee className="size-5" aria-hidden="true" />
+            <span>Coffee Homes</span>
           </Link>
-          <Badge variant="outline" className="text-xs uppercase font-bold">
-            {provider?.toUpperCase() ?? 'GATEWAY'}
-          </Badge>
+          {gateway && (
+            <div className="flex items-center gap-2 text-sm font-semibold">
+              <PaymentProviderMark provider={gateway} />
+              {paymentProviderNames[gateway]}
+            </div>
+          )}
         </div>
       </header>
 
-      <main className="flex-1 flex items-center justify-center p-4 sm:p-6">
-        <Card className="max-w-md w-full shadow-lg border-border text-center overflow-hidden">
-          <CardContent className="p-6 sm:p-8 space-y-5">
-            {/* Status visual icon */}
-            <div className="mx-auto flex items-center justify-center">
-              {isSuccess ? (
-                <div className="flex h-16 w-16 items-center justify-center rounded-full bg-emerald-50 text-emerald-600 ring-8 ring-emerald-50/50">
-                  <CheckCircle2 className="h-10 w-10" />
-                </div>
-              ) : isPending ? (
-                <div className="flex h-16 w-16 items-center justify-center rounded-full bg-amber-50 text-amber-600 ring-8 ring-amber-50/50">
-                  <Clock className="h-10 w-10 animate-spin" />
-                </div>
-              ) : (
-                <div className="flex h-16 w-16 items-center justify-center rounded-full bg-rose-50 text-rose-600 ring-8 ring-rose-50/50">
-                  <XCircle className="h-10 w-10" />
-                </div>
+      <main className="flex flex-1 items-center justify-center px-4 py-10 sm:px-6">
+        <Card className="w-full max-w-lg overflow-hidden rounded-lg border-border text-center shadow-sm">
+          <CardContent className="grid gap-6 p-5 sm:p-8">
+            <div
+              className={cn(
+                'mx-auto flex size-16 items-center justify-center rounded-lg border',
+                statusTone,
               )}
+            >
+              <StatusIcon className="size-8" aria-hidden="true" />
             </div>
 
-            <div className="space-y-1">
-              <h1 className="text-2xl font-bold tracking-tight text-foreground">
-                Kết quả thanh toán
+            <div className="grid gap-3">
+              <h1 className="text-2xl font-semibold text-foreground">
+                {t('payment.return.title')}
               </h1>
               <p
                 role={result.isError ? 'alert' : 'status'}
-                className={cn(
-                  'text-sm font-semibold',
-                  isSuccess ? 'text-emerald-700' : isError ? 'text-rose-600' : 'text-amber-700'
-                )}
+                className={cn('rounded-md border px-4 py-3 text-sm leading-relaxed', statusTone)}
               >
                 {message}
               </p>
             </div>
 
-            {/* Receipt Summary if attempt exists */}
             {result.data?.attempt && (
-              <div className="rounded-xl border border-border bg-muted/40 p-4 text-left text-xs space-y-2 tabular-nums">
-                <div className="flex justify-between text-muted-foreground">
-                  <span>Mã giao dịch:</span>
-                  <span className="font-mono text-foreground font-semibold">
+              <dl className="grid min-w-0 gap-4 border-y border-dashed border-border py-4 text-left text-xs tabular-nums">
+                <div className="flex min-w-0 flex-wrap justify-between gap-2">
+                  <dt className="text-muted-foreground">{t('payment.return.attemptId')}</dt>
+                  <dd
+                    className="break-all font-mono font-medium text-foreground"
+                    title={result.data.attempt.id}
+                  >
                     {result.data.attempt.id.slice(0, 12)}…
-                  </span>
+                  </dd>
                 </div>
-                <div className="flex justify-between text-muted-foreground">
-                  <span>Mã hóa đơn:</span>
-                  <span className="font-mono text-foreground font-semibold">
+                <div className="flex min-w-0 flex-wrap justify-between gap-2">
+                  <dt className="text-muted-foreground">{t('payment.return.invoiceId')}</dt>
+                  <dd
+                    className="break-all font-mono font-medium text-foreground"
+                    title={result.data.attempt.invoiceId}
+                  >
                     {result.data.attempt.invoiceId.slice(0, 12)}…
-                  </span>
+                  </dd>
                 </div>
-              </div>
+              </dl>
             )}
 
-            <div className="pt-2 flex flex-col gap-2.5">
+            <div className="grid gap-3">
               {supported && (
                 <Button
                   variant="outline"
                   disabled={result.isFetching}
                   onClick={() => void result.refetch()}
-                  className="w-full gap-2 font-semibold cursor-pointer"
+                  className="min-h-11 w-full gap-2 font-semibold"
                 >
-                  <RefreshCw className={cn('h-4 w-4', result.isFetching && 'animate-spin')} />
-                  Kiểm tra lại
+                  <RefreshCw
+                    aria-hidden="true"
+                    className={cn('size-4', result.isFetching && 'motion-safe:animate-spin')}
+                  />
+                  {t('payment.checkStatus')}
                 </Button>
               )}
               <Link
-                to="/"
+                to="/menu"
                 className={cn(
                   buttonVariants({ variant: 'default' }),
-                  'w-full font-bold shadow-xs cursor-pointer'
+                  'min-h-11 w-full gap-2 font-semibold',
                 )}
               >
-                Về thực đơn
+                {t('payment.return.menu')}
+                <ArrowRight size={16} aria-hidden="true" />
               </Link>
             </div>
           </CardContent>
@@ -168,7 +202,7 @@ export default function PaymentReturnPage() {
       </main>
 
       <footer className="border-t border-border/60 py-4 text-center text-xs text-muted-foreground">
-        <span>© 2026 Coffee Shop • Giao dịch thanh toán an toàn</span>
+        <span>Coffee Homes · {t('payment.return.footer')}</span>
       </footer>
     </div>
   )

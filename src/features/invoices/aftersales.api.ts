@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { apiGet } from '../../shared/api/client'
+import { apiGet, ApiError } from '../../shared/api/client'
 import { apiIdempotentMutate } from '../../shared/api/idempotency'
 import { moneySchema } from '../menu/menu.api'
 import { minorAmount } from '../../shared/lib/money'
@@ -8,6 +8,8 @@ export const reasonSchema = z.string().trim().min(3).max(500)
 export const cashRefundInputSchema = z.object({
   amount: moneySchema.refine(value => minorAmount(value) > 0n, 'Nhập số tiền dương.'),
   reason: reasonSchema,
+  // Older stored commands must remain visible, but cannot be sent without their reviewed shift.
+  expectedShiftId: z.uuid().optional(),
 })
 export const remakeInputSchema = z.object({ itemId: z.string().min(1), reason: reasonSchema })
 const cashRefundSchema = z.object({
@@ -26,6 +28,7 @@ export function getCashRefunds(invoiceId: string, page: number, signal: AbortSig
   }), signal, true)
 }
 export function createCashRefund(invoiceId: string, input: CashRefundInput, idempotencyKey: string) {
+  if (!input.expectedShiftId) throw new ApiError(409, 'CASH_COMMAND_LEGACY')
   return apiIdempotentMutate(`/invoices/${invoiceId}/cash-refunds`, cashRefundSchema, { ...input, idempotencyKey })
 }
 export function remakeOrderItem({ itemId, reason }: RemakeInput, idempotencyKey: string) {

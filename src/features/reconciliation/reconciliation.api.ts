@@ -46,9 +46,10 @@ export type BankInput = z.infer<typeof bankInputSchema>
 export type Incident = z.infer<typeof incidentSchema>
 export type BankEntry = z.infer<typeof bankEntrySchema>
 
-export function getIncidents(page: number, status: string, signal?: AbortSignal) {
+export function getIncidents(page: number, status: string, signal?: AbortSignal, keyword = '') {
   return apiGet('/payment-reconciliation/incidents?' + new URLSearchParams({
     page: String(page), itemPerPage: '20', ...(status ? { status } : {}),
+    ...(keyword.trim() ? { keyword: keyword.trim() } : {}),
   }), paginatedResponseSchema(incidentSchema), signal, true)
 }
 export function closeIncident(id: string, action: 'RESOLVE' | 'IGNORE', resolutionNote: string) {
@@ -66,7 +67,13 @@ export function getBankEntries(importId: string, page: number, signal?: AbortSig
 }
 export function importBankStatement(input: BankInput) {
   return apiMutate('/bank-reconciliation/imports', 'POST',
-    z.object({ statementImport: bankImportSchema, reconciliationPending: z.boolean().optional() }), input)
+    bankImportResultSchema, input)
+}
+const bankImportResultSchema = z.object({
+  statementImport: bankImportSchema, reconciliationPending: z.boolean().optional(), replayed: z.boolean().optional(),
+})
+export function recoverBankStatement(input: BankInput) {
+  return apiMutate('/bank-reconciliation/imports/recover', 'POST', bankImportResultSchema, input)
 }
 export function reconcileBank(id: string) {
   return apiMutate('/bank-reconciliation/imports/' + id + '/reconcile', 'POST',

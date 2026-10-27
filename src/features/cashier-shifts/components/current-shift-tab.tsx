@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Coins, Lock, RefreshCw, Send, Unlock, Wallet } from 'lucide-react'
 import { ApiError, errorMessage } from '../../../shared/api/client'
+import { formatDateTime } from '../../../shared/lib/format'
 import { pendingIntentKey, readPendingIntent, writePendingIntent, isPendingIntentExpired, type PendingIntent } from '../../../shared/api/pending-intent'
 import { formatPrice } from '../../menu/menu.api'
 import {
@@ -45,7 +46,6 @@ interface CurrentShiftTabProps {
   onOpenCreateHandover: (shiftId?: string) => void
   onError: (msg: string) => void
   onSuccess: (msg: string) => void
-  onShiftLoaded?: (shift: CashierShift | null) => void
 }
 
 export function CurrentShiftTab({
@@ -79,6 +79,7 @@ export function CurrentShiftTab({
   const [movementAmount, setMovementAmount] = useState('')
   const [movementDesc, setMovementDesc] = useState('')
   const [showMovementForm, setShowMovementForm] = useState(false)
+  const [lastClosedShift, setLastClosedShift] = useState<CashierShift | null>(null)
 
   // Queries
   const currentShiftQuery = useQuery({
@@ -112,6 +113,7 @@ export function CurrentShiftTab({
         : addCashMovement(payload.expectedShiftId, payload.type, payload.amount, payload.description, idempotencyKey)
     },
     onSuccess: (data, { payload }) => {
+      if (payload.kind === 'CLOSE' && 'status' in data && data.status === 'CLOSED') setLastClosedShift(data)
       sessionStorage.removeItem(recoveryKey)
       setSubmitted(null)
       onSuccess(payload.kind === 'OPEN' ? 'Mở ca thu ngân thành công!'
@@ -136,7 +138,9 @@ export function CurrentShiftTab({
       void queryClient.invalidateQueries({ queryKey: ['private', employeeId, 'cashier-shift'] })
       void queryClient.invalidateQueries({ queryKey: ['private', 'funds'] })
       void queryClient.invalidateQueries({ queryKey: ['private', 'cashier-shift', 'current', 'expenses'] })
-      void queryClient.invalidateQueries({ queryKey: ['private', 'cash-handovers'] })
+      void queryClient.invalidateQueries({ queryKey: ['private', employeeId, 'cash-handovers'] })
+      void queryClient.invalidateQueries({ queryKey: ['private', employeeId, 'cashier-shifts'] })
+      void queryClient.invalidateQueries({ queryKey: ['private', employeeId, 'expense-requests'] })
     },
   })
 
@@ -160,6 +164,7 @@ export function CurrentShiftTab({
     mutationFn: (id: string) => cancelCurrentExpenseRequest(id),
     onSuccess: () => {
       onSuccess('Đã hủy phiếu yêu cầu chi tiền!')
+      void queryClient.invalidateQueries({ queryKey: ['private', employeeId, 'expense-requests'] })
       void queryClient.invalidateQueries({
         queryKey: ['private', 'cashier-shift', 'current', 'expenses'],
       })
@@ -199,7 +204,7 @@ export function CurrentShiftTab({
     )
   }
 
-  const shift = currentShiftQuery.data
+  const shift = lastClosedShift?.id === currentShiftQuery.data?.id ? lastClosedShift : currentShiftQuery.data ?? lastClosedShift
 
   if (!shift || shift.status === 'CLOSED') {
     return (
@@ -213,7 +218,7 @@ export function CurrentShiftTab({
                 </h3>
                 <p className="text-sm mt-0.5 opacity-90">
                   Đóng lúc:{' '}
-                  {new Date(shift.closedAt || '').toLocaleString('vi-VN')}
+                  {formatDateTime(shift.closedAt ?? shift.openedAt)}
                   {' • '}Tiền thực kiểm:{' '}
                   {formatPrice(shift.reportedEndingCash || '0')}
                 </p>

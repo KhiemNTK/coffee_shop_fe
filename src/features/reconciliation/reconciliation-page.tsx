@@ -80,12 +80,12 @@ export default function ReconciliationPage() {
 
         {tabs.includes('payments') && (
           <TabsContent value="payments" className="focus-visible:outline-hidden space-y-4">
-            <PaymentIncidentsTab />
+            <PaymentIncidentsTab key={session.employee.id} />
           </TabsContent>
         )}
         {tabs.includes('bank') && (
           <TabsContent value="bank" className="focus-visible:outline-hidden space-y-4">
-            <BankStatementsTab />
+            <BankStatementsTab key={session.employee.id} />
           </TabsContent>
         )}
         {tabs.includes('feedback') && (

@@ -5,10 +5,10 @@ export function InvoicesKpis({ totalPaidAmount, totalItems, unpaidCount, voidedC
   totalPaidAmount: string; totalItems: number; unpaidCount: number; voidedCount: number
 }) {
   const stats = [
-    { label: 'Giá trị đã thu · trang này', value: formatPrice(totalPaidAmount), icon: Coins, color: 'text-primary' },
+    { label: 'Giá trị HĐ đã thanh toán trước hoàn · trang này', value: formatPrice(totalPaidAmount), icon: Coins, color: 'text-foreground' },
     { label: 'Hóa đơn theo bộ lọc', value: String(totalItems), icon: FileText, color: 'text-foreground' },
-    { label: 'Chờ thanh toán · trang này', value: String(unpaidCount), icon: Clock, color: 'text-amber-800' },
-    { label: 'Hủy / hoàn tiền · trang này', value: String(voidedCount), icon: Ban, color: 'text-rose-800' },
+    { label: 'Chờ thanh toán · trang này', value: String(unpaidCount), icon: Clock, color: 'text-amber-800 dark:text-amber-300' },
+    { label: 'Hủy / hoàn tiền · trang này', value: String(voidedCount), icon: Ban, color: 'text-rose-800 dark:text-rose-300' },
   ]
   return <dl className="grid grid-cols-2 gap-x-6 gap-y-4 border-y border-border py-5 lg:grid-cols-4">
     {stats.map(({ label, value, icon: Icon, color }) => <div key={label} className="min-w-0">

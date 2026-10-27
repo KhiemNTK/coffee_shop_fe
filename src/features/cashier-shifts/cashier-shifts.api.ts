@@ -98,7 +98,7 @@ export const cashHandoverStatusSchema = z.enum([
 ])
 export type CashHandoverStatus = z.infer<typeof cashHandoverStatusSchema>
 
-export const cashHandoverSettlementStatusSchema = z.enum(['PENDING', 'SETTLED'])
+export const cashHandoverSettlementStatusSchema = z.enum(['NOT_REQUIRED', 'PENDING', 'SETTLED'])
 export type CashHandoverSettlementStatus = z.infer<
   typeof cashHandoverSettlementStatusSchema
 >
@@ -200,9 +200,9 @@ export const cashExpenseRequestSchema = z.object({
   requestedById: z.string(),
   shiftId: z.string(),
   fundId: z.string(),
-  reviewedById: z.string().nullable().optional(),
-  reviewedAt: z.string().nullable().optional(),
-  reviewNote: z.string().nullable().optional(),
+  resolvedById: z.string().nullable().optional(),
+  resolvedAt: z.string().nullable().optional(),
+  resolutionNote: z.string().nullable().optional(),
   createdAt: z.string(),
   updatedAt: z.string().optional(),
   requestedBy: z
@@ -211,7 +211,7 @@ export const cashExpenseRequestSchema = z.object({
       fullName: z.string(),
     })
     .optional(),
-  reviewedBy: z
+  resolvedBy: z
     .object({
       id: z.string(),
       fullName: z.string(),
@@ -346,6 +346,10 @@ export async function getCashierShifts(
 }
 
 // --- API Functions: Funds Management ---
+export function getMyClosedShifts(page: number, signal?: AbortSignal) {
+  return apiGet(`/cashier-shifts/mine/closed?page=${page}&itemPerPage=20`, cashierShiftsPageSchema, signal, true)
+}
+
 export function getCashierShift(id: string, signal?: AbortSignal) {
   return apiGet(`/cashier-shifts/${id}`, cashierShiftSchema, signal, true)
 }
@@ -449,12 +453,13 @@ export async function getAllCashHandovers(
 }
 
 export async function getMyCashHandovers(
-  params: { page?: number; itemPerPage?: number } = {},
+  params: { page?: number; itemPerPage?: number; status?: CashHandoverStatus } = {},
   signal?: AbortSignal,
 ): Promise<CashHandoversPage> {
   const q = new URLSearchParams()
   if (params.page) q.set('page', String(params.page))
   if (params.itemPerPage) q.set('itemPerPage', String(params.itemPerPage))
+  if (params.status) q.set('status', params.status)
 
   const query = q.toString()
   return apiGet(
