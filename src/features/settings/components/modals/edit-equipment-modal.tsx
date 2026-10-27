@@ -35,7 +35,7 @@ export function EditEquipmentModal({
   return (
     <Dialog
       open={!!equipment}
-      onOpenChange={(open) => !open && onClose()}
+      onOpenChange={(open) => !open && !isPending && onClose()}
       className="max-h-[90vh] overflow-y-auto"
     >
       {equipment && (
@@ -50,7 +50,7 @@ export function EditEquipmentModal({
           </DialogHeader>
 
           {error && (
-            <div className="mt-4 flex items-start gap-2 rounded-xl border border-destructive/20 bg-destructive/5 p-3 text-xs text-destructive">
+            <div role="alert" className="mt-4 flex items-start gap-2 rounded-xl border border-destructive/20 bg-destructive/5 p-3 text-xs text-destructive">
               <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
               <span>{error}</span>
             </div>

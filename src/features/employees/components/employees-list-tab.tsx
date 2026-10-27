@@ -5,6 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Users, Search, Edit2, Trash2, Mail, Phone, ShieldCheck } from 'lucide-react'
 import {
   getEmployees,
+  getEmployee,
   createEmployee,
   updateEmployee,
   deleteEmployee,
@@ -16,7 +17,7 @@ import {
   type CreateEmployeeInput,
   type UpdateEmployeeInput,
 } from '@/features/employees/employees.api'
-import { errorMessage } from '@/shared/api/client'
+import { ApiError, errorMessage } from '@/shared/api/client'
 import { Pagination } from '@/shared/ui/pagination'
 import { Button, Badge, AdminTable, Input } from '@/shared/ui'
 import { CreateEmployeeModal } from './modals/create-employee-modal'
@@ -29,6 +30,7 @@ export interface EmployeesListTabProps {
   roles: Role[]
   rolesLoaded: boolean
   canCreate: boolean
+  canChangePosition: boolean
   canUpdate: boolean
   canDelete: boolean
   canManageRoles: boolean
@@ -42,6 +44,7 @@ export function EmployeesListTab({
   roles,
   rolesLoaded,
   canCreate,
+  canChangePosition,
   canUpdate,
   canDelete,
   canManageRoles,
@@ -82,6 +85,7 @@ export function EmployeesListTab({
     isActive: true,
   })
   const [editEmployeeError, setEditEmployeeError] = useState<string | null>(null)
+  const [profileReviewRequired, setProfileReviewRequired] = useState(false)
 
   // Modals state: Employee Delete
   const [deletingEmployee, setDeletingEmployee] = useState<EmployeeListItem | null>(null)
@@ -159,13 +163,28 @@ export function EmployeesListTab({
   })
 
   const updateEmployeeMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: UpdateEmployeeInput }) =>
-      updateEmployee(id, data),
+    mutationFn: ({ id, data, expectedUpdatedAt }: { id: string; data: UpdateEmployeeInput; expectedUpdatedAt: string }) =>
+      updateEmployee(id, data, expectedUpdatedAt),
     onSuccess: (emp) => {
       invalidateEmployeeQueries()
       onToast(`Đã cập nhật thông tin nhân viên "${emp.fullName}"`)
       setEditingEmployee(null)
       setEditEmployeeError(null)
+    },
+    onError: (err) => {
+      setEditEmployeeError(errorMessage(err))
+      setProfileReviewRequired(!(err instanceof ApiError) || err.status >= 500 || err.status === 408 || err.status === 429 || err.code === 'EMPLOYEE_PROFILE_CHANGED')
+    },
+  })
+
+  const reloadProfile = useMutation({
+    mutationFn: () => getEmployee(editingEmployee!.id),
+    onSuccess: (current) => {
+      setEditingEmployee(current)
+      setEditEmployeeData({ fullName: current.fullName, phoneNumber: current.phoneNumber ?? '', positionId: current.positionId ?? '', isActive: current.isActive })
+      setProfileReviewRequired(false)
+      setEditEmployeeError(null)
+      invalidateEmployeeQueries()
     },
     onError: (err) => setEditEmployeeError(errorMessage(err)),
   })
@@ -386,6 +405,7 @@ export function EmployeesListTab({
                               isActive: emp.isActive,
                             })
                             setEditEmployeeError(null)
+                            setProfileReviewRequired(!emp.updatedAt)
                           }}
                         >
                           <Edit2 size={16} aria-hidden="true" />
@@ -449,12 +469,24 @@ export function EmployeesListTab({
         setFormData={setEditEmployeeData}
         error={editEmployeeError}
         isPending={updateEmployeeMutation.isPending}
+        canChangePosition={canChangePosition}
+        reviewRequired={profileReviewRequired}
+        isReloading={reloadProfile.isPending}
+        onReload={() => reloadProfile.mutate()}
         onSubmit={(e) => {
           e.preventDefault()
-          if (!canUpdate || !editingEmployee) return
+          if (!canUpdate || !editingEmployee?.updatedAt || profileReviewRequired || reloadProfile.isPending || updateEmployeeMutation.isPending) return
+          const data: UpdateEmployeeInput = {}
+          if (editEmployeeData.fullName?.trim() !== editingEmployee.fullName) data.fullName = editEmployeeData.fullName?.trim()
+          if ((editEmployeeData.phoneNumber ?? '').trim() !== (editingEmployee.phoneNumber ?? '')) data.phoneNumber = editEmployeeData.phoneNumber?.trim()
+          if (canChangePosition && editEmployeeData.positionId !== editingEmployee.positionId) data.positionId = editEmployeeData.positionId
+          if (editEmployeeData.isActive !== editingEmployee.isActive) data.isActive = editEmployeeData.isActive
+          if (editEmployeeData.password) data.password = editEmployeeData.password
+          if (!Object.keys(data).length) { setEditEmployeeError('Chưa có thay đổi để lưu.'); return }
           updateEmployeeMutation.mutate({
             id: editingEmployee.id,
-            data: editEmployeeData,
+            data,
+            expectedUpdatedAt: editingEmployee.updatedAt,
           })
         }}
       />

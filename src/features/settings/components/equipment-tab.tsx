@@ -77,7 +77,7 @@ export function EquipmentTab({
   const [editingEquipment, setEditingEquipment] =
     useState<EquipmentItem | null>(null)
   const [editEquipmentData, setEditEquipmentData] =
-    useState<UpdateEquipmentInput>({})
+    useState<UpdateEquipmentInput>({ expectedUpdatedAt: '' })
   const [editEquipmentError, setEditEquipmentError] = useState<string | null>(
     null,
   )
@@ -176,7 +176,7 @@ export function EquipmentTab({
       setEditingEquipment(null)
       setEditEquipmentError(null)
     },
-    onError: (err) => setEditEquipmentError(errorMessage(err)),
+    onError: (err) => { setEditEquipmentError(errorMessage(err)); invalidateEquipment() },
   })
 
   const transitionEquipmentMutation = useMutation({
@@ -412,6 +412,7 @@ export function EquipmentTab({
                               onClick={() => {
                                 setEditingEquipment(item)
                                 setEditEquipmentData({
+                                  expectedUpdatedAt: item.updatedAt,
                                   name: item.name,
                                   serialNumber: item.serialNumber || '',
                                   quantity: item.quantity,

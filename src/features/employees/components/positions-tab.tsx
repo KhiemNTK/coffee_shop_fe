@@ -163,6 +163,7 @@ export function PositionsTab({
                         {canUpdate && (
                           <button
                             type="button"
+                            disabled={deletePositionMutation.isPending}
                             onClick={() => {
                               setEditingPosition(pos)
                               setPositionName(pos.name)
@@ -190,6 +191,7 @@ export function PositionsTab({
                             }}
                             className="rounded-md p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive cursor-pointer"
                             title="Xóa vị trí"
+                            disabled={deletePositionMutation.isPending}
                           >
                             <Trash2 className="h-4 w-4" />
                           </button>
@@ -217,6 +219,7 @@ export function PositionsTab({
       <Dialog
         open={isCreateOpen && (editingPosition ? canUpdate : canCreate)}
         onOpenChange={(open) => {
+          if (savePositionMutation.isPending) return
           setIsCreateOpen(open)
           if (!open) {
             setEditingPosition(null)
@@ -225,6 +228,7 @@ export function PositionsTab({
             setPositionError(null)
           }
         }}
+        showCloseButton={!savePositionMutation.isPending}
       >
         <DialogHeader>
           <DialogTitle className="text-lg font-bold text-foreground">
@@ -239,7 +243,7 @@ export function PositionsTab({
         </DialogHeader>
 
         {positionError && (
-          <div className="mt-4 flex items-start gap-2 rounded-xl border border-destructive/20 bg-destructive/5 p-3 text-xs text-destructive">
+          <div role="alert" className="mt-4 flex items-start gap-2 rounded-xl border border-destructive/20 bg-destructive/5 p-3 text-xs text-destructive">
             <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
             <span>{positionError}</span>
           </div>
@@ -248,6 +252,7 @@ export function PositionsTab({
         <form
           onSubmit={(e) => {
             e.preventDefault()
+            if (savePositionMutation.isPending) return
             if (editingPosition ? !canUpdate : !canCreate) return
             if (!positionName.trim()) {
               setPositionError('Vui lòng nhập tên vị trí')
@@ -258,10 +263,13 @@ export function PositionsTab({
           className="mt-4 space-y-3.5"
         >
           <div>
-            <label className="text-xs font-medium text-foreground">
+            <label htmlFor="position-name" className="text-xs font-medium text-foreground">
               Tên vị trí <span className="text-destructive">*</span>
             </label>
             <Input
+              id="position-name"
+              maxLength={100}
+              disabled={savePositionMutation.isPending}
               type="text"
               placeholder="Ví dụ: Barista / Pha chế"
               value={positionName}

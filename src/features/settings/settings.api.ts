@@ -37,7 +37,7 @@ export const EquipmentItemSchema = z.object({
     .nullable()
     .optional(),
   createdAt: z.string().optional(),
-  updatedAt: z.string().optional(),
+  updatedAt: z.iso.datetime({ offset: true }),
 })
 export type EquipmentItem = z.infer<typeof EquipmentItemSchema>
 
@@ -98,6 +98,7 @@ export interface CreateEquipmentInput {
 }
 
 export interface UpdateEquipmentInput {
+  expectedUpdatedAt: string
   name?: string
   serialNumber?: string | null
   quantity?: number
@@ -107,6 +108,18 @@ export interface UpdateEquipmentInput {
   nextMaintenanceAt?: string | null
   location?: string | null
   notes?: string | null
+}
+
+function normalizeEquipmentFields<T extends {
+  serialNumber?: string | null
+  location?: string | null
+  notes?: string | null
+}>(data: T) {
+  const normalized = { ...data }
+  for (const key of ['serialNumber', 'location', 'notes'] as const) {
+    if (typeof normalized[key] === 'string') normalized[key] = normalized[key].trim() || null
+  }
+  return normalized
 }
 
 export interface TransitionEquipmentInput {
@@ -252,10 +265,10 @@ export const settingsApi = {
   },
 
   createEquipment: (data: CreateEquipmentInput): Promise<EquipmentItem> =>
-    apiMutate('/equipment', 'POST', EquipmentItemSchema, data),
+    apiMutate('/equipment', 'POST', EquipmentItemSchema, normalizeEquipmentFields(data)),
 
   updateEquipment: (id: string, data: UpdateEquipmentInput): Promise<EquipmentItem> =>
-    apiMutate(`/equipment/${id}`, 'PATCH', EquipmentItemSchema, data),
+    apiMutate(`/equipment/${id}`, 'PATCH', EquipmentItemSchema, normalizeEquipmentFields(data)),
 
   transitionEquipment: (
     id: string,

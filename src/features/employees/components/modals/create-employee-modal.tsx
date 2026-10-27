@@ -1,4 +1,5 @@
 import { AlertCircle } from 'lucide-react'
+import { useId } from 'react'
 import type { PositionDropdownItem, CreateEmployeeInput } from '@/features/employees/employees.api'
 import {
   Button,
@@ -33,10 +34,11 @@ export function CreateEmployeeModal({
   isPending,
   onSubmit,
 }: CreateEmployeeModalProps) {
+  const id = useId()
   return (
     <Dialog
       open={isOpen}
-      onOpenChange={(open) => !open && onClose()}
+      onOpenChange={(open) => !open && !isPending && onClose()}
       className="max-h-[90vh] overflow-y-auto"
     >
       <DialogHeader>
@@ -49,7 +51,7 @@ export function CreateEmployeeModal({
       </DialogHeader>
 
       {error && (
-        <div className="mt-4 flex items-start gap-2 rounded-xl border border-destructive/20 bg-destructive/5 p-3 text-xs text-destructive">
+        <div role="alert" className="mt-4 flex items-start gap-2 rounded-xl border border-destructive/20 bg-destructive/5 p-3 text-xs text-destructive">
           <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
           <span>{error}</span>
         </div>
@@ -58,6 +60,7 @@ export function CreateEmployeeModal({
       <form
         onSubmit={(e) => {
           e.preventDefault()
+          if (isPending) return
           if (!formData.positionId) {
             setError('Vui lòng chọn vị trí công việc')
             return
@@ -67,10 +70,11 @@ export function CreateEmployeeModal({
         className="mt-4 space-y-3.5"
       >
         <div>
-          <label className="text-xs font-medium text-foreground">
+          <label htmlFor={`${id}-name`} className="text-xs font-medium text-foreground">
             Họ và tên <span className="text-destructive">*</span>
           </label>
           <Input
+            id={`${id}-name`}
             type="text"
             placeholder="Ví dụ: Nguyễn Văn An"
             value={formData.fullName}
@@ -87,10 +91,11 @@ export function CreateEmployeeModal({
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
-            <label className="text-xs font-medium text-foreground">
+            <label htmlFor={`${id}-email`} className="text-xs font-medium text-foreground">
               Email đăng nhập <span className="text-destructive">*</span>
             </label>
             <Input
+              id={`${id}-email`}
               type="email"
               placeholder="nhanvien@example.com"
               value={formData.email}
@@ -105,11 +110,12 @@ export function CreateEmployeeModal({
             />
           </div>
           <div>
-            <label className="text-xs font-medium text-foreground">
+            <label htmlFor={`${id}-username`} className="text-xs font-medium text-foreground">
               Tên đăng nhập (Username){' '}
               <span className="text-destructive">*</span>
             </label>
             <Input
+              id={`${id}-username`}
               type="text"
               placeholder="nguyenvanan"
               value={formData.username}
@@ -127,10 +133,12 @@ export function CreateEmployeeModal({
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
-            <label className="text-xs font-medium text-foreground">
+            <label htmlFor={`${id}-password`} className="text-xs font-medium text-foreground">
               Mật khẩu ban đầu <span className="text-destructive">*</span>
             </label>
             <Input
+              id={`${id}-password`}
+              autoComplete="new-password"
               type="password"
               placeholder="Tối thiểu 12 ký tự"
               minLength={12}
@@ -147,10 +155,11 @@ export function CreateEmployeeModal({
             />
           </div>
           <div>
-            <label className="text-xs font-medium text-foreground">
+            <label htmlFor={`${id}-position`} className="text-xs font-medium text-foreground">
               Vị trí công việc <span className="text-destructive">*</span>
             </label>
             <select
+              id={`${id}-position`}
               aria-label="Chọn vị trí công việc"
               value={formData.positionId}
               onChange={(e) =>
@@ -174,10 +183,11 @@ export function CreateEmployeeModal({
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
-            <label className="text-xs font-medium text-foreground">
+            <label htmlFor={`${id}-phone`} className="text-xs font-medium text-foreground">
               Số điện thoại
             </label>
             <Input
+              id={`${id}-phone`}
               type="tel"
               placeholder="0912345678"
               value={formData.phoneNumber || ''}
@@ -191,10 +201,11 @@ export function CreateEmployeeModal({
             />
           </div>
           <div>
-            <label className="text-xs font-medium text-foreground">
+            <label htmlFor={`${id}-address`} className="text-xs font-medium text-foreground">
               Địa chỉ
             </label>
             <Input
+              id={`${id}-address`}
               type="text"
               placeholder="Địa chỉ cư trú"
               value={formData.address || ''}

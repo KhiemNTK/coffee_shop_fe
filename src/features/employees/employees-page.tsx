@@ -57,11 +57,15 @@ export function EmployeesPage() {
     enabled: canReadEmployees,
   })
 
-  const { data: positionsDropdown = [], isSuccess: positionsLoaded } = useQuery({
+  const positions = useQuery({
     queryKey: ['private', 'positions-dropdown'],
     queryFn: ({ signal }) => getPositionsDropdown(signal),
     enabled: canReadPositions,
   })
+  const positionsDropdown = positions.data ?? []
+  const positionsLoaded = positions.isSuccess
+  const createReady = canCreateEmployee && canReadPositions && positionsLoaded &&
+    positionsDropdown.length > 0
 
   const {
     data: rolesData,
@@ -125,7 +129,8 @@ export function EmployeesPage() {
               Làm mới
             </Button>
             {activeTab === 'employees' && canCreateEmployee && (
-              <Button className="min-h-10" onClick={() => setIsCreateEmployeeOpen(true)}>
+              <Button className="min-h-10" disabled={!createReady} onClick={() => setIsCreateEmployeeOpen(true)}
+                title={!canReadPositions ? 'Cần quyền đọc vị trí để tạo nhân viên' : 'Cần tải được ít nhất một vị trí công việc'}>
                 <Plus size={16} aria-hidden="true" />
                 Thêm nhân viên
               </Button>
@@ -139,6 +144,16 @@ export function EmployeesPage() {
           </>
         }
       />
+
+      {activeTab === 'employees' && canCreateEmployee && !createReady && (
+        <p role={positions.isError ? 'alert' : 'status'} className="text-sm text-muted-foreground">
+          {!canReadPositions ? 'Bạn cần quyền đọc vị trí để hoàn tất tạo nhân viên.'
+            : positions.isError ? 'Không tải được vị trí công việc.'
+              : positionsLoaded && !positionsDropdown.length ? 'Tạo ít nhất một vị trí công việc trước khi thêm nhân viên.'
+                : 'Đang tải vị trí công việc…'}
+          {canReadPositions && positions.isError && <Button variant="outline" size="sm" onClick={() => void positions.refetch()}>Tải lại vị trí</Button>}
+        </p>
+      )}
 
       {rolesError && canReadRoles && (
         <p role="alert" className="text-sm text-destructive">
@@ -210,7 +225,8 @@ export function EmployeesPage() {
           positionsDropdown={canReadPositions ? positionsDropdown : []}
           roles={canReadRoles ? rolesData ?? [] : []}
           rolesLoaded={canReadRoles && Boolean(rolesData) && !isLoadingRoles}
-          canCreate={canCreateEmployee}
+          canCreate={createReady}
+          canChangePosition={canReadPositions && positionsLoaded}
           canUpdate={canUpdateEmployee}
           canDelete={canDeleteEmployee}
           canManageRoles={canManageEmployeeRoles}

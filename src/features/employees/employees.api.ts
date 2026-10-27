@@ -230,12 +230,18 @@ export async function createEmployee(
   })
 }
 
+export function getEmployee(id: string, signal?: AbortSignal) {
+  return apiGet(`/employees/${id}`, employeeListItemSchema.extend({ updatedAt: z.iso.datetime({ offset: true }) }), signal, true)
+}
+
 export async function updateEmployee(
   id: string,
   payload: UpdateEmployeeInput,
+  expectedUpdatedAt: string,
 ): Promise<EmployeeListItem> {
   return apiMutate(`/employees/${id}`, 'PATCH', employeeListItemSchema, {
     ...payload,
+    expectedUpdatedAt,
     phoneNumber:
       payload.phoneNumber === undefined
         ? undefined

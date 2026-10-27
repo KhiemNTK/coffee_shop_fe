@@ -34,7 +34,7 @@ import {
 export interface SystemSettingsTabProps {
   canUpdate: boolean
   canDelete: boolean
-  onToast: (msg: string) => void
+  onToast: (msg: string, tone?: 'error') => void
   isCreateOpen: boolean
   setIsCreateOpen: (open: boolean) => void
 }
@@ -176,7 +176,7 @@ export function SystemSettingsTab({
       onToast(`Đã xóa cấu hình "${res.key}"`)
       setPage(1)
     },
-    onError: (err) => onToast(errorMessage(err)),
+    onError: (err) => onToast(errorMessage(err), 'error'),
   })
 
   // Format setting value display

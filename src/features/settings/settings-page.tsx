@@ -14,7 +14,7 @@ import { settingsApi } from '@/features/settings/settings.api'
 import { operationsApi } from '../operations/operations.api'
 import { errorMessage } from '@/shared/api/client'
 import type { Session } from '@/features/auth/session'
-import { Button, Badge } from '@/shared/ui'
+import { Button, Badge, cn } from '@/shared/ui'
 import { EquipmentTab } from './components/equipment-tab'
 import { SystemSettingsTab } from './components/system-settings-tab'
 import { ManagementExceptionsTab } from '../operations/exception-queue'
@@ -48,7 +48,10 @@ export function SettingsPage() {
     ?? tabs.find((tab) => tab.allowed)?.id
 
   // Toast feedback
-  const [toastMessage, setToastMessage] = useState<string | null>(null)
+  const [toast, setToast] = useState<{ message: string; tone: 'success' | 'error' } | null>(null)
+  function showToast(message: string, tone: 'success' | 'error' = 'success') {
+    setToast({ message, tone })
+  }
 
   // Modals state for header create buttons
   const [isCreateEquipmentOpen, setIsCreateEquipmentOpen] = useState(false)
@@ -138,15 +141,16 @@ export function SettingsPage() {
       </div>
 
       {/* Toast notification */}
-      {toastMessage && (
-        <div className="flex items-center justify-between gap-2 rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300 shadow-xs animate-in fade-in">
+      {toast && (
+        <div role={toast.tone === 'error' ? 'alert' : 'status'} className={cn('flex items-center justify-between gap-2 rounded-lg border px-4 py-3 text-sm shadow-xs',
+          toast.tone === 'error' ? 'border-destructive/40 bg-destructive/10 text-destructive' : 'border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300')}>
           <div className="flex items-center gap-2">
-            <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
-            <span>{toastMessage}</span>
+            {toast.tone === 'error' ? <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden="true" /> : <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden="true" />}
+            <span>{toast.message}</span>
           </div>
           <button
             type="button"
-            onClick={() => setToastMessage(null)}
+            onClick={() => setToast(null)}
             className="text-xs text-muted-foreground hover:text-foreground underline cursor-pointer"
           >
             Đóng
@@ -233,7 +237,7 @@ export function SettingsPage() {
           canCreate={canCreateEquipment}
           canUpdate={canUpdateEquipment}
           canTransition={canTransitionEquipment}
-          onToast={(msg) => setToastMessage(msg)}
+          onToast={showToast}
           isCreateOpen={canCreateEquipment && isCreateEquipmentOpen}
           setIsCreateOpen={setIsCreateEquipmentOpen}
         />
@@ -243,7 +247,7 @@ export function SettingsPage() {
         <SystemSettingsTab
           canUpdate={canUpdateSettings}
           canDelete={canDeleteSettings}
-          onToast={(msg) => setToastMessage(msg)}
+          onToast={showToast}
           isCreateOpen={canCreateSettings && isCreateSettingOpen}
           setIsCreateOpen={setIsCreateSettingOpen}
         />
