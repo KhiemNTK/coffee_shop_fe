@@ -14,7 +14,6 @@ import {
   Search,
   Settings,
   Shield,
-  Store,
   User,
   Users2,
   UtensilsCrossed,
@@ -243,8 +242,7 @@ export default function StaffAccount() {
             </div>
           </div>
 
-          {/* Meta Info Grid */}
-          <div className="grid grid-cols-2 gap-3 sm:gap-4 border-t border-border/70 pt-4 md:border-t-0 md:pt-0 text-xs">
+          <div className="border-t border-border/70 pt-4 md:border-t-0 md:pt-0 text-xs">
             <div className="rounded-xl border border-border/60 bg-muted/30 p-2.5">
               <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider block">
                 Mã nhân viên
@@ -254,15 +252,6 @@ export default function StaffAccount() {
               </span>
             </div>
 
-            <div className="rounded-xl border border-border/60 bg-muted/30 p-2.5">
-              <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider block">
-                Chi nhánh làm việc
-              </span>
-              <span className="font-semibold text-foreground flex items-center gap-1 mt-0.5">
-                <Store className="h-3 w-3 text-primary shrink-0" />
-                Chi nhánh trung tâm
-              </span>
-            </div>
           </div>
         </div>
       </Card>
@@ -317,14 +306,6 @@ export default function StaffAccount() {
                     </dt>
                     <dd className="mt-0.5 text-sm font-semibold text-foreground break-words">
                       {authorization.roleNames.join(', ') || translate('common.unassigned')}
-                    </dd>
-                  </div>
-
-                  {/* Working Branch */}
-                  <div className="pt-3">
-                    <dt className="text-xs font-medium text-muted-foreground">Chi nhánh</dt>
-                    <dd className="mt-0.5 text-xs font-medium text-foreground">
-                      Chi nhánh trung tâm (Trụ sở chính)
                     </dd>
                   </div>
 

@@ -10,8 +10,10 @@ import { Turnstile } from '../auth/turnstile'
 import { SiteHeader } from '../../shared/components/site-header'
 import { SignInScene } from '../auth/sign-in-scene'
 import { buttonVariants } from '../../shared/ui/button-variants'
-import { Button } from '../../shared/ui'
-import { ApiError, errorMessage } from '../../shared/api/client'
+import { ApiErrorAlert, Button } from '../../shared/ui'
+import { ApiError } from '../../shared/api/client'
+import { useRetryAfter } from '../../shared/api/use-retry-after'
+import { announceCustomerSessionChange } from '../../app/query-client'
 import {
   customerKey,
   customerSignIn,
@@ -24,7 +26,7 @@ const intentSchema = z.object({
   returnTo: z
     .string()
     .regex(
-      /^\/(?:[?#].*|(?:menu|wishlist|cart|account|order|reservations|pickup|reorder)(?:[/?#].*)?)?$/
+      /^\/(?:[?#].*|(?:menu|wishlist|cart|account|order|reservations|pickup|reorder|about|contact)(?:[/?#].*)?)?$/
     ),
   favoriteItemId: z.uuid().optional(),
 })
@@ -45,9 +47,11 @@ export function CustomerSignIn({ returnTo = '/account' }: { returnTo?: string })
   const [error, setError] = useState<unknown>()
   const flight = useRef(false)
   const mounted = useRef(true)
-  const errorRef = useRef<HTMLParagraphElement>(null)
+  const errorRef = useRef<HTMLDivElement>(null)
   const configMissing = import.meta.env.PROD && !authConfig.turnstileSiteKey
   const failure = error ?? logout.error ?? customer.error
+  const retryWait = useRetryAfter(failure)
+  const logoutRetryWait = useRetryAfter(logout.error)
   useEffect(() => {
     mounted.current = true
     return () => {
@@ -58,6 +62,7 @@ export function CustomerSignIn({ returnTo = '/account' }: { returnTo?: string })
   async function finish(credential?: string) {
     if (
       flight.current ||
+      retryWait > 0 ||
       logout.isPending ||
       (credential && (configMissing || (authConfig.turnstileSiteKey && !token)))
     )
@@ -76,6 +81,7 @@ export function CustomerSignIn({ returnTo = '/account' }: { returnTo?: string })
           predicate: (query) => query.queryKey[1] !== 'me',
         })
         client.setQueryData(customerKey, account)
+        announceCustomerSessionChange()
       }
       if (!account || !mounted.current) return
       if (itemId) {
@@ -110,7 +116,7 @@ export function CustomerSignIn({ returnTo = '/account' }: { returnTo?: string })
   }
 
   function switchAccount() {
-    if (flight.current || logout.isPending) return
+    if (flight.current || logout.isPending || logoutRetryWait > 0) return
     flight.current = true
     setError(undefined)
     logout.mutate(undefined, {
@@ -141,19 +147,17 @@ export function CustomerSignIn({ returnTo = '/account' }: { returnTo?: string })
         {t('customer.signInDescription')}
       </p>
       {failure && (
-        <p
+        <div
           ref={errorRef}
           tabIndex={-1}
-          role="alert"
-          className="break-words text-sm text-destructive"
         >
-          {errorMessage(failure)}
-        </p>
+          <ApiErrorAlert error={failure} />
+        </div>
       )}
       {customer.isPending ? (
         <p role="status">{t('common.loading')}</p>
       ) : customer.isError ? (
-        <Button variant="outline" onClick={() => void customer.refetch()}>
+        <Button variant="outline" disabled={retryWait > 0 || customer.isFetching} onClick={() => void customer.refetch()}>
           {t('common.retry')}
         </Button>
       ) : customer.data ? (
@@ -165,7 +169,7 @@ export function CustomerSignIn({ returnTo = '/account' }: { returnTo?: string })
           <div className="flex flex-wrap gap-3">
             <Button
               isLoading={pending}
-              disabled={pending || logout.isPending}
+              disabled={pending || logout.isPending || retryWait > 0}
               onClick={() => void finish()}
             >
               <ArrowRight size={16} aria-hidden="true" />
@@ -174,7 +178,7 @@ export function CustomerSignIn({ returnTo = '/account' }: { returnTo?: string })
             <Button
               variant="outline"
               isLoading={logout.isPending}
-              disabled={pending || logout.isPending}
+              disabled={pending || logout.isPending || logoutRetryWait > 0}
               onClick={switchAccount}
             >
               <LogOut size={16} aria-hidden="true" />
@@ -201,7 +205,7 @@ export function CustomerSignIn({ returnTo = '/account' }: { returnTo?: string })
           )}
           {pending ? (
             <p role="status">{t('auth.signingIn')}</p>
-          ) : !authConfig.turnstileSiteKey || token ? (
+          ) : retryWait > 0 ? null : !authConfig.turnstileSiteKey || token ? (
             <GoogleButton
               clientId={authConfig.googleClientId}
               onCredential={(credential) => {

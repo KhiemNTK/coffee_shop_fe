@@ -23,6 +23,7 @@ import { buttonVariants } from '../../shared/ui/button-variants'
 import { cn } from '../../shared/ui/utils'
 import { ThemeToggle } from '../../shared/theme'
 import { createPermissionAccess, type PermissionKey } from '../../shared/auth/permissions'
+import { clearStaffDestination } from '../../shared/auth/staff-destination'
 
 export function PermissionGate({
   permission,
@@ -76,6 +77,7 @@ export function StaffLayout() {
     try {
       await authCommand('/auth/logout', {})
       clearPrivatePendingOperations()
+      clearStaffDestination()
       clearIdentity()
       announceSessionChange()
       navigate('/sign-in', { replace: true })
@@ -119,7 +121,11 @@ export function StaffLayout() {
 
   if (session.isError) {
     if (session.error instanceof ApiError && session.error.status === 401)
-      return <Navigate to="/sign-in" replace />
+      return <Navigate
+        to="/sign-in"
+        replace
+        state={{ returnTo: location.pathname + location.search + location.hash }}
+      />
     return (
       <main className="mx-auto my-12 max-w-md rounded-xl border border-destructive/20 bg-destructive/5 p-6 text-center">
         <h1 className="text-lg font-bold text-destructive">
@@ -132,7 +138,7 @@ export function StaffLayout() {
           <Button onClick={() => void session.refetch()} disabled={session.isFetching}>
             {translate('common.retry')}
           </Button>
-          <Link to="/sign-in" className={buttonVariants({ variant: 'outline' })}>
+          <Link to="/sign-in" state={{ returnTo: location.pathname + location.search + location.hash }} className={buttonVariants({ variant: 'outline' })}>
             {translate('auth.backToSignIn')}
           </Link>
         </div>

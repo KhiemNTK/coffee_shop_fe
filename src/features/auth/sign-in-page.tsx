@@ -15,6 +15,7 @@ import { authConfig } from './auth.config'
 import { GoogleButton } from './google-button'
 import { SignInScene } from './sign-in-scene'
 import { ThemeToggle } from '../../shared/theme'
+import { takeStaffDestination } from '../../shared/auth/staff-destination'
 
 const siteKey = (import.meta.env.VITE_TURNSTILE_SITE_KEY as string | undefined)?.trim() ?? ''
 
@@ -22,8 +23,8 @@ export default function SignInPage() {
   const { t: translate } = useTranslation()
   const navigate = useNavigate()
   const location = useLocation()
-  const unlinkUncertain =
-    (location.state as { googleUnlinkUncertain?: unknown } | null)?.googleUnlinkUncertain === true
+  const intent = location.state as { returnTo?: unknown; googleUnlinkUncertain?: unknown } | null
+  const unlinkUncertain = intent?.googleUnlinkUncertain === true
   const [pending, setPending] = useState(false)
   const [visible, setVisible] = useState(false)
   const [error, setError] = useState<unknown>()
@@ -56,7 +57,7 @@ export default function SignInPage() {
       await authCommand('/auth/google', { idToken, ...(token ? { turnstileToken: token } : {}) })
       clearIdentity()
       announceSessionChange()
-      if (mounted.current) navigate('/staff', { replace: true })
+      if (mounted.current) navigate(takeStaffDestination(intent?.returnTo), { replace: true })
     } catch (failure) {
       if (mounted.current) {
         setError(failure)
@@ -144,7 +145,7 @@ export default function SignInPage() {
               form.reset()
               clearIdentity()
               announceSessionChange()
-              if (mounted.current) navigate('/staff', { replace: true })
+              if (mounted.current) navigate(takeStaffDestination(intent?.returnTo), { replace: true })
             } catch (failure) {
               if (!mounted.current) return
               setError(failure)

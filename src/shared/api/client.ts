@@ -156,17 +156,12 @@ async function requestResponse(
       response = await http(path, method, combined, body, timeoutMs)
     } catch (error) {
       if (!authenticated || !(error instanceof ApiError) || error.status !== 401) throw error
-      try {
-        await refresh(observedCsrf, sessionSignal)
-      } catch (refreshError) {
-        if (!sessionSignal.aborted) sessionEvents.dispatchEvent(new Event('expired'))
-        throw refreshError
-      }
+      await refresh(observedCsrf, sessionSignal)
       combined.throwIfAborted()
       response = await http(path, method, combined, body, timeoutMs)
     }
   } catch (error) {
-    if (authenticated && error instanceof ApiError && error.status === 401)
+    if (authenticated && !sessionSignal.aborted && error instanceof ApiError && error.status === 401)
       sessionEvents.dispatchEvent(new Event('expired'))
     if (
       authenticated &&
@@ -277,6 +272,8 @@ export function errorMessage(error: unknown) {
   if (error instanceof Error && !(error instanceof ApiError) && error.message) return error.message
   if (!(error instanceof ApiError)) return translate('error.connection')
   if (error.code === 'CLOUDFLARE_CHALLENGE') return translate('error.cloudflareChallenge')
+  if (error.code === 'AUTH_ORIGIN_NOT_ALLOWED' || error.code === 'AUTH_JSON_REQUIRED')
+    return translate('auth.requestNotAllowed')
   if (error.code === 'TURNSTILE_REQUIRED') return translate('auth.verificationRequired')
   if (error.code === 'TURNSTILE_EXPIRED') return translate('auth.verificationExpired')
   if (error.code === 'TURNSTILE_INVALID') return translate('auth.verificationFailed')
@@ -288,7 +285,12 @@ export function errorMessage(error: unknown) {
     return translate('takeaway.pendingRecoveryInfo')
   if (error.code === 'CLIENT_RESPONSE_INVALID') return translate('error.invalidResponse')
   if (error.code === 'AUTHORIZATION_CHANGED') return translate('permissions.changed')
+  if (error.code === 'TRANSACTION_CONFLICT') return translate('error.transactionConflict')
+  if (error.code === 'DATABASE_BUSY') return translate('error.databaseBusy')
   if (error.code === 'ROLE_IN_USE') return translate('roles.inUse')
+  if (error.code === 'CASH_HANDOVER_FUND_BUSY') return translate('cash.handoverFundBusy')
+  if (error.code === 'POSITION_IN_USE') return translate('positions.inUse')
+  if (error.code === 'PRINT_JOB_REQUIRES_REVIEW') return translate('receipt.status.REQUIRES_REVIEW')
   if (error.code === 'IMAGE_UPLOAD_DISABLED') return translate('menu.image.disabled')
   if (error.code === 'IMAGE_STORAGE_UNAVAILABLE') return translate('menu.image.unavailable')
   if (error.code === 'IMAGE_UPLOAD_INVALID') return translate('menu.image.invalid')
@@ -297,6 +299,8 @@ export function errorMessage(error: unknown) {
   if (error.code === 'WISHLIST_LIMIT_REACHED') return translate('wishlist.limit')
   if (error.code === 'CUSTOMER_SESSION_CHANGED') return translate('wishlist.accountChanged')
   if (error.code === 'CASHIER_SHIFT_CHANGED') return translate('error.shiftChanged')
+  if (error.code === 'CASH_COMMAND_LEGACY') return translate('error.legacyCashCommand')
+  if (error.code === 'EQUIPMENT_CHANGED') return translate('error.equipmentChanged')
   if (error.code === 'CASHIER_SHIFT_REQUIRED') return translate('error.shiftRequired')
   if (error.code === 'CASHIER_SHIFT_FUND_INVALID') return translate('error.shiftFundInvalid')
   if (error.code === 'ONLINE_INTAKE_PAUSED') return translate('takeaway.intakePaused')

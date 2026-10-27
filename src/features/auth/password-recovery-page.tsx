@@ -2,9 +2,10 @@ import { useTranslation } from 'react-i18next'
 import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { z } from 'zod'
-import { apiMutate, errorMessage } from '../../shared/api/client'
+import { apiMutate } from '../../shared/api/client'
+import { useRetryAfter } from '../../shared/api/use-retry-after'
 import { clearIdentity, announceSessionChange } from '../../app/query-client'
-import { Button, Input } from '../../shared/ui'
+import { ApiErrorAlert, Button, Input } from '../../shared/ui'
 import { authConfig } from './auth.config'
 import { Turnstile } from './turnstile'
 
@@ -17,9 +18,10 @@ export default function PasswordRecoveryPage() {
   const [attempt, setAttempt] = useState(0)
   const [pending, setPending] = useState(false)
   const [done, setDone] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<unknown>(null)
+  const retryWait = useRetryAfter(error)
   const submitting = useRef(false)
-  const errorRef = useRef<HTMLParagraphElement>(null)
+  const errorRef = useRef<HTMLDivElement>(null)
   const unavailable = !resetting && import.meta.env.PROD && !authConfig.turnstileSiteKey
 
   useEffect(() => {
@@ -29,7 +31,7 @@ export default function PasswordRecoveryPage() {
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (submitting.current || unavailable) return
+    if (submitting.current || unavailable || retryWait > 0) return
     const form = event.currentTarget
     const fields = new FormData(form)
     const password = String(fields.get('password') ?? '')
@@ -67,7 +69,7 @@ export default function PasswordRecoveryPage() {
       form.reset()
       setDone(true)
     } catch (failure) {
-      setError(errorMessage(failure))
+      setError(failure)
       requestAnimationFrame(() => errorRef.current?.focus())
     } finally {
       submitting.current = false
@@ -143,16 +145,17 @@ export default function PasswordRecoveryPage() {
             </>
           )}
           {unavailable && <p role="alert">{translate('auth.recoveryUnavailable')}</p>}
-          {error && (
-            <p ref={errorRef} tabIndex={-1} role="alert" className="text-sm text-destructive">
-              {error}
-            </p>
+          {error != null && (
+            <div ref={errorRef} tabIndex={-1}>
+              <ApiErrorAlert error={error} />
+            </div>
           )}
           <Button
             type="submit"
             isLoading={pending}
             disabled={
               unavailable ||
+              retryWait > 0 ||
               (resetting ? !resetToken : Boolean(authConfig.turnstileSiteKey && !captcha))
             }
           >

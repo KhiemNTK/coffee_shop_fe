@@ -9,6 +9,7 @@ import { Button, Input } from '../../shared/ui'
 import { sessionKey } from './session'
 import { authConfig } from './auth.config'
 import { GoogleButton } from './google-button'
+import { clearStaffDestination } from '../../shared/auth/staff-destination'
 
 export function GoogleAccount({ linked }: { linked: boolean }) {
   const { t: translate } = useTranslation()
@@ -27,6 +28,7 @@ export function GoogleAccount({ linked }: { linked: boolean }) {
     retry: false,
     onSuccess: () => {
       if (linked) {
+        clearStaffDestination()
         clearIdentity()
         announceSessionChange()
         navigate('/sign-in', { replace: true })
@@ -34,6 +36,7 @@ export function GoogleAccount({ linked }: { linked: boolean }) {
     },
     onError: (error) => {
       if (linked && (!(error instanceof ApiError) || error.status >= 500)) {
+        clearStaffDestination()
         clearIdentity()
         announceSessionChange()
         navigate('/sign-in', {

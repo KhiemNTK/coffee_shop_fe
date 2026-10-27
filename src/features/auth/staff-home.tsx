@@ -144,6 +144,15 @@ export default function StaffHome() {
     kitchen.data?.stations.reduce((sum, s) => sum + s.overdueTicketCount, 0) ?? 0
   const totalExceptions = exceptions.data?.total ?? 0
   const isShiftClosed = !shift.data && !shift.isPending && !shift.isError
+  const operationalQueries = [
+    { allowed: can('/cashier-shifts_current'), query: shift },
+    { allowed: can('/kitchen-tickets_read'), query: kitchen },
+    { allowed: can('/online-orders_read'), query: pending },
+    { allowed: can('/management-exceptions_read'), query: exceptions },
+  ].filter(({ allowed }) => allowed)
+  const operationalError = operationalQueries.some(({ query }) => query.isError)
+  const operationalReady = operationalQueries.length > 0
+    && operationalQueries.every(({ query }) => query.isSuccess && !query.isFetching)
 
   // Attention strip signals
   const hasUrgentIssues =
@@ -521,12 +530,17 @@ export default function StaffHome() {
               )}
 
               {/* Zero incidents empty state */}
-              {!overdueKitchenTickets && !totalExceptions && !isShiftClosed && (pending.data?.totalItems ?? 0) === 0 && (
+              {!operationalReady && (
+                <p role={operationalError ? 'alert' : 'status'} className={cn('p-4 text-sm', operationalError ? 'text-destructive' : 'text-muted-foreground')}>
+                  {translate(operationalError ? 'workdesk.unavailable' : operationalQueries.length ? 'workdesk.checking' : 'workdesk.noAccess')}
+                </p>
+              )}
+              {operationalReady && !overdueKitchenTickets && !totalExceptions && !isShiftClosed && (pending.data?.totalItems ?? 0) === 0 && (
                 <div className="text-center py-8 px-4 rounded-xl border border-dashed border-border/80">
                   <CheckCircle2 className="mx-auto h-8 w-8 text-emerald-600 mb-2" />
                   <p className="text-sm font-bold text-foreground">Mọi vận hành đang trơn tru</p>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    Không có phiếu trễ hoặc ngoại lệ nào cần xử lý lúc này.
+                    {translate('workdesk.noIssues')}
                   </p>
                 </div>
               )}
@@ -545,7 +559,11 @@ export default function StaffHome() {
             </div>
 
             {can('/kitchen-tickets_read') ? (
-              kitchen.data?.stations && kitchen.data.stations.length > 0 ? (
+              kitchen.isError ? (
+                <p role="alert" className="text-sm text-destructive">{errorMessage(kitchen.error)}</p>
+              ) : kitchen.isPending ? (
+                <p role="status" className="text-sm text-muted-foreground">{translate('common.loadingPlain')}</p>
+              ) : kitchen.data?.stations && kitchen.data.stations.length > 0 ? (
                 <ul className="divide-y divide-border/60 text-xs sm:text-sm">
                   {kitchen.data.stations.map((station) => (
                     <li key={station.stationId}>

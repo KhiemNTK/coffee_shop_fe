@@ -1,5 +1,6 @@
 import { QueryClient } from '@tanstack/react-query'
 import { resetSessionRequests, sessionEvents } from '../shared/api/client'
+import { clearStaffDestination, rememberStaffDestination } from '../shared/auth/staff-destination'
 
 export const queryClient = new QueryClient({
   defaultOptions: {
@@ -21,10 +22,33 @@ const channel =
 export function announceSessionChange() {
   channel?.postMessage('changed')
 }
-function endSession() {
+
+const customerChannel = typeof BroadcastChannel === 'undefined'
+  ? undefined
+  : new BroadcastChannel('coffee-shop-customer-session')
+export function announceCustomerSessionChange() {
+  customerChannel?.postMessage('changed')
+}
+async function refreshCustomerIdentity() {
+  await queryClient.cancelQueries({ queryKey: ['customer'] })
+  queryClient.removeQueries({
+    queryKey: ['customer'],
+    predicate: query => query.queryKey[1] !== 'me',
+  })
+  queryClient.setQueryData(['customer', 'me'], null)
+  await queryClient.invalidateQueries({ queryKey: ['customer', 'me'] })
+}
+if (customerChannel) customerChannel.onmessage = event => {
+  if (event.data === 'changed') void refreshCustomerIdentity()
+}
+function endSession(event: Event) {
   clearIdentity()
-  if (window.location.pathname.startsWith('/staff'))
+  if (/^\/staff(?:\/|$)/.test(window.location.pathname)) {
+    if (event.type === 'expired')
+      rememberStaffDestination(window.location.pathname + window.location.search + window.location.hash)
+    else clearStaffDestination()
     window.location.replace('/sign-in')
+  }
 }
 sessionEvents.addEventListener('expired', endSession)
 function reloadPermissions() {
@@ -37,4 +61,5 @@ if (import.meta.hot)
     sessionEvents.removeEventListener('expired', endSession)
     sessionEvents.removeEventListener('forbidden', reloadPermissions)
     channel?.close()
+    customerChannel?.close()
   })
