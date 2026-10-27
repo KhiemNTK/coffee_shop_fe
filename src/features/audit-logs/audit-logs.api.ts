@@ -27,6 +27,8 @@ export interface GetAuditLogsQuery {
   itemPerPage?: number
   employeeId?: string
   actionType?: string
+  actionPrefix?: string
+  keyword?: string
   requestId?: string
   from?: string
   to?: string
@@ -42,6 +44,8 @@ export const auditLogsApi = {
     if (query?.itemPerPage) params.set('itemPerPage', String(query.itemPerPage))
     if (query?.employeeId) params.set('employeeId', query.employeeId)
     if (query?.actionType) params.set('actionType', query.actionType)
+    if (query?.actionPrefix) params.set('actionPrefix', query.actionPrefix)
+    if (query?.keyword) params.set('keyword', query.keyword)
     if (query?.requestId) params.set('requestId', query.requestId)
     if (query?.from) params.set('from', query.from)
     if (query?.to) params.set('to', query.to)

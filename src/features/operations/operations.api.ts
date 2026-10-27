@@ -10,6 +10,7 @@ export const ManagementExceptionKindSchema = z.enum([
   'KITCHEN_OVERDUE',
   'ONLINE_PICKUP_LATE',
   'OUTBOX_DEAD_LETTER',
+  'PRINT_REVIEW',
 ])
 export type ManagementExceptionKind = z.infer<
   typeof ManagementExceptionKindSchema
@@ -25,6 +26,7 @@ export const ManagementExceptionsSummarySchema = z.object({
     KITCHEN_OVERDUE: z.number().int().nonnegative(),
     ONLINE_PICKUP_LATE: z.number().int().nonnegative(),
     OUTBOX_DEAD_LETTER: z.number().int().nonnegative(),
+    PRINT_REVIEW: z.number().int().nonnegative(),
   }),
   total: z.number().int().nonnegative(),
 })
@@ -65,6 +67,11 @@ export const ManagementExceptionItemSchema = z.object({
   attempts: z.number().int().nonnegative().optional(),
   occurredAt: z.string().datetime().optional(),
   availableAt: z.string().datetime().optional(),
+  lastErrorCode: z.string().nullable().optional(),
+  lastFailedAt: z.string().datetime().nullable().optional(),
+  requestId: z.string().nullable().optional(),
+  updatedAt: z.string().datetime().optional(),
+  device: z.object({ name: z.string() }).nullable().optional(),
 })
 export type ManagementExceptionItem = z.infer<
   typeof ManagementExceptionItemSchema

@@ -2,9 +2,9 @@ import { useQuery } from '@tanstack/react-query'
 import { useOutletContext } from 'react-router-dom'
 import { Activity, ChefHat, Clock, CreditCard, RefreshCw } from 'lucide-react'
 import type { Session } from '../auth/session'
-import { errorMessage } from '@/shared/api/client'
+import { useRetryAfter } from '@/shared/api/use-retry-after'
 import { formatStoreDateTime } from '@/shared/lib/store-time'
-import { Button, OperationsHeader, OperationsSummary } from '@/shared/ui'
+import { ApiErrorAlert, Button, OperationsHeader, OperationsSummary } from '@/shared/ui'
 import { operationsApi } from './operations.api'
 import { ManagementExceptionsTab } from './exception-queue'
 
@@ -13,8 +13,11 @@ export default function OperationsPage() {
   const summary = useQuery({
     queryKey: ['management-exceptions-summary', employee.id],
     queryFn: ({ signal }) => operationsApi.getManagementExceptionsSummary(signal),
-    refetchInterval: 30_000,
+    refetchInterval: query => query.state.error ? false : 30_000,
+    refetchOnWindowFocus: query => !query.state.error,
+    refetchOnReconnect: query => !query.state.error,
   })
+  const retryWait = useRetryAfter(summary.error)
   return (
     <div className="admin-page space-y-5">
       <OperationsHeader
@@ -31,7 +34,7 @@ export default function OperationsPage() {
             aria-label="Làm mới tổng quan"
             title="Làm mới tổng quan"
             className="h-10 w-10"
-            disabled={summary.isFetching}
+            disabled={summary.isFetching || retryWait > 0}
             onClick={() => void summary.refetch()}
           >
             <RefreshCw className="h-4 w-4" aria-hidden="true" />
@@ -39,7 +42,7 @@ export default function OperationsPage() {
         }
       />
       {summary.isPending && <p role="status">Đang tải tổng quan vận hành...</p>}
-      {summary.isError && <p role="alert">{errorMessage(summary.error)}</p>}
+      {summary.isError && <ApiErrorAlert error={summary.error} />}
       <OperationsSummary
         label="Tổng quan ngoại lệ"
         variant="cards"

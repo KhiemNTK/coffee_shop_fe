@@ -14,7 +14,7 @@ import {
 import type { Session } from '../auth/session'
 import { closeIncident, resolveFeedback } from '../reconciliation/reconciliation.api'
 import { reconcilePaymentAttempt } from '../invoices/invoices.api'
-import { ApiError, errorMessage } from '@/shared/api/client'
+import { ApiError } from '@/shared/api/client'
 import { useRetryAfter } from '@/shared/api/use-retry-after'
 import { formatVnd } from '@/shared/lib/format'
 import { formatStoreDateTime } from '@/shared/lib/store-time'
@@ -40,6 +40,7 @@ const exceptionKinds: { id: ManagementExceptionKind; label: string }[] = [
   { id: 'KITCHEN_OVERDUE', label: 'Phiếu bếp trễ' },
   { id: 'ONLINE_PICKUP_LATE', label: 'Đơn quá giờ hẹn' },
   { id: 'OUTBOX_DEAD_LETTER', label: 'Event lỗi' },
+  { id: 'PRINT_REVIEW', label: 'Phiếu in cần kiểm tra' },
 ]
 
 function itemTitle(item: ManagementExceptionItem) {
@@ -48,6 +49,7 @@ function itemTitle(item: ManagementExceptionItem) {
     item.eventName ||
     item.description ||
     item.comment ||
+    item.device?.name ||
     (item.station
       ? item.station.code + '-' + item.sequence + ' · ' + item.station.name
       : 'Phiếu ' + item.id)
@@ -55,6 +57,7 @@ function itemTitle(item: ManagementExceptionItem) {
 }
 
 export function ManagementExceptionsTab({ summary }: { summary?: ManagementExceptionsSummary }) {
+  const { t } = useTranslation()
   const { employee, access } = useOutletContext<Session>()
   const can = access.has
   const client = useQueryClient()
@@ -74,8 +77,9 @@ export function ManagementExceptionsTab({ summary }: { summary?: ManagementExcep
     queryKey: ['management-exceptions-list', employee.id, kind, page],
     queryFn: ({ signal }) =>
       operationsApi.getManagementExceptions({ kind, page, itemPerPage: 20 }, signal),
-    refetchInterval: selectedId && kind === 'OUTBOX_DEAD_LETTER' ? false : 30_000,
-    refetchOnWindowFocus: !selectedId || kind !== 'OUTBOX_DEAD_LETTER',
+    refetchInterval: query => query.state.error || (selectedId && kind === 'OUTBOX_DEAD_LETTER') ? false : 30_000,
+    refetchOnWindowFocus: query => !query.state.error && (!selectedId || kind !== 'OUTBOX_DEAD_LETTER'),
+    refetchOnReconnect: query => !query.state.error,
   })
   const selected = query.data?.list.find((item) => item.id === selectedId)
   function update(changes: Record<string, string | null>, replace = false) {
@@ -118,7 +122,8 @@ export function ManagementExceptionsTab({ summary }: { summary?: ManagementExcep
         if (
           kind !== 'PAYMENT' ||
           !can('/payment-reconciliation_manage') ||
-          !selected.paymentAttemptId
+          !selected.paymentAttemptId ||
+          selected.paymentRefundId
         )
           throw new Error('Không thể đối soát ngoại lệ này.')
         return reconcilePaymentAttempt(selected.paymentAttemptId)
@@ -199,7 +204,7 @@ export function ManagementExceptionsTab({ summary }: { summary?: ManagementExcep
               size="icon"
               aria-label="Làm mới danh sách"
               title="Làm mới danh sách"
-              disabled={query.isFetching || action.isPending}
+              disabled={query.isFetching || action.isPending || retryWait > 0}
               onClick={() => {
                 action.reset()
                 void query.refetch()
@@ -209,9 +214,9 @@ export function ManagementExceptionsTab({ summary }: { summary?: ManagementExcep
             </Button>
           </div>
           {query.isError ? (
-            <div role="alert" className="space-y-2 border-l-4 border-destructive p-4">
-              <p>{errorMessage(query.error)}</p>
-              <Button variant="outline" onClick={() => void query.refetch()}>
+            <div className="space-y-2">
+              <ApiErrorAlert error={query.error} />
+              <Button variant="outline" disabled={query.isFetching || retryWait > 0} onClick={() => void query.refetch()}>
                 <RefreshCw className="h-4 w-4" aria-hidden="true" />
                 Thử lại
               </Button>
@@ -240,6 +245,7 @@ export function ManagementExceptionsTab({ summary }: { summary?: ManagementExcep
               <tbody>
                 {query.data.list.map((item) => {
                   const date =
+                    item.updatedAt ||
                     item.occurredAt ||
                     item.dueAt ||
                     item.pickupAt ||
@@ -271,7 +277,9 @@ export function ManagementExceptionsTab({ summary }: { summary?: ManagementExcep
                         >
                           {item.status === 'PENDING'
                             ? 'Chờ xử lý'
-                            : item.status || (item.rating ? item.rating + ' sao' : '—')}
+                            : item.status === 'REQUIRES_REVIEW'
+                              ? t('printing.review')
+                              : item.status || (item.rating ? item.rating + ' sao' : '—')}
                         </Badge>
                       </td>
                       <td className="max-w-56 text-xs text-muted-foreground">
@@ -371,6 +379,12 @@ export function ManagementExceptionsTab({ summary }: { summary?: ManagementExcep
                       <dd className="break-all">{selected.paymentAttemptId}</dd>
                     </>
                   )}
+                  {selected.paymentRefundId && (
+                    <>
+                      <dt>{t('operations.refundId')}</dt>
+                      <dd className="select-all break-all font-mono">{selected.paymentRefundId}</dd>
+                    </>
+                  )}
                   {selected.invoiceId && (
                     <>
                       <dt>Hóa đơn</dt>
@@ -389,9 +403,28 @@ export function ManagementExceptionsTab({ summary }: { summary?: ManagementExcep
                       <dd>
                         {selected.occurredAt ? formatStoreDateTime(selected.occurredAt) : '—'}
                       </dd>
+                      <dt>{t('outbox.failureCode')}</dt>
+                      <dd className="break-words">
+                        <code>{selected.lastErrorCode ?? 'UNKNOWN'}</code>
+                        <p>{t(`outbox.failure.${selected.lastErrorCode ?? 'UNKNOWN'}`, { defaultValue: t('outbox.failure.UNKNOWN') })}</p>
+                      </dd>
+                      <dt>{t('outbox.failedAt')}</dt>
+                      <dd>{selected.lastFailedAt ? formatStoreDateTime(selected.lastFailedAt) : '—'}</dd>
+                      <dt>{t('outbox.requestId')}</dt>
+                      <dd className="select-all break-all font-mono">{selected.requestId ?? '—'}</dd>
+                    </>
+                  )}
+                  {kind === 'PRINT_REVIEW' && (
+                    <>
+                      <dt>{t('operations.printDevice')}</dt>
+                      <dd className="break-words">{selected.device?.name ?? '—'}</dd>
                     </>
                   )}
                 </dl>
+                {kind === 'PRINT_REVIEW' && <p className="text-sm">{t('operations.printReviewHint')}</p>}
+                {kind === 'PAYMENT' && selected.paymentRefundId && (
+                  <p role="status" className="border-l-2 border-warning p-3 text-sm">{t('operations.refundManualHint')}</p>
+                )}
                 {(action.isError || query.isError) && (
                   <div className="space-y-2">
                     <ApiErrorAlert error={action.error ?? query.error} />
@@ -436,6 +469,7 @@ export function ManagementExceptionsTab({ summary }: { summary?: ManagementExcep
                   )}
                 {kind === 'PAYMENT' &&
                   selected.paymentAttemptId &&
+                  !selected.paymentRefundId &&
                   can('/payment-reconciliation_manage') && (
                     <Button
                       variant="outline"
@@ -501,6 +535,11 @@ export function ManagementExceptionsTab({ summary }: { summary?: ManagementExcep
                     to={'/staff/pos/sessions/' + selected.orderSessionId}
                   >
                     Mở đơn hàng
+                  </Link>
+                )}
+                {kind === 'PRINT_REVIEW' && can('/print-jobs_read') && (
+                  <Link className="block underline" to={'/staff/printing?tab=JOBS&job=' + encodeURIComponent(selected.id)}>
+                    {t('operations.openPrintJob')}
                   </Link>
                 )}
               </div>

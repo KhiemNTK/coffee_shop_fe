@@ -1,10 +1,11 @@
-import { useState, useMemo } from 'react'
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useOutletContext } from 'react-router-dom'
 import type { Session } from '../auth/session'
 import { Pagination } from '@/shared/ui/pagination'
 import { fromStoreLocal, toStoreLocal } from '@/shared/lib/store-time'
 import { useDebouncedSearch } from '@/shared/lib/use-debounced-search'
+import { errorMessage } from '@/shared/api/client'
 import { useQuery } from '@tanstack/react-query'
 import {
   ScrollText,
@@ -125,31 +126,23 @@ export function AuditLogsPage() {
   const [selectedLog, setSelectedLog] = useState<AuditLogItem | null>(null)
   const [copiedId, setCopiedId] = useState<string | null>(null)
 
-  // Map categoryPreset to actual actionType prefix or exact filter
-  const actionTypeQuery = useMemo(() => {
-    if (search) {
-      return search
-    }
-    if (categoryPreset !== 'ALL') {
-      return categoryPreset
-    }
-    return undefined
-  }, [search, categoryPreset])
-
   // Main Query
   const {
     data: logsData,
     isLoading,
     isFetching,
+    isError,
+    error,
     refetch,
   } = useQuery({
-    queryKey: ['private', employee.id, 'audit-logs', currentPage, actionTypeQuery, dateBounds.fromDate, dateBounds.toDate],
+    queryKey: ['private', employee.id, 'audit-logs', currentPage, search, categoryPreset, dateBounds.fromDate, dateBounds.toDate],
     queryFn: ({ signal }) =>
       auditLogsApi.getAuditLogs(
         {
           page: currentPage,
           itemPerPage: 20,
-          actionType: actionTypeQuery,
+          keyword: search || undefined,
+          actionPrefix: categoryPreset === 'ALL' ? undefined : categoryPreset,
           from: dateBounds.fromDate,
           to: dateBounds.toDate,
         },
@@ -361,12 +354,16 @@ export function AuditLogsPage() {
       </Card>
 
       {/* Main Table Content */}
+      {isError && <div role="alert" className="flex flex-wrap items-center gap-3 border-l-4 border-destructive p-3 text-sm">
+        <p>{errorMessage(error)}</p>
+        <Button variant="outline" disabled={isFetching} onClick={() => void refetch()}><RefreshCw className="size-4" aria-hidden="true" />{t('common.retry')}</Button>
+      </div>}
       {isLoading ? (
         <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border py-16">
           <RefreshCw className="h-8 w-8 animate-spin text-muted-foreground" />
           <p className="mt-3 text-sm text-muted-foreground">Đang tải nhật ký kiểm toán...</p>
         </div>
-      ) : logs.length === 0 ? (
+      ) : logs.length === 0 && !isError ? (
         <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border py-16 text-center">
           <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted">
             <Filter className="h-6 w-6 text-muted-foreground" />
@@ -384,7 +381,7 @@ export function AuditLogsPage() {
             </Button>
           )}
         </div>
-      ) : (
+      ) : logs.length > 0 ? (
         <div className="space-y-4">
           <div className="overflow-x-auto rounded-xl border border-border bg-card shadow-xs">
             <table className="w-full text-left text-sm">
@@ -476,7 +473,7 @@ export function AuditLogsPage() {
             </div>
           )}
         </div>
-      )}
+      ) : null}
 
       {/* Action Log Detail Modal */}
       <Dialog open={!!selectedLog} onOpenChange={(open) => !open && setSelectedLog(null)}>
