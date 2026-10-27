@@ -1,4 +1,5 @@
-import { Edit2, Plus, RotateCcw, Search, Trash2 } from 'lucide-react'
+import { Edit2, Megaphone, Plus, RotateCcw, Search, Trash2 } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import type {
   DiscountType,
   Promotion,
@@ -35,6 +36,7 @@ interface Props {
   onEditClick: (promotion: Promotion) => void
   onDeleteClick: (promotion: Promotion) => void
   onRestoreClick: (promotion: Promotion) => void
+  onPublishClick: (promotion: Promotion) => void
 }
 const statusLabel = {
   ACTIVE: 'Đang áp dụng',
@@ -51,6 +53,7 @@ const statusFilterLabel: Record<PromotionStatus, string> = {
 const selectClass = 'h-10 w-full min-w-0 rounded-md border border-input bg-card px-3 text-sm'
 
 export function PromotionsListView(props: Props) {
+  const { t } = useTranslation()
   const { promotionsData: data, onPageChange } = props
   return (
     <div className="space-y-4">
@@ -210,6 +213,7 @@ export function PromotionsListView(props: Props) {
                 {promotion.discountType === 'PERCENTAGE' && promotion.maxDiscount != null && (
                   <p className="text-sm">Tối đa: {formatPrice(promotion.maxDiscount)}</p>
                 )}
+                {promotion.showOnStorefront && <p className="text-sm text-primary">{t('offer.published')}</p>}
                 <dl className="space-y-2 text-sm">
                   <div>
                     <dt className="text-muted-foreground">Bắt đầu (Việt Nam)</dt>
@@ -238,6 +242,10 @@ export function PromotionsListView(props: Props) {
                     )
                   ) : (
                     <>
+                      {props.canUpdate && <Button variant="outline" size="sm" title={t('offer.publicationTitle')}
+                        aria-label={`${t('offer.publicationTitle')}: ${promotion.name}`} onClick={() => props.onPublishClick(promotion)}>
+                        <Megaphone size={16} aria-hidden="true" />
+                      </Button>}
                       {props.canUpdate && (
                         <Button
                           variant="outline"

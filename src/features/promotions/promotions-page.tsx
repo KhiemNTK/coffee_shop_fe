@@ -14,6 +14,8 @@ import type { Session } from '../auth/session'
 import { Button } from '../../shared/ui'
 import { PromotionsListView } from './components/promotions-list-view'
 import { PromotionEditorModal, PromotionCommandModal } from './components/promotion-modals'
+import { PromotionPublicationModal } from './components/promotion-publication-modal'
+import { storefrontPromotionKey } from './storefront-promotion.api'
 
 export default function PromotionsPage() {
   const client = useQueryClient()
@@ -32,6 +34,7 @@ export default function PromotionsPage() {
   const [sortBy, setSortBy] = useState<'createdAt' | 'name' | 'endDate'>('createdAt')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
   const [createOpen, setCreateOpen] = useState(false)
+  const [publicationId, setPublicationId] = useState<string | null>(null)
   const [editTarget, setEditTarget] = useState<Promotion | null>(null)
   const [command, setCommand] = useState<{
     kind: 'delete' | 'restore'
@@ -74,6 +77,7 @@ export default function PromotionsPage() {
     staleTime: 15_000,
   })
   function invalidate() {
+    void client.invalidateQueries({ queryKey: storefrontPromotionKey })
     void client.invalidateQueries({ queryKey: promotionKeys.list(employeeId) })
     void client.invalidateQueries({ queryKey: promotionKeys.active(employeeId) })
     void client.invalidateQueries({ queryKey: ['private', employeeId, 'pos-quote'] })
@@ -139,6 +143,7 @@ export default function PromotionsPage() {
         canDelete={canDelete}
         onCreateClick={() => setCreateOpen(true)}
         onEditClick={setEditTarget}
+        onPublishClick={(promotion) => setPublicationId(promotion.id)}
         onDeleteClick={(promotion) => setCommand({ kind: 'delete', promotion })}
         onRestoreClick={(promotion) => setCommand({ kind: 'restore', promotion })}
       />
@@ -149,6 +154,9 @@ export default function PromotionsPage() {
           onSuccess={() => setCreateOpen(false)}
         />
       )}
+      {canUpdate && publicationId && <PromotionPublicationModal
+        employeeId={employeeId} promotionId={publicationId}
+        onClose={() => setPublicationId(null)} onSettled={invalidate} />}
       {canUpdate && editTarget && (
         <PromotionEditorModal
           key={editTarget.id}

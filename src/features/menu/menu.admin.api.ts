@@ -224,6 +224,7 @@ export const recipeIngredientDetailSchema = z.object({
 export const itemRecipeSchema = z.object({
   id: z.uuid(),
   name: z.string(),
+  revision: z.string().regex(/^[a-f0-9]{64}$/),
   ingredients: z.array(recipeIngredientDetailSchema),
 })
 
@@ -237,8 +238,9 @@ export function getItemRecipe(id: string, signal?: AbortSignal) {
 export function replaceItemRecipe(
   id: string,
   ingredients: RecipeIngredientInput[],
+  expectedRevision: string,
 ) {
-  return apiMutate(`/menu/items/${id}/recipe`, 'PUT', itemRecipeSchema, { ingredients })
+  return apiMutate(`/menu/items/${id}/recipe`, 'PUT', itemRecipeSchema, { ingredients, expectedRevision })
 }
 
 // --- Item Options ---
@@ -267,6 +269,7 @@ export const optionGroupSchema = z.object({
 export const itemOptionsSchema = z.object({
   id: z.uuid(),
   name: z.string(),
+  revision: z.string().regex(/^[a-f0-9]{64}$/),
   optionGroups: z.array(optionGroupSchema),
 })
 
@@ -289,8 +292,9 @@ export function replaceItemOptions(
       ingredients: RecipeIngredientInput[]
     }>
   }>,
+  expectedRevision: string,
 ) {
-  return apiMutate(`/menu/items/${id}/options`, 'PUT', itemOptionsSchema, { groups })
+  return apiMutate(`/menu/items/${id}/options`, 'PUT', itemOptionsSchema, { groups, expectedRevision })
 }
 
 // --- Kitchen Stations Helper ---

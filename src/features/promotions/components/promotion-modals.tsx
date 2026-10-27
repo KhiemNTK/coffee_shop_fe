@@ -26,7 +26,7 @@ type ModalProps = {
   onSettled: () => void
 }
 
-function PromotionDetail({
+export function PromotionDetail({
   promotionId,
   employeeId,
   onClose,

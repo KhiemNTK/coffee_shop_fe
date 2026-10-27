@@ -36,7 +36,7 @@ export function MenuCatalogSidebar({
   const { t: translate } = useTranslation()
 
   return (
-    <aside className="lg:col-span-3 xl:col-span-3 space-y-4">
+    <aside className="hidden lg:block lg:col-span-3 xl:col-span-3 space-y-4">
       <div className="rounded-[16px] border border-border/80 bg-card p-4 shadow-xs sticky top-20 space-y-5">
         {/* Category Filter list */}
         <div>

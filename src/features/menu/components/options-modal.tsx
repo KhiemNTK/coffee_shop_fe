@@ -29,8 +29,8 @@ function OptionsEditor({ initial, onReload, ...props }: OptionsModalProps & { in
   const [uncertain, setUncertain] = useState(false)
   const [validation, setValidation] = useState('')
   const errorRef = useRef<HTMLParagraphElement>(null)
-  const mutation = useMutation({ mutationFn: (payload: Parameters<typeof replaceItemOptions>[1]) => replaceItemOptions(props.item.id, payload), onSuccess: props.onSuccess,
-    onError: error => setUncertain(!(error instanceof ApiError) || error.status >= 500) })
+  const mutation = useMutation({ mutationFn: (payload: Parameters<typeof replaceItemOptions>[1]) => replaceItemOptions(props.item.id, payload, initial.revision), onSuccess: props.onSuccess,
+    onError: error => setUncertain(!(error instanceof ApiError) || error.status >= 500 || error.code === 'MENU_CONFIGURATION_CHANGED') })
   const editGroup = (index: number, change: Partial<GroupDraft>) => setGroups(groups.map((group, i) => i === index ? { ...group, ...change } : group))
   const editOption = (groupIndex: number, optionIndex: number, change: Partial<OptionDraft>) => editGroup(groupIndex, {
     options: groups[groupIndex]!.options.map((option, i) => i === optionIndex ? { ...option, ...change } : option),

@@ -31,6 +31,8 @@ export const promotionSchema = z.object({
   createdAt: dateTimeSchema,
   updatedAt: dateTimeSchema,
   deletedAt: dateTimeSchema.nullable(),
+  showOnStorefront: z.boolean().default(false),
+  storefrontDescription: z.string().nullable().default(null),
   estimatedDiscountAmount: promotionDecimalSchema.optional(),
 })
 export type Promotion = z.infer<typeof promotionSchema>
@@ -148,4 +150,11 @@ export async function deletePromotion(id: string): Promise<{ success: boolean; m
 
 export async function restorePromotion(id: string): Promise<PromotionRecord> {
   return apiMutate(`/promotions/${id}/restore`, 'POST', promotionRecordSchema, {})
+}
+
+export function updatePromotionStorefront(
+  id: string,
+  payload: { showOnStorefront: boolean; storefrontDescription: string | null; expectedUpdatedAt: string },
+) {
+  return apiMutate(`/promotions/${id}/storefront`, 'PUT', z.object({ success: z.literal(true) }), payload)
 }

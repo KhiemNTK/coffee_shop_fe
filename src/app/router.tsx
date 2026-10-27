@@ -21,6 +21,7 @@ const PickupPage = lazy(() => import('../features/online-orders/pickup-page'))
 const CartPage = lazy(() => import('../features/online-orders/cart-page'))
 const OnlineOrderRecoveryGate = lazy(() => import('../features/online-orders/online-order-recovery-gate'))
 const WishlistPage = lazy(() => import('../features/customers/wishlist-page'))
+const StoreInformationPage = lazy(() => import('../features/menu/store-information-page'))
 const CustomerSignInPage = lazy(() => import('../features/customers/customer-sign-in'))
 const CustomerAccountPage = lazy(() => import('../features/customers/customer-account-page'))
 const ReconciliationPage = lazy(() => import('../features/reconciliation/reconciliation-page'))
@@ -111,7 +112,9 @@ export function AppRouter() {
       >
         <Routes>
           <Route path="/" element={<MenuPage />} />
-          <Route path="/menu" element={<MenuPage />} />
+          <Route path="/menu" element={<MenuPage catalogOnly />} />
+          <Route path="/about" element={<StoreInformationPage section="about" />} />
+          <Route path="/contact" element={<StoreInformationPage section="contact" />} />
           <Route path="/wishlist" element={<WishlistPage />} />
           <Route path="/customer/sign-in" element={<CustomerSignInPage />} />
           <Route path="/account" element={<CustomerAccountPage />} />

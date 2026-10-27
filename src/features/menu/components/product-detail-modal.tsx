@@ -166,6 +166,13 @@ export function ProductDetailModal({
 
                       {/* Pill options (Size, Sugar, Ice, etc.) */}
                       <div className="flex flex-wrap gap-2">
+                        {group.minSelected === 0 && group.maxSelected === 1 && (
+                          <button type="button" aria-pressed={selectedIds.length === 0}
+                            onClick={() => setSelectedOptions(prev => new Map(prev).set(group.id, []))}
+                            className={cn('rounded-lg border px-3 py-1.5 text-xs font-semibold', selectedIds.length === 0 ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-card text-foreground')}>
+                            {t('common.noExtras')}
+                          </button>
+                        )}
                         {group.options.map((opt) => {
                           const isSelected = selectedIds.includes(opt.id)
 

@@ -33,11 +33,10 @@ export function SiteHeader({
   })
 
   const navLinks = [
-    { href: '/', label: translate('storefront.home'), isRoute: true },
-    { href: '/menu', label: translate('storefront.menu'), isRoute: true },
-    { href: '/#bestsellers', label: translate('storefront.offers'), isRoute: false },
-    { href: '/#about', label: translate('storefront.about'), isRoute: false },
-    { href: '/#contact', label: translate('storefront.contact'), isRoute: false },
+    { href: '/', label: translate('storefront.home') },
+    { href: '/menu', label: translate('storefront.menu') },
+    { href: '/about', label: translate('storefront.about') },
+    { href: '/contact', label: translate('storefront.contact') },
   ]
 
   return (
@@ -62,7 +61,7 @@ export function SiteHeader({
 
           <Link
             to="/"
-            className="min-w-0 flex items-center gap-2 text-sm sm:text-lg font-bold text-primary group"
+            className="min-w-0 flex items-center gap-2 text-sm sm:text-lg font-bold text-primary dark:text-emerald-300 group"
           >
             <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-xs group-hover:scale-105 transition-transform">
               <Coffee className="h-5 w-5" />
@@ -75,30 +74,21 @@ export function SiteHeader({
 
         {/* Desktop Nav Links */}
         <nav className="hidden xl:flex items-center gap-6" aria-label={translate('menu.mainNav')}>
-          {navLinks.map((link) =>
-            link.isRoute ? (
-              <Link
-                key={link.href}
-                to={link.href}
-                className={cn(
-                  'text-sm font-semibold transition-colors',
-                  location.pathname === link.href
-                    ? 'text-primary font-bold'
-                    : 'text-muted-foreground hover:text-foreground',
-                )}
-              >
-                {link.label}
-              </Link>
-            ) : (
-              <a
-                key={link.href}
-                href={link.href}
-                className="text-sm font-semibold text-muted-foreground hover:text-foreground transition-colors"
-              >
-                {link.label}
-              </a>
-            ),
-          )}
+          {navLinks.map((link) => (
+            <Link
+              key={link.href}
+              to={link.href}
+              aria-current={location.pathname === link.href ? 'page' : undefined}
+              className={cn(
+                'text-sm font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-primary',
+                location.pathname === link.href
+                  ? 'text-primary dark:text-emerald-300 font-bold'
+                  : 'text-muted-foreground hover:text-foreground',
+              )}
+            >
+              {link.label}
+            </Link>
+          ))}
         </nav>
 
         {/* Right Actions */}
@@ -161,7 +151,7 @@ export function SiteHeader({
             title={translate('storefront.cart')}
             aria-label={translate('storefront.cartLabel', { count: totalCount })}
           >
-            <ShoppingBag className="h-5 w-5 text-primary" />
+            <ShoppingBag className="h-5 w-5 text-primary dark:text-emerald-300" />
             <span
               className="absolute top-1 right-1 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-promo px-1 text-[10px] font-bold text-white shadow-xs"
               aria-hidden="true"
@@ -175,7 +165,7 @@ export function SiteHeader({
             state={signInState}
             aria-label={translate(customer.data ? 'customer.account' : 'wishlist.customerSignIn')}
             title={translate(customer.data ? 'customer.account' : 'wishlist.customerSignIn')}
-            className="ml-auto inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center gap-2 rounded-md px-2 text-primary hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary sm:ml-0"
+            className="ml-auto inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center gap-2 rounded-md px-2 text-primary dark:text-emerald-300 hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary sm:ml-0"
           >
             <UserRound className="h-5 w-5" aria-hidden="true" />
             <span className="text-sm font-semibold xl:hidden">
@@ -194,40 +184,30 @@ export function SiteHeader({
           id="mobile-navigation-menu"
           className="xl:hidden border-t border-border bg-card/98 px-4 py-4 backdrop-blur-lg shadow-lg animate-in slide-in-from-top-2 duration-200"
         >
-          <nav className="flex flex-col space-y-1">
-            {navLinks.map((link) =>
-              link.isRoute ? (
-                <Link
-                  key={`mobile-${link.href}`}
-                  to={link.href}
-                  onClick={() => setMobileMenuOpen(false)}
-                  className={cn(
-                    'flex items-center px-3 py-2.5 rounded-lg text-sm font-semibold transition-colors',
-                    location.pathname === link.href
-                      ? 'bg-primary/10 text-primary font-bold'
-                      : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground',
-                  )}
-                >
-                  {link.label}
-                </Link>
-              ) : (
-                <a
-                  key={`mobile-${link.href}`}
-                  href={link.href}
-                  onClick={() => setMobileMenuOpen(false)}
-                  className="flex items-center px-3 py-2.5 rounded-lg text-sm font-semibold text-muted-foreground hover:bg-muted/60 hover:text-foreground transition-colors"
-                >
-                  {link.label}
-                </a>
-              ),
-            )}
+          <nav className="flex flex-col space-y-1" aria-label={translate('menu.mainNav')}>
+            {navLinks.map((link) => (
+              <Link
+                key={`mobile-${link.href}`}
+                to={link.href}
+                aria-current={location.pathname === link.href ? 'page' : undefined}
+                onClick={() => setMobileMenuOpen(false)}
+                className={cn(
+                  'flex items-center px-3 py-2.5 rounded-lg text-sm font-semibold transition-colors',
+                  location.pathname === link.href
+                    ? 'bg-primary/10 text-primary dark:text-emerald-300 font-bold'
+                    : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground',
+                )}
+              >
+                {link.label}
+              </Link>
+            ))}
 
             <div className="pt-3 border-t border-border/80 mt-2 flex flex-col gap-2">
               <Link
                 to={customer.data ? '/account' : '/customer/sign-in'}
                 state={signInState}
                 onClick={() => setMobileMenuOpen(false)}
-                className="px-3 py-3 text-sm font-semibold text-primary"
+                className="px-3 py-3 text-sm font-semibold text-primary dark:text-emerald-300"
               >
                 {translate(customer.data ? 'customer.account' : 'wishlist.customerSignIn')}
               </Link>

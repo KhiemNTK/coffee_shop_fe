@@ -27,8 +27,8 @@ function RecipeEditor({ initial, onReload, ...props }: RecipeModalProps & { init
   const [uncertain, setUncertain] = useState(false)
   const [validation, setValidation] = useState('')
   const errorRef = useRef<HTMLParagraphElement>(null)
-  const mutation = useMutation({ mutationFn: (payload: RecipeIngredientInput[]) => replaceItemRecipe(props.item.id, payload), onSuccess: props.onSuccess,
-    onError: error => setUncertain(!(error instanceof ApiError) || error.status >= 500) })
+  const mutation = useMutation({ mutationFn: (payload: RecipeIngredientInput[]) => replaceItemRecipe(props.item.id, payload, initial.revision), onSuccess: props.onSuccess,
+    onError: error => setUncertain(!(error instanceof ApiError) || error.status >= 500 || error.code === 'MENU_CONFIGURATION_CHANGED') })
   return <Dialog open maxWidth="lg" onClose={() => { if (!mutation.isPending) props.onClose() }}>
     <form className="space-y-4" onSubmit={event => {
       event.preventDefault()

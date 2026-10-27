@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
@@ -22,6 +22,7 @@ import { BestsellersShelf } from './components/bestsellers-shelf'
 import { MenuCatalogSidebar } from './components/menu-catalog-sidebar'
 import { MenuCard } from './components/menu-card'
 import { StoreFooter } from './components/store-footer'
+import { StorefrontPromotion } from '../promotions/storefront-promotion'
 
 const initialFilters: MenuFilters = {
   keyword: '',
@@ -31,7 +32,7 @@ const initialFilters: MenuFilters = {
   sortOrder: 'asc',
 }
 
-export function MenuPage() {
+export function MenuPage({ catalogOnly = false }: { catalogOnly?: boolean }) {
   const { t: translate } = useTranslation()
   const navigate = useNavigate()
   const [copyrightYear] = useState(() => new Date().getFullYear())
@@ -59,10 +60,19 @@ export function MenuPage() {
   })
 
   const filtered = Boolean(filters.keyword || filters.categoryId)
+  const CatalogHeading = catalogOnly ? 'h1' : 'h2'
+  useEffect(() => {
+    if (catalogOnly) window.scrollTo(0, 0)
+  }, [catalogOnly])
 
   function resetFilters() {
     setDraft('')
     setFilters((current) => ({ ...current, keyword: '', categoryId: '', page: 1 }))
+  }
+
+  function selectCategory(categoryId: string) {
+    setDraft('')
+    setFilters((current) => ({ ...current, categoryId, keyword: '', page: 1 }))
   }
 
   function handleSelectItem(item: MenuItem) {
@@ -91,7 +101,7 @@ export function MenuPage() {
   }
 
   function handleSelectFeaturedCategory(categoryId: string) {
-    setFilters((prev) => ({ ...prev, categoryId, keyword: '', page: 1 }))
+    selectCategory(categoryId)
     document.getElementById('menu')?.scrollIntoView({ behavior: 'smooth' })
   }
 
@@ -114,19 +124,19 @@ export function MenuPage() {
       <SiteHeader onOpenCart={() => setIsCartOpen(true)} />
 
       {/* 2. Hero Section */}
-      <MenuHero />
+      {!catalogOnly && <MenuHero />}
 
       {/* 3. Benefit / Trust Strip */}
-      <TrustBadgesStrip />
+      {!catalogOnly && <TrustBadgesStrip />}
 
       {/* 4. Danh mục nổi bật */}
-      <FeaturedCategories
+      {!catalogOnly && <FeaturedCategories
         categories={categories.data}
         onSelectCategory={handleSelectFeaturedCategory}
-      />
+      />}
 
       {/* 5. Kệ món bán chạy nhất */}
-      {!filtered && filters.page === 1 && (menu.data?.totalItems ?? 0) > 5 && (
+      {!catalogOnly && !filtered && filters.page === 1 && (menu.data?.totalItems ?? 0) > 5 && (
         <BestsellersShelf items={featuredBestsellers} onSelect={handleSelectItem} />
       )}
 
@@ -146,9 +156,9 @@ export function MenuPage() {
           <div className="absolute inset-0 bg-gradient-to-r from-primary via-primary/90 to-primary/60" />
 
           <div className="relative z-10 max-w-xl">
-            <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
+            <CatalogHeading className="text-2xl sm:text-3xl font-extrabold">
               {translate('menu.heading')}
-            </h2>
+            </CatalogHeading>
             <p className="mt-1 text-xs sm:text-sm text-emerald-100/90 font-medium">
               {translate('menu.description')}
             </p>
@@ -174,7 +184,7 @@ export function MenuPage() {
                   maxLength={120}
                   value={draft}
                   onChange={(event) => setDraft(event.target.value)}
-                  className="pl-9 bg-white text-foreground rounded-[10px] h-10 border-0 shadow-xs"
+                  className="pl-9 bg-card text-card-foreground rounded-lg h-10 border-0 shadow-xs"
                 />
               </div>
               <Button
@@ -232,9 +242,7 @@ export function MenuPage() {
                 type="button"
                 role="tab"
                 aria-selected={isSelected}
-                onClick={() => {
-                  setFilters((prev) => ({ ...prev, categoryId: cat.id, keyword: '', page: 1 }))
-                }}
+                onClick={() => selectCategory(cat.id)}
                 className={cn(
                   'rounded-full px-4 py-2 text-xs font-bold whitespace-nowrap transition-all cursor-pointer',
                   isSelected
@@ -255,9 +263,7 @@ export function MenuPage() {
             categories={categories.data}
             activeCategoryId={filters.categoryId}
             totalItems={menu.data?.totalItems}
-            onSelectCategory={(categoryId) =>
-              setFilters((current) => ({ ...current, categoryId, page: 1 }))
-            }
+            onSelectCategory={selectCategory}
           />
 
           {/* Right Product Grid Area */}
@@ -282,7 +288,8 @@ export function MenuPage() {
                 </span>
               </div>
 
-              <div className="flex items-center gap-3">
+              <div className="flex flex-wrap items-center gap-3">
+                {!selectedProduct && !isCartOpen && menu.isSuccess && !menu.isError && <StorefrontPromotion />}
                 {filtered && (
                   <Button
                     type="button"
