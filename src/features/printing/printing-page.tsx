@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useIsFetching, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useOutletContext } from 'react-router-dom'
+import { useOutletContext, useSearchParams } from 'react-router-dom'
 import { Clock, Plus, Printer, Receipt, RefreshCw } from 'lucide-react'
 import { type Session } from '@/features/auth/session'
 import { errorMessage } from '@/shared/api/client'
@@ -45,7 +45,16 @@ export function PrintingPage() {
     },
   ].filter((tab) => tab.allowed)
 
-  const [selectedTab, setSelectedTab] = useState(tabs[0]?.id)
+  const [params, setParams] = useSearchParams()
+  const selectedTab = params.get('tab')
+  function setSelectedTab(id: string) {
+    setParams(previous => {
+      const next = new URLSearchParams(previous)
+      next.set('tab', id)
+      if (id !== 'JOBS') next.delete('job')
+      return next
+    })
+  }
   const activeTab =
     tabs.find((tab) => tab.id === selectedTab)?.id ?? tabs[0]?.id
   const [isCreateOpen, setIsCreateOpen] = useState(false)

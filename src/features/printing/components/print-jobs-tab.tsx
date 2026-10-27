@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useOutletContext } from 'react-router-dom'
+import { useOutletContext, useSearchParams } from 'react-router-dom'
+import { z } from 'zod'
 import type { Session } from '../../auth/session'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
@@ -10,6 +11,7 @@ import {
   Receipt,
   RefreshCw,
   RotateCcw,
+  ClipboardCheck,
 } from 'lucide-react'
 import { errorMessage } from '@/shared/api/client'
 import { formatDateTime } from '@/shared/lib/format'
@@ -21,6 +23,7 @@ import {
   type PrintJob,
   type PrintJobStatus,
   type PrintJobType,
+  type ResolvePrintJobDto,
 } from '../printing.api'
 import {
   Badge,
@@ -55,7 +58,17 @@ export function PrintJobsTab({ canManageJobs, devices }: PrintJobsTabProps) {
   const [jobPage, setJobPage] = useState(1)
 
   const [retryingJob, setRetryingJob] = useState<PrintJob | null>(null)
-  const [selectedJob, setSelectedJob] = useState<PrintJob | null>(null)
+  const [params, setParams] = useSearchParams()
+  const selectedJobId = z.uuid().safeParse(params.get('job')).data ?? null
+  function setSelectedJobId(id: string | null) {
+    setParams(previous => {
+      const next = new URLSearchParams(previous)
+      if (id) next.set('job', id)
+      else next.delete('job')
+      return next
+    })
+  }
+  const [resolutionReason, setResolutionReason] = useState('')
   const [retryTargetDeviceId, setRetryTargetDeviceId] = useState<string>('')
 
   const {
@@ -76,11 +89,27 @@ export function PrintJobsTab({ canManageJobs, devices }: PrintJobsTabProps) {
         },
         signal,
       ),
+    refetchInterval: (query) => !query.state.error && query.state.data?.list.some((job) => job.status === 'PENDING' || job.status === 'PROCESSING') ? 5000 : false,
   })
 
   const jobs = jobsData?.list ?? EMPTY_JOBS
   const totalJobs = jobsData?.totalItems ?? 0
   const totalJobPages = jobsData?.totalPages ?? 1
+
+  const detail = useQuery({
+    queryKey: [...printingKeys.jobs(employee.id), 'detail', selectedJobId],
+    queryFn: ({ signal }) => printingApi.getJob(selectedJobId!, signal),
+    enabled: selectedJobId !== null,
+    staleTime: 0,
+    refetchInterval: (query) =>
+      !query.state.error && (query.state.data?.status === 'PROCESSING' || query.state.data?.status === 'REQUIRES_REVIEW') ? 5000 : false,
+  })
+  const selectedJob = detail.data
+  const resolveJobMutation = useMutation({
+    mutationFn: ({ id, ...dto }: ResolvePrintJobDto & { id: string }) => printingApi.resolveJob(id, dto),
+    onSuccess: () => { setResolutionReason('') },
+    onSettled: () => { void queryClient.invalidateQueries({ queryKey: printingKeys.jobs(employee.id) }) },
+  })
 
   const retryJobMutation = useMutation({
     mutationFn: ({ id, deviceId }: { id: string; deviceId?: string }) =>
@@ -116,6 +145,7 @@ export function PrintJobsTab({ canManageJobs, devices }: PrintJobsTabProps) {
                 <option value="ALL">Tất cả trạng thái lệnh</option>
                 <option value="PENDING">Chờ xử lý (PENDING)</option>
                 <option value="PROCESSING">Đang in (PROCESSING)</option>
+                <option value="REQUIRES_REVIEW">{t('printing.review')}</option>
                 <option value="PRINTED">Đã in thành công (PRINTED)</option>
                 <option value="FAILED">Thất bại (FAILED)</option>
                 <option value="CANCELLED">Đã hủy (CANCELLED)</option>
@@ -268,7 +298,7 @@ export function PrintJobsTab({ canManageJobs, devices }: PrintJobsTabProps) {
                           variant={
                             job.status === 'PRINTED'
                               ? 'default'
-                              : job.status === 'FAILED'
+                              : job.status === 'FAILED' || job.status === 'REQUIRES_REVIEW'
                                 ? 'destructive'
                                 : job.status === 'PROCESSING'
                                   ? 'secondary'
@@ -288,6 +318,8 @@ export function PrintJobsTab({ canManageJobs, devices }: PrintJobsTabProps) {
                             ? 'Đã in'
                             : job.status === 'FAILED'
                               ? 'Thất bại'
+                              : job.status === 'REQUIRES_REVIEW'
+                                ? t('printing.review')
                               : job.status === 'PROCESSING'
                                 ? 'Đang in'
                                 : job.status === 'PENDING'
@@ -314,12 +346,12 @@ export function PrintJobsTab({ canManageJobs, devices }: PrintJobsTabProps) {
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => setSelectedJob(job)}
+                            onClick={() => { setSelectedJobId(job.id); setResolutionReason(''); resolveJobMutation.reset() }}
                             className="h-7 px-2 text-xs gap-1 text-muted-foreground hover:text-foreground"
                             title="Xem chi tiết lệnh in"
                           >
-                            <Eye className="h-3.5 w-3.5" />
-                            <span>Chi tiết</span>
+                            {job.status === 'REQUIRES_REVIEW' ? <ClipboardCheck className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                            <span>{job.status === 'REQUIRES_REVIEW' ? t('printing.resolve') : 'Chi tiết'}</span>
                           </Button>
                         </div>
                       </td>
@@ -430,10 +462,13 @@ export function PrintJobsTab({ canManageJobs, devices }: PrintJobsTabProps) {
 
       {/* JOB DETAIL MODAL */}
       <Dialog
-        open={!!selectedJob}
-        onOpenChange={(open) => !open && setSelectedJob(null)}
+        open={!!selectedJobId}
+        onOpenChange={(open) => !open && !resolveJobMutation.isPending && setSelectedJobId(null)}
+        showCloseButton={!resolveJobMutation.isPending}
       >
-        {selectedJob && (
+        {detail.isPending ? <p role="status">{t('common.loading')}</p> : detail.error ? (
+          <div><p role="alert">{errorMessage(detail.error)}</p><Button variant="outline" onClick={() => void detail.refetch()}>{t('printing.refresh')}</Button></div>
+        ) : selectedJob && (
           <div className="max-w-lg">
             <DialogHeader>
               <div className="flex items-center justify-between pr-4">
@@ -446,7 +481,7 @@ export function PrintJobsTab({ canManageJobs, devices }: PrintJobsTabProps) {
                   }
                   className="text-xs font-mono"
                 >
-                  {selectedJob.status}
+                  {selectedJob.status === 'REQUIRES_REVIEW' ? t('printing.review') : selectedJob.status}
                 </Badge>
               </div>
               <DialogDescription className="text-xs text-muted-foreground">
@@ -529,12 +564,38 @@ export function PrintJobsTab({ canManageJobs, devices }: PrintJobsTabProps) {
                   </span>
                 </div>
               )}
+              {selectedJob.status === 'REQUIRES_REVIEW' && (
+                <div className="space-y-3 border-t border-border pt-3">
+                  <p role="status">{t('printing.reviewWarning')}</p>
+                  {canManageJobs && (
+                    <>
+                      <label className="block space-y-1">
+                        <span>{t('printing.reason')}</span>
+                        <textarea className="w-full rounded-md border border-border bg-background p-2 text-sm" value={resolutionReason} onChange={(event) => setResolutionReason(event.target.value)} minLength={3} maxLength={500} disabled={resolveJobMutation.isPending} />
+                      </label>
+                      <div className="flex flex-wrap gap-2">
+                        {(['PRINTED', 'NOT_PRINTED'] as const).map((outcome) => (
+                          <Button key={outcome} variant="outline" disabled={resolveJobMutation.isPending || detail.isFetching || resolutionReason.trim().length < 3} onClick={() => resolveJobMutation.mutate({ id: selectedJob.id, outcome, reason: resolutionReason.trim(), expectedUpdatedAt: selectedJob.updatedAt })}>
+                            <ClipboardCheck className="size-4" aria-hidden="true" />
+                            {t(outcome === 'PRINTED' ? 'printing.printed' : 'printing.notPrinted')}
+                          </Button>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+              {resolveJobMutation.error && <p role="alert" className="text-destructive">{errorMessage(resolveJobMutation.error)}</p>}
             </div>
 
             <DialogFooter className="mt-5">
+              <Button variant="outline" disabled={detail.isFetching || resolveJobMutation.isPending} onClick={() => void detail.refetch()}>
+                <RefreshCw className="size-4" aria-hidden="true" />{t('printing.refresh')}
+              </Button>
               <Button
                 variant="outline"
-                onClick={() => setSelectedJob(null)}
+                onClick={() => setSelectedJobId(null)}
+                disabled={resolveJobMutation.isPending}
                 className="h-9"
               >
                 Đóng

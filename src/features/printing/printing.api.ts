@@ -20,6 +20,7 @@ export type PrintJobType = z.infer<typeof PrintJobTypeSchema>
 export const PrintJobStatusSchema = z.enum([
   'PENDING',
   'PROCESSING',
+  'REQUIRES_REVIEW',
   'PRINTED',
   'FAILED',
   'CANCELLED',
@@ -141,6 +142,12 @@ export interface RetryPrintJobDto {
   deviceId?: string | null
 }
 
+export interface ResolvePrintJobDto {
+  outcome: 'PRINTED' | 'NOT_PRINTED'
+  reason: string
+  expectedUpdatedAt: string
+}
+
 export interface ReprintReceiptDto {
   reason: string
   copies?: number
@@ -242,6 +249,9 @@ export const printingApi = {
 
   retryJob: (id: string, dto: RetryPrintJobDto): Promise<PrintJob> =>
     apiMutate(`/printing/jobs/${id}/retry`, 'POST', PrintJobSchema, dto),
+
+  resolveJob: (id: string, dto: ResolvePrintJobDto): Promise<PrintJob> =>
+    apiMutate(`/printing/jobs/${id}/resolve`, 'POST', PrintJobSchema, dto),
 
   reprintReceipt: (
     invoiceId: string,

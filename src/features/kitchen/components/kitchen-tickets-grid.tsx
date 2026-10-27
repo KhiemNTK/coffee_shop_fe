@@ -40,7 +40,7 @@ export function KitchenTicketsGrid({
     )
   }
 
-  if (isError) {
+  if (isError && tickets.length === 0) {
     return (
       <div className="space-y-3 py-6 text-center">
         <p className="font-semibold text-destructive" role="alert">
@@ -74,7 +74,7 @@ export function KitchenTicketsGrid({
       label: translate('ops.kitchen.cooking'),
       icon: Flame,
       tickets: tickets.filter((ticket) => !ticket.isScheduled && ticket.state === 'IN_PROGRESS'),
-      color: 'bg-sky-50/70',
+      color: 'bg-sky-50/70 dark:bg-sky-950/30',
     },
     {
       key: 'ready',
@@ -86,7 +86,7 @@ export function KitchenTicketsGrid({
           ticket.state === 'COMPLETED' &&
           ticket.items.some((item) => item.serveStatus === 'READY'),
       ),
-      color: 'bg-emerald-50/60',
+      color: 'bg-emerald-50/60 dark:bg-emerald-950/30',
     },
   ]
   const finished = tickets.filter(
@@ -104,11 +104,18 @@ export function KitchenTicketsGrid({
       nowMs={nowMs}
       dueSoonWindowSeconds={dueSoonWindowSeconds}
       onAdvanceItemStatus={onAdvanceItemStatus}
-      isUpdatingStatus={isUpdatingStatus}
+      isUpdatingStatus={isUpdatingStatus || isError}
     />
   )
   return (
     <div className="operations-board space-y-5">
+      {isError && (
+        <div role="alert" className="space-y-2 border-l-4 border-amber-600 bg-amber-50 p-3 text-sm text-amber-950 dark:bg-amber-950/40 dark:text-amber-100">
+          <p>{translate('ops.kitchen.staleTickets')}</p>
+          {error != null && <p>{errorMessage(error)}</p>}
+          <Button variant="outline" onClick={onRetry}>{translate('common.retry')}</Button>
+        </div>
+      )}
       {scheduled.length > 0 && (
         <section
           aria-label={translate('ops.kitchen.scheduled')}

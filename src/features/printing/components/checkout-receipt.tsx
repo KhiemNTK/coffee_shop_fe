@@ -61,7 +61,7 @@ export function CheckoutReceipt({ invoiceId }: { invoiceId: string }) {
     }
   })
   const job = canRead ? jobs.data?.list[0] : reprint.data
-  const inProgress = job?.status === 'PENDING' || job?.status === 'PROCESSING'
+  const inProgress = job?.status === 'PENDING' || job?.status === 'PROCESSING' || job?.status === 'REQUIRES_REVIEW'
 
   if (!canRead && !canReprint) return null
 

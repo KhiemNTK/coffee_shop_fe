@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useOutletContext, useSearchParams } from 'react-router-dom'
 import { z } from 'zod'
 import { AlertCircle, Radio, RefreshCw, Settings2, Volume2, VolumeX } from 'lucide-react'
-import { errorMessage } from '../../shared/api/client'
+import { ApiError, errorMessage } from '../../shared/api/client'
 import { type Session } from '../auth/session'
 import {
   getKitchenStations,
@@ -15,7 +15,7 @@ import {
   type KitchenTicketItem,
 } from './kitchen.api'
 import { useKitchenSse } from './use-kitchen-sse'
-import { enableNotificationSound } from '../../shared/lib/sound'
+import { enableNotificationSound, playNotificationChime } from '../../shared/lib/sound'
 import { Button } from '../../shared/ui/button'
 import { Badge } from '../../shared/ui/badge'
 import { KitchenWorkloadKpis } from './components/kitchen-workload-kpis'
@@ -68,13 +68,9 @@ export default function KitchenPage() {
     return () => window.clearInterval(timer)
   }, [])
 
-  const [soundEnabled, setSoundEnabled] = useState(() => {
-    try {
-      return localStorage.getItem('coffee_kds_sound') !== 'false'
-    } catch {
-      return false
-    }
-  })
+  const [soundEnabled, setSoundEnabled] = useState(false)
+  const [soundPending, setSoundPending] = useState(false)
+  const [soundFailed, setSoundFailed] = useState(false)
 
   // Real-time SSE connection
   const { status: sseStatus } = useKitchenSse(employee.id, canReadTickets && !management, {
@@ -112,6 +108,8 @@ export default function KitchenPage() {
   const lastRefreshedAt = ticketsQuery.dataUpdatedAt
     ? new Date(ticketsQuery.dataUpdatedAt).toLocaleTimeString(i18n.resolvedLanguage)
     : null
+  const ticketAccessDenied = ticketsQuery.error instanceof ApiError &&
+    (ticketsQuery.error.status === 401 || ticketsQuery.error.status === 403)
 
   const statusMutation = useMutation({
     retry: false,
@@ -148,7 +146,7 @@ export default function KitchenPage() {
   })
 
   function advanceItemStatus(item: KitchenTicketItem) {
-    if (flight.current || reviewRequired || ticketsQuery.isFetching || !ticketsQuery.isSuccess)
+    if (flight.current || reviewRequired || ticketsQuery.isFetching || ticketsQuery.isPaused || !ticketsQuery.isSuccess)
       return
     if (
       ticketsQuery.data?.list.some(
@@ -209,17 +207,21 @@ export default function KitchenPage() {
               size="icon"
               className="h-11 w-11"
               aria-pressed={soundEnabled}
+              disabled={soundPending}
               title={translate(soundEnabled ? 'ops.kitchen.soundOff' : 'ops.kitchen.soundOn')}
               aria-label={translate(soundEnabled ? 'ops.kitchen.soundOff' : 'ops.kitchen.soundOn')}
-              onClick={() => {
-                const next = !soundEnabled
-                if (next) void enableNotificationSound()
-                setSoundEnabled(next)
-                try {
-                  localStorage.setItem('coffee_kds_sound', String(next))
-                } catch {
-                  /* Sound still works in this tab. */
+              onClick={async () => {
+                if (soundPending) return
+                if (soundEnabled) {
+                  setSoundEnabled(false)
+                  setSoundFailed(false)
+                  return
                 }
+                setSoundPending(true)
+                const enabled = (await enableNotificationSound()) && playNotificationChime()
+                setSoundEnabled(enabled)
+                setSoundFailed(!enabled)
+                setSoundPending(false)
               }}
             >
               {soundEnabled ? (
@@ -254,6 +256,8 @@ export default function KitchenPage() {
           </>
         }
       />
+
+      {soundFailed && <p role="status" className="text-sm text-destructive">{translate('payment.soundUnavailable')}</p>}
 
       {actionError && (
         <div
@@ -330,9 +334,9 @@ export default function KitchenPage() {
           {/* Lưới hiển thị các thẻ vé bếp (Kitchen Tickets) */}
           {canReadTickets && (
             <KitchenTicketsGrid
-              tickets={ticketsQuery.data?.list || []}
+              tickets={ticketAccessDenied ? [] : ticketsQuery.data?.list || []}
               isLoading={ticketsQuery.isPending}
-              isError={ticketsQuery.isError}
+              isError={ticketsQuery.isError || ticketsQuery.isPaused}
               error={ticketsQuery.error}
               onRetry={() => void ticketsQuery.refetch()}
               nowMs={nowMs}
@@ -344,6 +348,8 @@ export default function KitchenPage() {
                 !canUpdateStatus ||
                 statusMutation.isPending ||
                 reviewRequired ||
+                ticketsQuery.isError ||
+                ticketsQuery.isPaused ||
                 ticketsQuery.isFetching
               }
             />
