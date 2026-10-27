@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useDebouncedSearch } from '../../../shared/lib/use-debounced-search'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -334,6 +334,7 @@ function ReceiptForm({ initial, editable, onClose, onSaved }: {
 function StocktakeForm({ initial, editable, onClose, onSaved }: {
   initial?: StocktakeDetail; editable: boolean; onClose: () => void; onSaved: () => void
 }) {
+  const { t } = useTranslation()
   const { employee, access } = useOutletContext<Session>()
   const [keyword, setKeyword] = useState('')
   const search = useDebouncedSearch(keyword)
@@ -341,7 +342,18 @@ function StocktakeForm({ initial, editable, onClose, onSaved }: {
   const [snapshot, setSnapshot] = useState(initial)
   const [counts, setCounts] = useState(() => Object.fromEntries(initial?.items.map(item => [item.inventoryItemId, item.countedQuantity ?? '']) ?? []))
   const [uncertain, setUncertain] = useState(false)
+  const [note, setNote] = useState('')
+  const [discardOpen, setDiscardOpen] = useState(false)
   const readOnly = !editable || Boolean(initial && initial.status !== 'DRAFT')
+  const dirty = !readOnly && (snapshot
+    ? snapshot.items.some(item => (counts[item.inventoryItemId] ?? '').trim() !== (item.countedQuantity ?? ''))
+    : selected.length > 0 || note.trim().length > 0)
+  useEffect(() => {
+    if (!dirty) return
+    const warnBeforeLeaving = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = '' }
+    window.addEventListener('beforeunload', warnBeforeLeaving)
+    return () => window.removeEventListener('beforeunload', warnBeforeLeaving)
+  }, [dirty])
   const inventory = useQuery({ queryKey: ['private', employee.id, 'stocktake-item-options', search], queryFn: ({ signal }) => getInventoryItems({ keyword: search, itemPerPage: 100 }, signal), enabled: !initial && !readOnly && access.has('/inventory_read') && search === keyword.trim() })
   const mutation = useMutation({
     mutationFn: (payload: { inventoryItemIds: string[]; note?: string } | StocktakeCountInput[]) =>
@@ -354,7 +366,11 @@ function StocktakeForm({ initial, editable, onClose, onSaved }: {
     mutation.reset(); setUncertain(false)
   } })
   const locked = mutation.isPending || reload.isPending || uncertain
-  return <Dialog open onClose={() => { if (!mutation.isPending && !reload.isPending && (!uncertain || initial)) onClose() }} maxWidth="lg">
+  return <><Dialog open onClose={() => {
+    if (mutation.isPending || reload.isPending || (uncertain && !initial)) return
+    if (dirty) setDiscardOpen(true)
+    else onClose()
+  }} maxWidth="lg">
     <form className="space-y-4" onSubmit={(event) => {
       event.preventDefault()
       if (mutation.isPending || readOnly || snapshot?.status === 'POSTED' || snapshot?.status === 'CANCELLED') return
@@ -386,7 +402,7 @@ function StocktakeForm({ initial, editable, onClose, onSaved }: {
               {item.name} · {formatQuantity(item.stock)} {item.unit?.name}
             </label>)}
           </div>
-          <label className="block text-sm">Ghi chú<Input name="note" maxLength={500} /></label>
+          <label className="block text-sm">Ghi chú<Input name="note" maxLength={500} value={note} onChange={event => setNote(event.target.value)} /></label>
         </>}
       </fieldset>
       {(mutation.error || reload.error || inventory.error) && <p role="alert" className="text-sm text-destructive">{errorMessage(reload.error || mutation.error || inventory.error)}</p>}
@@ -395,6 +411,15 @@ function StocktakeForm({ initial, editable, onClose, onSaved }: {
         : !readOnly && (!snapshot || snapshot.status === 'DRAFT') && <Button type="submit" isLoading={mutation.isPending} disabled={!initial && !selected.length}>{uncertain ? 'Thử lại phiếu đã gửi' : initial ? 'Lưu số đếm' : 'Tạo phiếu kiểm kê'}</Button>}
     </form>
   </Dialog>
+    {discardOpen && <Dialog open onClose={() => setDiscardOpen(false)} maxWidth="sm">
+      <h2 className="pr-8 text-lg font-semibold">{t('inventory.discardTitle')}</h2>
+      <p className="mt-3 text-sm text-muted-foreground">{t('inventory.discardDescription')}</p>
+      <div className="mt-4 flex flex-wrap justify-end gap-2">
+        <Button type="button" variant="outline" onClick={() => setDiscardOpen(false)}>{t('inventory.keepEditing')}</Button>
+        <Button type="button" variant="destructive" onClick={onClose}>{t('inventory.discardDraft')}</Button>
+      </div>
+    </Dialog>}
+  </>
 }
 
 function StocktakeSummary({ stocktake }: { stocktake: StocktakeDetail }) {

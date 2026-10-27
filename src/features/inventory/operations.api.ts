@@ -20,9 +20,9 @@ export const bulkMovementSchema = z.discriminatedUnion('type', [
 export type BulkMovement = z.infer<typeof bulkMovementSchema>
 const movementSchema = z.object({ inventoryItemId: z.string(), transactionId: z.string(), type: z.enum(['IMPORT', 'EXPORT']),
   quantity: quantitySchema, unitCost: moneySchema, totalAmount: moneySchema, stockAfter: quantitySchema, averageUnitCost: moneySchema })
-export function bulkMoveStock(input: BulkMovement) {
+export function bulkMoveStock(input: BulkMovement, idempotencyKey?: string) {
   const parsed = bulkMovementSchema.parse(input)
-  return apiIdempotentMutate('/inventory/' + (parsed.type === 'IMPORT' ? 'imports' : 'exports') + '/bulk', z.array(movementSchema), { items: parsed.items })
+  return apiIdempotentMutate('/inventory/' + (parsed.type === 'IMPORT' ? 'imports' : 'exports') + '/bulk', z.array(movementSchema), { items: parsed.items, idempotencyKey })
 }
 const wasteSchema = z.object({
   id: z.string(), orderItemId: z.string(), inventoryItemId: z.string(), quantity: quantitySchema, reason: z.string(), createdAt: z.string(),

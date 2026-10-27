@@ -2,12 +2,16 @@ import { ArrowDownToLine, CheckCircle2, RefreshCw } from 'lucide-react'
 import { type ReorderAlertRow, type ReorderAlertsResponse } from '../inventory.api'
 import { formatQuantity } from '../quantity'
 import { Badge, Button, Card, CardContent } from '../../../shared/ui'
+import { Pagination } from '../../../shared/ui/pagination'
 
 interface InventoryAlertsTabProps {
   data?: ReorderAlertsResponse
   isLoading: boolean
   onImport: (item: ReorderAlertRow) => void
   canAdjust: boolean
+  page: number
+  onPage: (page: number) => void
+  isFetching: boolean
 }
 
 export function InventoryAlertsTab({
@@ -15,8 +19,10 @@ export function InventoryAlertsTab({
   isLoading,
   onImport,
   canAdjust,
+  page, onPage, isFetching,
 }: InventoryAlertsTabProps) {
   return (
+    <section className="grid gap-4" aria-label="Cảnh báo nhập hàng">
     <Card className="border-border/80 shadow-xs overflow-hidden">
       <CardContent className="p-0">
         {isLoading && (
@@ -29,7 +35,7 @@ export function InventoryAlertsTab({
         {data && (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm border-collapse">
-              <thead className="bg-amber-50/50 border-b border-amber-200 text-xs uppercase text-amber-900 font-semibold">
+              <thead className="border-b border-border bg-muted/50 text-xs font-semibold uppercase text-foreground">
                 <tr>
                   <th className="py-3.5 px-4 sm:px-6">Mặt hàng thiếu hụt</th>
                   <th className="py-3.5 px-4">Nhóm kho</th>
@@ -46,13 +52,13 @@ export function InventoryAlertsTab({
                     <td colSpan={7} className="py-12 text-center text-muted-foreground">
                       <CheckCircle2 className="h-8 w-8 text-emerald-600 mx-auto mb-2" />
                       <p className="font-semibold text-foreground">
-                        Không có nguyên liệu trong danh sách cảnh báo.
+                        {data.totalItems === 0 ? 'Không có nguyên liệu trong danh sách cảnh báo.' : 'Trang này không còn mục cảnh báo. Vui lòng quay lại trang đầu.'}
                       </p>
                     </td>
                   </tr>
                 ) : (
                   data.list.map((alert) => (
-                    <tr key={alert.id} className="hover:bg-amber-50/30 transition-colors">
+                    <tr key={alert.id} className="transition-colors hover:bg-muted/50">
                       <td className="py-3.5 px-4 sm:px-6 font-semibold text-foreground">
                         {alert.name}
                       </td>
@@ -70,7 +76,7 @@ export function InventoryAlertsTab({
                       <td className="py-3.5 px-4 text-right text-xs text-muted-foreground">
                         {formatQuantity(alert.reorderPoint)}
                       </td>
-                      <td className="py-3.5 px-4 text-right font-bold text-amber-700">
+                      <td className="py-3.5 px-4 text-right font-bold text-amber-700 dark:text-amber-300">
                         +{formatQuantity(alert.shortageQuantity)} {alert.unitName}
                       </td>
                       <td className="py-3.5 px-4 sm:px-6 text-center">
@@ -81,7 +87,7 @@ export function InventoryAlertsTab({
                             onClick={() => onImport(alert)}
                             className="h-7 text-xs bg-emerald-700 hover:bg-emerald-800 text-white gap-1 font-semibold"
                           >
-                            <ArrowDownToLine className="h-3.5 w-3.5" /> Tạo phiếu nhập
+                            <ArrowDownToLine className="h-3.5 w-3.5" aria-hidden="true" /> Nhập kho
                           </Button>
                         )}
                       </td>
@@ -94,5 +100,8 @@ export function InventoryAlertsTab({
         )}
       </CardContent>
     </Card>
+    {data && !isLoading && <Pagination page={page} totalPages={data.totalPages} onPage={onPage} disabled={isFetching} />}
+    {data && page > Math.max(1, data.totalPages) && <Button type="button" variant="outline" onClick={() => onPage(1)}>Về trang đầu</Button>}
+    </section>
   )
 }

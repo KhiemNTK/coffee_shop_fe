@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { formatDateTime } from '@/shared/lib/format'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -8,7 +8,9 @@ import { Check, Plus, Search, Trash2 } from 'lucide-react'
 import type { Session } from '../../auth/session'
 import { Button, Input } from '../../../shared/ui'
 import { Pagination } from '../../../shared/ui/pagination'
-import { errorMessage } from '../../../shared/api/client'
+import { ApiError, errorMessage } from '../../../shared/api/client'
+import { pendingOperationPrefix } from '../../../shared/api/idempotency'
+import { pendingIntentKey, readPendingIntent, writePendingIntent, isPendingIntentExpired, type PendingIntent } from '../../../shared/api/pending-intent'
 import { getInventoryItems } from '../inventory.api'
 import { bulkMoveStock, bulkMovementSchema, getInventoryWaste, type BulkMovement } from '../operations.api'
 
@@ -43,23 +45,57 @@ export function InventoryWasteTab() {
 
 type DraftRow = { id: string; inventoryItemId: string; label: string; quantity: string; unitPrice: string; note: string }
 const newRow = (): DraftRow => ({ id: crypto.randomUUID(), inventoryItemId: '', label: '', quantity: '', unitPrice: '', note: '' })
+const bulkIntentSchema = z.object({ movement: bulkMovementSchema, labels: z.record(z.string(), z.string().max(500)) })
+type BulkIntent = z.infer<typeof bulkIntentSchema>
 
 export function InventoryBulkTab() {
+  const { t } = useTranslation()
   const { employee, access } = useOutletContext<Session>()
-  const [type, setType] = useState<'IMPORT' | 'EXPORT'>('IMPORT')
-  const [rows, setRows] = useState<DraftRow[]>(() => [newRow()])
+  const storageKey = pendingIntentKey(employee.id, 'inventory.bulk')
+  const [recovery] = useState(() => {
+    try {
+      const intent = readPendingIntent(storageKey, bulkIntentSchema)
+      const legacy = !intent && Object.keys(sessionStorage).some(key =>
+        key.startsWith(`${pendingOperationPrefix}private:/inventory/imports/bulk:`) ||
+        key.startsWith(`${pendingOperationPrefix}private:/inventory/exports/bulk:`))
+      return { intent, error: legacy }
+    } catch { return { intent: null, error: true } }
+  })
+  const [pending, setPending] = useState(recovery.intent)
+  const [type, setType] = useState<'IMPORT' | 'EXPORT'>(recovery.intent?.payload.movement.type ?? 'IMPORT')
+  const [rows, setRows] = useState<DraftRow[]>(() => recovery.intent
+    ? recovery.intent.payload.movement.items.map(item => ({ ...item, id: crypto.randomUUID(), unitPrice: 'unitPrice' in item ? item.unitPrice : '', label: recovery.intent!.payload.labels[item.inventoryItemId] ?? item.inventoryItemId }))
+    : [newRow()])
   const [search, setSearch] = useState('')
   const [keyword, setKeyword] = useState('')
-  const [review, setReview] = useState<BulkMovement | null>(null)
+  const [review, setReview] = useState<BulkMovement | null>(recovery.intent?.payload.movement ?? null)
   const [validation, setValidation] = useState('')
   const client = useQueryClient()
-  const options = useQuery({ queryKey: ['private', employee.id, 'inventory-bulk-options', keyword], queryFn: ({ signal }) => getInventoryItems({ itemPerPage: 100, keyword: keyword || undefined }, signal) })
-  const mutation = useMutation({ mutationFn: bulkMoveStock, onSettled: () => {
-    for (const key of ['inventory-items', 'inventory-transactions', 'inventory-reorder-alerts']) void client.invalidateQueries({ queryKey: [key] })
-  } })
+  const flight = useRef(false)
   const canAdjust = access.has('/inventory_stock_adjust')
+  const options = useQuery({ queryKey: ['private', employee.id, 'inventory-bulk-options', keyword], queryFn: ({ signal }) => getInventoryItems({ itemPerPage: 100, keyword: keyword || undefined }, signal), enabled: canAdjust && !pending && !recovery.error })
+  const mutation = useMutation({
+    retry: false,
+    mutationFn: (intent: PendingIntent<BulkIntent>) => bulkMoveStock(intent.payload.movement, intent.idempotencyKey),
+    onSuccess: () => { sessionStorage.removeItem(storageKey); setPending(null) },
+    onError: (error, intent) => {
+      if (!intent.uncertain && error instanceof ApiError && error.status >= 400 && error.status < 500 && error.status !== 408 && error.status !== 429) {
+        sessionStorage.removeItem(storageKey); setPending(null); setReview(null)
+      } else {
+        const unknown = { ...intent, uncertain: true }
+        setPending(unknown)
+        try { writePendingIntent(storageKey, unknown) } catch { setValidation(t('inventory.movement.storageFailed')) }
+      }
+    },
+    onSettled: () => {
+      flight.current = false
+      for (const key of ['inventory-items', 'inventory-transactions', 'inventory-reorder-alerts']) void client.invalidateQueries({ queryKey: [key] })
+    },
+  })
   const edit = (id: string, change: Partial<DraftRow>) => setRows(rows.map(row => row.id === id ? { ...row, ...change } : row))
   if (!canAdjust) return null
+  if (recovery.error) return <p role="alert" className="border-l-2 border-destructive p-3 text-sm text-destructive">{t('inventory.movement.corrupt')}</p>
+  const expired = pending && isPendingIntentExpired(pending)
   return <section aria-label="Nhập xuất nhiều nguyên liệu" className="space-y-4">
     <div className="flex flex-wrap gap-3">
       <label className="flex items-center gap-2"><input type="radio" name="movement-type" checked={type === 'IMPORT'} disabled={Boolean(review)} onChange={() => setType('IMPORT')} />Nhập kho</label>
@@ -72,13 +108,20 @@ export function InventoryBulkTab() {
     {options.isError && <p role="alert">{errorMessage(options.error)}</p>}
     <form className="space-y-4" onSubmit={e => {
       e.preventDefault()
-      if (review) { mutation.mutate(review); return }
+      if (flight.current || mutation.isPending || mutation.isSuccess) return
+      if (pending && isPendingIntentExpired(pending)) { setValidation(t('inventory.movement.expired')); return }
+      if (review) {
+        const intent = pending ?? { payload: bulkIntentSchema.parse({ movement: review, labels: Object.fromEntries(rows.map(row => [row.inventoryItemId, row.label])) }), idempotencyKey: crypto.randomUUID(), createdAt: Date.now() }
+        try { writePendingIntent(storageKey, { ...intent, uncertain: true }) }
+        catch { setValidation(t('inventory.movement.storageFailed')); return }
+        setPending(intent); setValidation(''); flight.current = true; mutation.mutate(intent); return
+      }
       const parsed = bulkMovementSchema.safeParse({ type, items: rows.map(({ inventoryItemId, quantity, unitPrice, note }) => ({ inventoryItemId, quantity, note, ...(type === 'IMPORT' ? { unitPrice } : {}) })) })
-      if (parsed.success) { setReview(parsed.data); setValidation('') } else setValidation(parsed.error.issues[0]?.message ?? 'Dữ liệu chưa hợp lệ')
+      if (parsed.success) { mutation.reset(); setReview(parsed.data); setValidation('') } else setValidation(parsed.error.issues[0]?.message ?? 'Dữ liệu chưa hợp lệ')
     }}>
-      <fieldset disabled={Boolean(review) || mutation.isPending} className="space-y-3">
+      <fieldset disabled={Boolean(review) || Boolean(pending) || mutation.isPending} className="space-y-3">
         {rows.map((row, index) => <div key={row.id} className="grid gap-3 border-b border-border py-3 sm:grid-cols-2 lg:grid-cols-4">
-          <label className="text-sm">Nguyên liệu {index + 1}<select required className="mt-1 block h-10 w-full rounded border border-border p-2" value={row.inventoryItemId} onChange={e => {
+          <label className="text-sm">Nguyên liệu {index + 1}<select aria-label={`Nguyên liệu ${index + 1}`} required className="mt-1 block h-10 w-full rounded border border-border p-2" value={row.inventoryItemId} onChange={e => {
             const item = options.data?.list.find(item => item.id === e.target.value)
             edit(row.id, { inventoryItemId: e.target.value, label: item ? item.name + ' (' + (item.unit?.name ?? '') + ')' : '' })
           }}><option value="">Chọn nguyên liệu</option>
@@ -95,13 +138,14 @@ export function InventoryBulkTab() {
       </fieldset>
       {validation && <p role="alert">{validation}</p>}
       {review && <p role="status">{type === 'IMPORT' ? 'Nhập' : 'Xuất'} {review.items.length} nguyên liệu. Xác nhận số lượng và lý do bên trên.</p>}
-      {mutation.isError && <p role="alert">{errorMessage(mutation.error)} Gửi lại giữ nguyên lô và khóa chống trùng.</p>}
+      {pending && <p role="alert">{t(expired ? 'inventory.movement.expired' : 'inventory.movement.uncertain')}</p>}
+      {mutation.isError && <p role="alert">{errorMessage(mutation.error)}</p>}
       {mutation.isSuccess ? <>
         <p role="status">Đã ghi nhận {mutation.data.length} giao dịch kho.</p>
         <Button type="button" variant="outline" onClick={() => { mutation.reset(); setReview(null); setRows([newRow()]) }}>Lô mới</Button>
       </> : <div className="flex flex-wrap gap-2">
-        <Button type="submit" disabled={mutation.isPending || options.isPending || options.isError}><Check size={16} />{review ? mutation.isError ? 'Gửi lại cùng lô' : 'Xác nhận ghi sổ' : 'Kiểm tra lô'}</Button>
-        {review && !mutation.isPending && !mutation.isError && <Button type="button" variant="outline" onClick={() => setReview(null)}>Sửa lô</Button>}
+        <Button type="submit" disabled={mutation.isPending || Boolean(expired) || (!pending && (options.isPending || options.isError))}><Check size={16} />{pending ? 'Gửi lại cùng lô' : review ? 'Xác nhận ghi sổ' : 'Kiểm tra lô'}</Button>
+        {review && !pending && !mutation.isPending && !mutation.isError && <Button type="button" variant="outline" onClick={() => setReview(null)}>Sửa lô</Button>}
       </div>}
     </form>
   </section>

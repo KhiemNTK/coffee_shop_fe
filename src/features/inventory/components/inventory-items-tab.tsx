@@ -234,7 +234,7 @@ export function InventoryItemsTab({
                                 variant="outline"
                                 size="sm"
                                 onClick={() => onExport(item)}
-                                title="Xuất kho / Hao hụt"
+                                title="Xuất kho nguyên liệu"
                               >
                                 <ArrowUpFromLine size={15} aria-hidden="true" />
                                 Xuất

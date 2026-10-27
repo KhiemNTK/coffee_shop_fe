@@ -16,16 +16,15 @@ import {
   getInventoryTransactions,
   deleteInventoryItem,
   type InventoryItem,
-  type ReorderAlertRow,
 } from './inventory.api'
 import { Badge, Button, OperationsHeader, cn } from '../../shared/ui'
 import { InventoryKpis } from './components/inventory-kpis'
 import { InventoryItemsTab } from './components/inventory-items-tab'
 import { InventoryAlertsTab } from './components/inventory-alerts-tab'
 import { InventoryTransactionsTab } from './components/inventory-transactions-tab'
+import { InventoryMovementDialog } from './components/inventory-movement-dialog'
+import type { MovementTarget } from './movement-intent'
 import {
-  ImportDialog,
-  ExportDialog,
   CreateItemDialog,
   EditItemDialog,
   DeleteInventoryItemDialog,
@@ -67,12 +66,12 @@ export default function InventoryPage() {
   const [lowStockOnly, setLowStockOnly] = useState(false)
   const [page, setPage] = useState(1)
   const [transactionPage, setTransactionPage] = useState(1)
+  const [alertPage, setAlertPage] = useState(1)
   const [transactionType, setTransactionType] = useState<'IMPORT' | 'EXPORT' | ''>('')
 
   // Dialog states
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
-  const [importItem, setImportItem] = useState<InventoryItem | ReorderAlertRow | null>(null)
-  const [exportItem, setExportItem] = useState<InventoryItem | null>(null)
+  const [movement, setMovement] = useState<MovementTarget | null>(null)
   const [editItem, setEditItem] = useState<InventoryItem | null>(null)
   const [deleteItem, setDeleteItem] = useState<InventoryItem | null>(null)
 
@@ -116,8 +115,9 @@ export default function InventoryPage() {
   })
 
   const alertsQuery = useQuery({
-    queryKey: ['inventory-reorder-alerts'],
-    queryFn: ({ signal }) => getReorderAlerts({}, signal),
+    queryKey: ['inventory-reorder-alerts', alertPage],
+    queryFn: ({ signal }) => getReorderAlerts({ page: alertPage, itemPerPage: 10 }, signal),
+    staleTime: 0,
     enabled: canRead,
   })
 
@@ -172,7 +172,9 @@ export default function InventoryPage() {
               Làm mới
             </Button>
             {canCreate && (
-              <Button type="button" className="min-h-10" onClick={() => setCreateDialogOpen(true)}>
+              <Button type="button" className="min-h-10" onClick={() => setCreateDialogOpen(true)}
+                disabled={!categoriesQuery.isSuccess || !unitsQuery.isSuccess || !categoriesQuery.data.length || !unitsQuery.data.length}
+                title="Cần có nhóm kho và đơn vị tính trước khi tạo nguyên liệu">
                 <Plus size={16} aria-hidden="true" />
                 Thêm nguyên liệu
               </Button>
@@ -180,6 +182,14 @@ export default function InventoryPage() {
           </>
         }
       />
+      {canAdjust && <InventoryMovementDialog
+        key={employee.id} employeeId={employee.id} target={movement}
+        onClose={() => setMovement(null)}
+        onUpdated={() => {
+          for (const name of ['inventory-items', 'inventory-reorder-alerts', 'inventory-transactions'])
+            void queryClient.invalidateQueries({ queryKey: [name] })
+        }}
+      />}
       {/* Overview Stats Cards */}
       {canRead && <InventoryKpis
         totalItems={itemsQuery.isSuccess ? itemsQuery.data.totalItems : undefined}
@@ -312,10 +322,10 @@ export default function InventoryPage() {
           error={itemsQuery.error}
           isFetching={itemsQuery.isFetching}
           onRefetch={() => void itemsQuery.refetch()}
-          onImport={(item) => setImportItem(item)}
-          onExport={(item) => setExportItem(item)}
+          onImport={(item) => setMovement({ type: 'IMPORT', item })}
+          onExport={(item) => setMovement({ type: 'EXPORT', item })}
           onEdit={(item) => setEditItem(item)}
-          onDelete={(item) => setDeleteItem(item)}
+          onDelete={(item) => { deleteMutation.reset(); setDeleteItem(item) }}
         />
       )}
 
@@ -333,7 +343,10 @@ export default function InventoryPage() {
             canAdjust={canAdjust}
             data={alertsQuery.data}
             isLoading={alertsQuery.isLoading}
-            onImport={(alert) => setImportItem(alert)}
+            onImport={(item) => setMovement({ type: 'IMPORT', item })}
+            page={alertPage}
+            onPage={setAlertPage}
+            isFetching={alertsQuery.isFetching}
           />
         ))}
 
@@ -378,46 +391,6 @@ export default function InventoryPage() {
         </section>
       )}
 
-      {/* IMPORT MODAL */}
-      {canAdjust && importItem && (
-        <ImportDialog
-          item={importItem}
-          onClose={() => setImportItem(null)}
-          onSuccess={() => {
-            setImportItem(null)
-            void queryClient.invalidateQueries({
-              queryKey: ['inventory-items'],
-            })
-            void queryClient.invalidateQueries({
-              queryKey: ['inventory-reorder-alerts'],
-            })
-            void queryClient.invalidateQueries({
-              queryKey: ['inventory-transactions'],
-            })
-          }}
-        />
-      )}
-
-      {/* EXPORT MODAL */}
-      {canAdjust && exportItem && (
-        <ExportDialog
-          item={exportItem}
-          onClose={() => setExportItem(null)}
-          onSuccess={() => {
-            setExportItem(null)
-            void queryClient.invalidateQueries({
-              queryKey: ['inventory-items'],
-            })
-            void queryClient.invalidateQueries({
-              queryKey: ['inventory-reorder-alerts'],
-            })
-            void queryClient.invalidateQueries({
-              queryKey: ['inventory-transactions'],
-            })
-          }}
-        />
-      )}
-
       {/* CREATE ITEM MODAL */}
       {canCreate && createDialogOpen && (
         <CreateItemDialog
@@ -460,6 +433,7 @@ export default function InventoryPage() {
         <DeleteInventoryItemDialog
           item={deleteItem}
           isPending={deleteMutation.isPending}
+          error={deleteMutation.error}
           onClose={() => setDeleteItem(null)}
           onConfirm={(id) => deleteMutation.mutate(id)}
         />

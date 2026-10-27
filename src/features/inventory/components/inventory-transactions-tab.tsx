@@ -35,7 +35,7 @@ export function InventoryTransactionsTab({
         {data && (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm border-collapse">
-              <thead className="bg-stone-50 border-b border-border text-xs uppercase text-muted-foreground font-semibold">
+              <thead className="border-b border-border bg-muted/50 text-xs font-semibold uppercase text-muted-foreground">
                 <tr>
                   <th className="py-3.5 px-4 sm:px-6">Thời gian</th>
                   <th className="py-3.5 px-4">Loại biến động</th>
@@ -54,7 +54,7 @@ export function InventoryTransactionsTab({
                   </tr>
                 ) : (
                   data.list.map((tx) => (
-                    <tr key={tx.id} className="hover:bg-stone-50/70 transition-colors">
+                    <tr key={tx.id} className="transition-colors hover:bg-muted/50">
                       <td className="py-3.5 px-4 sm:px-6 text-xs text-muted-foreground">
                         {formatDateTime(tx.transactionDate)}
                       </td>
@@ -65,8 +65,8 @@ export function InventoryTransactionsTab({
                           </Badge>
                         ) : (
                           <Badge
-                            variant="secondary"
-                            className="gap-1 text-xs text-amber-800 bg-amber-50 border-amber-200"
+                            variant="warning"
+                            className="gap-1 text-xs"
                           >
                             <ArrowUpFromLine className="h-3 w-3" /> Xuất kho
                           </Badge>
@@ -78,7 +78,7 @@ export function InventoryTransactionsTab({
                       <td
                         className={cn(
                           'py-3.5 px-4 text-right font-bold text-sm',
-                          tx.type === 'IMPORT' ? 'text-emerald-700' : 'text-amber-800',
+                          tx.type === 'IMPORT' ? 'text-emerald-700 dark:text-emerald-300' : 'text-amber-800 dark:text-amber-300',
                         )}
                       >
                         {tx.type === 'IMPORT' ? '+' : '-'}
