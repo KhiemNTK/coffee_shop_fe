@@ -21,6 +21,7 @@ const en: Record<keyof typeof vi, string> = {
   'inventory.movement.cancel': 'Cancel',
   'inventory.movement.reviewClose': 'Close to reconcile',
   'inventory.movement.observedStock': 'Quantity observed at the start',
+  'inventory.movement.observedAvailable': 'Available stock when the form was opened',
   'inventory.movement.quantity': 'Quantity ({{unit}})',
   'inventory.movement.unitPrice': 'Unit cost (VND / {{unit}})',
   'inventory.movement.note': 'Reason / Source',

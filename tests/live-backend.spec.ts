@@ -830,15 +830,15 @@ test.describe('real Docker backend contract', () => {
     await prisma.inventoryItem.update({ where: { id: itemIds[1] }, data: { stock: '3' } })
     const attempt = () => page.evaluate(async id => {
       const { postDocument } = await import('/src/features/inventory/procurement.api.ts')
-      try { await postDocument('stocktakes', id); return { status: 0, message: '' } }
-      catch (error) { const failure = error as { status: number; serverMessage: string }; return { status: failure.status, message: failure.serverMessage } }
+      try { await postDocument('stocktakes', id); return { status: 0, code: '' } }
+      catch (error) { const failure = error as { status: number; code: string }; return { status: failure.status, code: failure.code } }
     }, draft.id)
-    expect(await attempt()).toMatchObject({ status: 409, message: expect.stringContaining('Cancel this draft and create a new stocktake') })
+    expect(await attempt()).toEqual({ status: 409, code: 'INVENTORY_STOCKTAKE_SNAPSHOT_STALE' })
     await page.evaluate(async input => {
       const { saveCounts } = await import('/src/features/inventory/procurement.api.ts')
       await saveCounts(input.id, input.itemIds.map(inventoryItemId => ({ inventoryItemId, countedQuantity: '3' })))
     }, { id: draft.id, itemIds })
-    expect((await attempt()).status).toBe(409)
+    expect(await attempt()).toEqual({ status: 409, code: 'INVENTORY_STOCKTAKE_SNAPSHOT_STALE' })
     const persisted = await prisma.stocktake.findUniqueOrThrow({ where: { id: draft.id }, include: { items: true } })
     expect(persisted.status).toBe('DRAFT')
     expect(persisted.items.every(line => line.expectedQuantity.toString() === '2' && line.differenceQuantity === null)).toBe(true)

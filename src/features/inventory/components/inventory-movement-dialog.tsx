@@ -265,7 +265,7 @@ function MovementForm({
         <div className="grid gap-2 rounded-md border border-border bg-muted/40 p-3 text-sm">
           <p className="break-words font-semibold text-foreground">{item.name}</p>
           <p className="text-muted-foreground">
-            {t('inventory.movement.observedStock')}:{' '}
+            {t(isImport ? 'inventory.movement.observedStock' : 'inventory.movement.observedAvailable')}:{' '}
             {formatQuantity(isImport ? item.stock : available)} {unit}
           </p>
         </div>

@@ -138,7 +138,7 @@ export function InventoryBulkTab() {
       </fieldset>
       {validation && <p role="alert">{validation}</p>}
       {review && <p role="status">{type === 'IMPORT' ? 'Nhập' : 'Xuất'} {review.items.length} nguyên liệu. Xác nhận số lượng và lý do bên trên.</p>}
-      {pending && <p role="alert">{t(expired ? 'inventory.movement.expired' : 'inventory.movement.uncertain')}</p>}
+      {pending && <p role={expired ? 'alert' : 'status'}>{t(expired ? 'inventory.movement.expired' : 'inventory.movement.uncertain')}</p>}
       {mutation.isError && <p role="alert">{errorMessage(mutation.error)}</p>}
       {mutation.isSuccess ? <>
         <p role="status">Đã ghi nhận {mutation.data.length} giao dịch kho.</p>

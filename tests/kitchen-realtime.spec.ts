@@ -124,6 +124,16 @@ const newTicket = (stationId = bar, availableAt = '2020-01-01T00:00:00.000Z') =>
 const chimes = (page: Page) =>
   page.evaluate(() => (window as unknown as { fixtureChimes: () => number }).fixtureChimes())
 
+async function enableSound(page: Page) {
+  const before = await chimes(page)
+  await page.getByRole('button', { name: 'Bật âm báo vé mới', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Tắt âm báo vé mới', exact: true }))
+    .toHaveAttribute('aria-pressed', 'true')
+  const after = await chimes(page)
+  expect(after).toBe(before + 1)
+  return after
+}
+
 test('a silent stream falls back to polling and reconciles when reconnected', async ({
   page,
 }, info) => {
@@ -178,6 +188,7 @@ test('only a due new ticket for the selected station chimes, once across reconne
   page,
 }) => {
   await setup(page)
+  const baseline = await enableSound(page)
   for (const data of [
     {},
     { ...newTicket(), eventName: 'order.item.status.updated' },
@@ -188,12 +199,12 @@ test('only a due new ticket for the selected station chimes, once across reconne
     await emit(page, data)
     await page.clock.runFor(300)
   }
-  expect(await chimes(page)).toBe(0)
+  expect(await chimes(page)).toBe(baseline)
   const event = newTicket()
   await emit(page, event)
   await emit(page, event)
   await page.clock.runFor(300)
-  expect(await chimes(page)).toBe(1)
+  expect(await chimes(page)).toBe(baseline + 1)
   await page.evaluate(() => {
     const source = (window.EventSource as unknown as FixtureConstructor).instances.at(-1)!
     source.onerror?.()
@@ -205,17 +216,18 @@ test('only a due new ticket for the selected station chimes, once across reconne
   await expect(page.getByText('Realtime Live', { exact: true })).toBeVisible()
   await emit(page, event)
   await page.clock.runFor(300)
-  expect(await chimes(page)).toBe(1)
+  expect(await chimes(page)).toBe(baseline + 1)
   await emit(page, newTicket())
   await emit(page, newTicket())
   await page.clock.runFor(300)
-  expect(await chimes(page)).toBe(2)
+  expect(await chimes(page)).toBe(baseline + 2)
 })
 
 test('filter changes and muted tickets do not produce delayed or replayed chimes', async ({
   page,
 }) => {
   await setup(page)
+  const baseline = await enableSound(page)
   // Keep the event and filter change in one task, before the 250 ms notification batch.
   await page.getByRole('button', { name: 'Tea (TEA)', exact: true }).evaluate((button, data) => {
     if (!(button instanceof HTMLButtonElement)) throw new Error('Expected a station button')
@@ -230,19 +242,19 @@ test('filter changes and muted tickets do not produce delayed or replayed chimes
     'true'
   )
   await page.clock.runFor(300)
-  expect(await chimes(page)).toBe(0)
+  expect(await chimes(page)).toBe(baseline)
   await page.getByRole('button', { name: 'Tắt âm báo vé mới', exact: true }).click()
   const event = newTicket(tea)
   await emit(page, event)
   await page.clock.runFor(300)
-  expect(await chimes(page)).toBe(0)
-  await page.getByRole('button', { name: 'Bật âm báo vé mới', exact: true }).click()
+  expect(await chimes(page)).toBe(baseline)
+  const resumed = await enableSound(page)
   await emit(page, event)
   await page.clock.runFor(300)
-  expect(await chimes(page)).toBe(0)
+  expect(await chimes(page)).toBe(resumed)
   await emit(page, newTicket(tea))
   await page.clock.runFor(300)
-  expect(await chimes(page)).toBe(1)
+  expect(await chimes(page)).toBe(resumed + 1)
 })
 
 test('a healthy SSE connection switches to fast polling when its Redis relay is degraded', async ({

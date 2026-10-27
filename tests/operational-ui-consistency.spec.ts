@@ -97,9 +97,12 @@ test('printing uses store time and translated pagination without losing seconds 
   await expect(page.getByText('22/10/2026, 09:00:45', { exact: true })).toBeVisible()
   await page.getByRole('button', { name: 'Hàng đợi Lệnh in', exact: true }).click()
   const pagination = page.getByRole('navigation', { name: 'Pagination', exact: true })
+  await expect(page.getByText('Page 1 / 2 · 21 records', { exact: true })).toBeVisible()
   await expect(pagination.getByRole('button', { name: 'Previous page' })).toBeDisabled()
+  const next = pagination.getByRole('button', { name: 'Next page' })
+  await expect(next).toBeEnabled()
   const previousReads = pages.length
-  await pagination.getByRole('button', { name: 'Next page' }).click()
+  await next.click()
   await expect(pagination.getByText('2 / 2', { exact: true })).toBeVisible()
   await expect(pagination.getByRole('button', { name: 'Next page' })).toBeDisabled()
   expect(pages.slice(previousReads)).toEqual([2])

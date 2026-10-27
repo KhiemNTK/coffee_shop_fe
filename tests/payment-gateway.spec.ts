@@ -372,7 +372,7 @@ test('an expired attempt offers reconciliation instead of a second payment', asy
     attempts: () => [{ ...attempt, status: 'EXPIRED' }],
   })
   await openGateway(page)
-  await expect(page.getByRole('button', { name: 'Tạo phiên VNPAY', exact: true })).toBeDisabled()
+  await expect(page.getByRole('button', { name: /^Tạo phiên / })).toHaveCount(0)
   await expect(page.getByRole('button', { name: 'Đối soát VNPay', exact: true })).toBeEnabled()
   await expect(page.getByRole('link', { name: /^Mở thanh toán/ })).toHaveCount(0)
 })

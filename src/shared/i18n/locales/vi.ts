@@ -20,6 +20,7 @@ const vi = {
   'inventory.movement.cancel': 'Hủy',
   'inventory.movement.reviewClose': 'Đóng để đối soát',
   'inventory.movement.observedStock': 'Số lượng ghi nhận lúc bắt đầu',
+  'inventory.movement.observedAvailable': 'Tồn khả dụng lúc mở phiếu',
   'inventory.movement.quantity': 'Số lượng ({{unit}})',
   'inventory.movement.unitPrice': 'Đơn giá nhập (VND / {{unit}})',
   'inventory.movement.note': 'Lý do / Nguồn gốc',
