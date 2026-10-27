@@ -376,6 +376,70 @@ test('two tabs coordinate refresh using shared cookies and Web Locks', async ({
   expect(refreshes).toBe(1)
 })
 
+for (const failure of ['503', 'network'] as const) {
+  test(`transient refresh ${failure} retains the session and waits for explicit retry`, async ({ page, context }) => {
+    await cookie(context)
+    let recovered = false
+    let refreshed = false
+    let refreshes = 0
+    await context.route('**/api/v1/auth/me', route => route.fulfill(refreshed ? { json: envelope(employee) } : { status: 401, json: {} }))
+    await context.route('**/api/v1/auth/me/permissions', route => route.fulfill(refreshed ? { json: envelope(authorization) } : { status: 401, json: {} }))
+    await context.route('**/api/v1/auth/refresh', async route => {
+      refreshes++
+      if (!recovered) return failure === 'network' ? route.abort('failed') : route.fulfill({ status: 503, json: { errors: [{ message: 'Temporary failure' }] } })
+      refreshed = true
+      await cookie(context, 'csrf-recovered')
+      return route.fulfill({ json: envelope({}) })
+    })
+    await page.goto('/staff')
+    await expect(page.getByRole('heading', { name: 'Chưa mở được phiên làm việc' })).toBeVisible()
+    await expect(page).toHaveURL(/\/staff$/)
+    const initialRefreshes = refreshes
+    expect(initialRefreshes).toBeGreaterThanOrEqual(1)
+    expect(initialRefreshes).toBeLessThanOrEqual(2)
+    recovered = true
+    await page.getByRole('button', { name: 'Thử lại', exact: true }).click()
+    await expect(page.getByRole('heading', { name: employee.fullName })).toBeVisible()
+    expect(refreshes).toBe(initialRefreshes + 1)
+  })
+}
+
+test('a transient refresh failure never replays the rejected mutation or emits session expiry', async ({ page, context }) => {
+  await cookie(context)
+  let commands = 0
+  let refreshes = 0
+  await context.route('**/api/v1/fixture-command', route => {
+    commands++
+    return route.fulfill({ status: 401, json: {} })
+  })
+  await context.route('**/api/v1/auth/refresh', route => {
+    refreshes++
+    return route.fulfill({ status: 503, json: {} })
+  })
+  await page.goto('/sign-in')
+  const expired = await page.evaluate(async () => {
+    const clientPath = '/src/shared/api/client.ts'
+    const schemaPath = '/src/features/operations/operations.api.ts'
+    const { apiMutate, ApiError, sessionEvents } = await import(clientPath)
+    const { ManagementExceptionsSummarySchema } = await import(schemaPath)
+    let events = 0
+    const onExpired = () => { events++ }
+    sessionEvents.addEventListener('expired', onExpired)
+    try {
+      await apiMutate('/fixture-command', 'POST', ManagementExceptionsSummarySchema, { command: 'fixture' })
+      throw new Error('The fixture must reject the command')
+    } catch (error) {
+      if (!(error instanceof ApiError)) throw error
+    } finally {
+      sessionEvents.removeEventListener('expired', onExpired)
+    }
+    return events
+  })
+  expect(expired).toBe(0)
+  expect(commands).toBe(1)
+  expect(refreshes).toBe(1)
+})
+
 test('refresh failure goes to sign in without a refresh loop', async ({
   page,
   context,

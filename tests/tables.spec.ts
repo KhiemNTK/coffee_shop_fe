@@ -209,6 +209,7 @@ test.describe('Staff Dining Tables Management', () => {
     await page.route('**/api/v1/orders/tables/**/clear', (route) => {
       expect(route.request().postDataJSON()).toEqual({
         expectedOrderSessionId: mockTables[1]!.orderSessions[0]!.id,
+        reason: 'Khách hủy trước khi chế biến',
       })
       const t0 = currentTables[0]
       const t1 = currentTables[1]
@@ -250,6 +251,10 @@ test.describe('Staff Dining Tables Management', () => {
     // Clear modal
     await page.getByTitle('Dọn / Giải phóng bàn').first().click()
     await expect(page.getByRole('heading', { name: 'Dọn dẹp & Giải phóng bàn' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Xác nhận dọn bàn' })).toBeDisabled()
+    await page.getByLabel('Lý do', { exact: true }).fill('   ')
+    await expect(page.getByRole('button', { name: 'Xác nhận dọn bàn' })).toBeDisabled()
+    await page.getByLabel('Lý do', { exact: true }).fill('  Khách hủy trước khi chế biến  ')
     await page.getByRole('button', { name: 'Xác nhận dọn bàn' }).click()
     await expect(page.getByText('Đã dọn bàn và giải phóng trạng thái thành công')).toBeVisible()
   })

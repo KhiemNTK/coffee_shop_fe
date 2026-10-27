@@ -218,9 +218,9 @@ test.describe('real Docker backend contract', () => {
     const recipes = await prisma.orderItemRecipeIngredient.findMany({ where: { orderItemId: order.itemId }, orderBy: { inventoryItemId: 'asc' } })
     expect(recipes.map(row => row.quantityPerItem.toString())).toEqual(['0.2346', '0.2001'])
     await page.evaluate(async input => {
-      const { replaceItemRecipe, replaceItemOptions } = await import('/src/features/menu/menu.admin.api.ts')
-      await replaceItemRecipe(input.menuId, [{ inventoryItemId: input.beanId, quantity: '1.0000' }])
-      await replaceItemOptions(input.menuId, [{ name: 'Changed', minSelected: 0, maxSelected: 1, options: [{ name: 'Different topping', priceDelta: '0', ingredients: [] }] }])
+      const { getItemRecipe, getItemOptions, replaceItemRecipe, replaceItemOptions } = await import('/src/features/menu/menu.admin.api.ts')
+      await replaceItemRecipe(input.menuId, [{ inventoryItemId: input.beanId, quantity: '1.0000' }], (await getItemRecipe(input.menuId)).revision)
+      await replaceItemOptions(input.menuId, [{ name: 'Changed', minSelected: 0, maxSelected: 1, options: [{ name: 'Different topping', priceDelta: '0', ingredients: [] }] }], (await getItemOptions(input.menuId)).revision)
     }, fixture)
     await page.goto('/staff/kitchen')
     await page.getByRole('button', { name: `${fixture.name} (${fixture.name})`, exact: true }).click()
@@ -596,9 +596,13 @@ test.describe('real Docker backend contract', () => {
     await detail.getByRole('button', { name: 'Đóng', exact: true }).click()
     await page.getByRole('button', { name: 'Kho hàng & Tồn kho' }).click()
     await page.getByPlaceholder('Tìm tên nguyên liệu…').fill(prefix + '-procurement')
-    const inventoryRow = page.getByRole('row').filter({ hasText: prefix + '-procurement' })
-    await expect(inventoryRow.getByRole('cell').nth(3)).toContainText('15')
-    const costCell = inventoryRow.getByRole('cell').nth(5)
+    const inventoryTable = page.getByRole('region', { name: 'Danh sách tồn kho', exact: true }).getByRole('table')
+    const inventoryRow = inventoryTable.getByRole('row').filter({ hasText: prefix + '-procurement' })
+    await expect(inventoryRow).toBeVisible()
+    const columns = await inventoryTable.getByRole('columnheader').allTextContents()
+    expect(columns).toEqual(expect.arrayContaining(['Tồn thực tế', 'Giá vốn BQ']))
+    await expect(inventoryRow.getByRole('cell').nth(columns.indexOf('Tồn thực tế'))).toContainText('15')
+    const costCell = inventoryRow.getByRole('cell').nth(columns.indexOf('Giá vốn BQ'))
     await expect(costCell).toContainText('21.000')
     await costCell.scrollIntoViewIfNeeded()
     await page.screenshot({ path: info.outputPath('procurement-stock-cost.png'), fullPage: true })
@@ -1024,7 +1028,7 @@ test.describe('real Docker backend contract', () => {
     const created = await creation
     expect(created.status()).toBe(201)
     const { data: attempt } = await created.json() as { data: { id: string; merchantReference: string } }
-    await expect(page.getByRole('link', { name: 'Mở thanh toán VNPAY' })).toBeVisible()
+    await expect(page.getByRole('link', { name: 'Mở thanh toán VNPay' })).toBeVisible()
     await page.screenshot({ path: info.outputPath('real-payment-gateway.png') })
     const env = backendTestEnvironment()
     const sign = (params: Record<string, string>) => {

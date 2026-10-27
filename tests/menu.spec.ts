@@ -61,7 +61,7 @@ test('category failure does not hide the menu and has its own retry', async ({
   failed = false
   await page.getByRole('button', { name: 'Thử lại danh mục' }).click()
   await expect(
-    page.getByRole('button', { name: category.name, exact: true }),
+    page.getByRole('tab', { name: category.name, exact: true }),
   ).toBeVisible()
 })
 
@@ -144,14 +144,14 @@ test('filters and pagination are sent to the API; filtering resets page', async 
     (request) =>
       new URL(request.url()).searchParams.get('categoryId') === category.id,
   )
-  await page.getByRole('button', { name: category.name, exact: true }).click()
+  await page.getByRole('tab', { name: category.name, exact: true }).click()
   expect(
     new URL((await categoryRequest).url()).searchParams.get('itemPerPage'),
   ).toBe('12')
   await page.getByRole('button', { name: 'Xóa bộ lọc', exact: true }).click()
   await expect(page.getByRole('searchbox')).toHaveValue('')
-  await expect(page.getByRole('button', { name: 'Tất cả' })).toHaveAttribute(
-    'aria-pressed',
+  await expect(page.getByRole('tab', { name: 'Tất cả', exact: true })).toHaveAttribute(
+    'aria-selected',
     'true',
   )
 })

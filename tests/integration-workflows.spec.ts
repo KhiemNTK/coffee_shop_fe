@@ -33,11 +33,16 @@ test('failed lazy screen has a render fallback instead of a blank page', async (
   await page.goto('/staff/reconciliation')
   await expect(page.getByRole('heading', { name: 'Chưa mở được màn hình' })).toBeVisible()
   await expect(page.getByRole('alert')).toContainText('Kiểm tra trạng thái giao dịch')
+  await page.unroute('**/src/features/reconciliation/reconciliation-page.tsx*')
+  await page.route('**/api/v1/payment-reconciliation/incidents?*', route => route.fulfill({ json: envelope(paged([])) }))
+  await page.getByRole('button', { name: 'Tải lại', exact: true }).click()
+  await expect(page.getByRole('heading', { name: 'Chưa mở được màn hình' })).toHaveCount(0)
+  await expect(page.getByRole('main')).toBeVisible()
 })
 
 test('exception read failure is not shown as an empty healthy queue', async ({ page }) => {
   await staff(page, ['/management-exceptions_read'])
-  await page.route('**/api/v1/management/exceptions/summary', route => route.fulfill({ json: envelope({ asOf: date, counts: { PAYMENT: 0, CASH_EXPENSE: 0, CASH_HANDOVER: 0, FEEDBACK: 0, KITCHEN_OVERDUE: 0, ONLINE_PICKUP_LATE: 0, OUTBOX_DEAD_LETTER: 0 }, total: 0 }) }))
+  await page.route('**/api/v1/management/exceptions/summary', route => route.fulfill({ json: envelope({ asOf: date, counts: { PAYMENT: 0, CASH_EXPENSE: 0, CASH_HANDOVER: 0, FEEDBACK: 0, KITCHEN_OVERDUE: 0, ONLINE_PICKUP_LATE: 0, OUTBOX_DEAD_LETTER: 0, PRINT_REVIEW: 0 }, total: 0 }) }))
   await page.route('**/api/v1/management/exceptions?*', route => route.fulfill({ status: 503, json: { message: 'Unavailable' } }))
   await page.goto('/staff/operations')
   await expect(page.getByRole('alert')).toContainText('Dịch vụ tạm thời không khả dụng')

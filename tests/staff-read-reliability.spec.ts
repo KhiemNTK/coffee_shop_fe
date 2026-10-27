@@ -241,6 +241,7 @@ for (const domain of ['equipment', 'system-settings'] as const) {
               : {
                   id,
                   assetCode: 'EQ-1',
+                  updatedAt: date,
                   name: 'Equipment page ' + current,
                   status: 'IN_USE',
                   quantity: 1,

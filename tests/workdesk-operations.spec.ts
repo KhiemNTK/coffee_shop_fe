@@ -19,6 +19,7 @@ const summary = {
     KITCHEN_OVERDUE: 1,
     ONLINE_PICKUP_LATE: 1,
     OUTBOX_DEAD_LETTER: 0,
+    PRINT_REVIEW: 0,
   },
   total: 5,
 }
@@ -43,6 +44,7 @@ const failedEvent = {
   id, topic: 'order', eventName: 'order.invoice.paid', aggregateType: 'Invoice',
   aggregateId: stationId, status: 'DEAD_LETTER', attempts: 5, occurredAt: asOf,
   availableAt: asOf,
+  lastErrorCode: 'PERMANENT_REJECTION', lastFailedAt: asOf, requestId: 'original-request-12345678',
 }
 
 async function outboxQueue(page: Page, retryPermission = true) {
@@ -65,10 +67,75 @@ test('read-only managers see dead letters without recovery commands', async ({ p
   const dialog = page.getByRole('dialog')
   await expect(dialog.getByText('order.invoice.paid', { exact: true })).toBeVisible()
   await expect(dialog.getByText('Số lần lỗi', { exact: true })).toBeVisible()
+  await expect(dialog.getByText('PERMANENT_REJECTION', { exact: true })).toBeVisible()
+  await expect(dialog.getByText('original-request-12345678', { exact: true })).toBeVisible()
   await expect(dialog.getByLabel('Lý do phục hồi')).toHaveCount(0)
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
   await page.screenshot({ path: info.outputPath('outbox-read-only.png'), fullPage: true })
 })
+
+for (const printPermission of [false, true]) {
+  test(`print review opens the exact job only with print-read permission: ${printPermission}`, async ({ page }, info) => {
+    await staff(page, ['/management-exceptions_read', ...(printPermission ? ['/print-jobs_read'] : [])])
+    await operations(page)
+    const job = {
+      id, type: 'RECEIPT', status: 'REQUIRES_REVIEW', copies: 1, attempts: 1, maxAttempts: 5,
+      createdAt: asOf, updatedAt: asOf, device: null,
+    }
+    await page.route('**/api/v1/management/exceptions?*', route => route.fulfill({
+      json: envelope({ kind: 'PRINT_REVIEW', list: [job], totalItems: 1, totalPages: 1, currentPage: 1 }),
+    }))
+    await page.route('**/api/v1/printing/jobs**', route => route.fulfill({
+      json: envelope(new URL(route.request().url()).pathname.endsWith('/' + id) ? job : { list: [job], totalItems: 1, totalPages: 1, currentPage: 1 }),
+    }))
+    await page.goto('/staff/operations?kind=PRINT_REVIEW')
+    await page.getByRole('button', { name: 'Chi tiết', exact: true }).click()
+    const dialog = page.getByRole('dialog')
+    await expect(dialog.getByText(/Chưa xác nhận được giấy đã in/)).toBeVisible()
+    const link = dialog.getByRole('link', { name: 'Kiểm tra phiếu in', exact: true })
+    if (printPermission) {
+      await link.click()
+      await expect(page).toHaveURL(new RegExp('/staff/printing\\?tab=JOBS&job=' + id))
+      await expect(page.getByRole('dialog')).toContainText('Chi tiết Lệnh in')
+      await expect(page.getByRole('dialog')).toContainText(id)
+      await expect(page.getByRole('dialog').getByRole('button', { name: 'Xác nhận đã in', exact: true })).toHaveCount(0)
+    } else {
+      await expect(link).toHaveCount(0)
+    }
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+    await page.screenshot({ path: info.outputPath('print-review-permission.png'), fullPage: true })
+  })
+}
+
+for (const failure of [{ status: 429, code: 'HTTP_429' }, { status: 503, code: 'DATABASE_BUSY' }]) {
+test(`operations read failures expose support IDs and respect retry-after (${failure.code})`, async ({ page }, info) => {
+  await page.clock.install()
+  await staff(page, ['/management-exceptions_read'])
+  let reads = 0
+  for (const endpoint of ['summary', '?*']) {
+    await page.route('**/api/v1/management/exceptions' + (endpoint === 'summary' ? '/summary' : endpoint), route => {
+      reads++
+      return route.fulfill({
+        status: failure.status, headers: { 'retry-after': '120' },
+        json: { data: null, message: 'ERROR', code: failure.code, requestId: 'ops-read-' + (endpoint === 'summary' ? 'summary' : 'list'), errors: [{ message: 'Service is busy' }] },
+      })
+    })
+  }
+  await page.goto('/staff/operations')
+  await expect(page.getByRole('alert').filter({ hasText: 'ops-read-summary' })).toBeVisible()
+  await expect(page.getByRole('alert').filter({ hasText: 'ops-read-list' })).toBeVisible()
+  if (failure.code === 'DATABASE_BUSY') await expect(page.getByRole('alert').filter({ hasText: 'ops-read-list' })).toContainText('đang bận')
+  await expect(page.getByRole('button', { name: 'Làm mới tổng quan', exact: true })).toBeDisabled()
+  await expect(page.getByRole('button', { name: 'Thử lại', exact: true })).toBeDisabled()
+  const initialReads = reads
+  await page.clock.fastForward(31_000)
+  await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')))
+  expect(reads).toBe(initialReads)
+  await expect(page.getByRole('button', { name: 'Thử lại', exact: true })).toBeDisabled()
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+  await page.screenshot({ path: info.outputPath('operations-support-errors.png'), fullPage: true })
+})
+}
 
 test('recovery confirms once, prevents double submit and reports queued rather than published', async ({ page }, info) => {
   const markQueued = await outboxQueue(page)
@@ -211,6 +278,21 @@ test('employees without permissions see no operational data or privileged links'
   await expect(
     page.getByText(defaultMockAdminEmployee.email, { exact: true }),
   ).toBeVisible()
+})
+
+test('staff account shows real identity without a fabricated branch', async ({ page }, info) => {
+  await staff(page, [])
+  await page.goto('/staff/account')
+  await expect(page.getByRole('heading', { name: defaultMockAdminEmployee.fullName, exact: true })).toBeVisible()
+  const details = page.getByRole('region', { name: 'Thông tin nhân sự', exact: true })
+  await expect(details.getByText(defaultMockAdminEmployee.email, { exact: true })).toBeVisible()
+  await expect(details.getByText(`@${defaultMockAdminEmployee.username}`, { exact: true })).toBeVisible()
+  await expect(details.getByText(defaultMockAdminEmployee.id, { exact: true })).toBeVisible()
+  await expect(details.getByText(defaultMockAdminEmployee.position.name, { exact: true })).toBeVisible()
+  await expect(details.getByText('ADMIN', { exact: true })).toBeVisible()
+  await expect(page.locator('body')).not.toContainText(/chi nhánh|trụ sở chính/i)
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+  await page.screenshot({ path: info.outputPath('staff-account-single-store.png'), fullPage: true })
 })
 
 test('workdesk read failures never become zero counts or an empty healthy shift', async ({

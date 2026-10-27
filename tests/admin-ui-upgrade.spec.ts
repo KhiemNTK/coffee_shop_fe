@@ -149,6 +149,7 @@ async function fixture(page: Page, state: 'data' | 'empty' | 'error' = 'data') {
     KITCHEN_OVERDUE: 0,
     ONLINE_PICKUP_LATE: 0,
     OUTBOX_DEAD_LETTER: 0,
+    PRINT_REVIEW: 0,
   }
   await page.route('**/api/v1/management/exceptions/summary', (r) =>
     r.fulfill(reply({ asOf: date, counts, total: counts.PAYMENT })),

@@ -38,6 +38,50 @@ async function mockInventory(page: Page, keys = permissions) {
   }
 }
 
+test('stocktake preserves unsaved counts until an explicit discard', async ({ page }, info) => {
+  await mockInventory(page, stocktakePermissions)
+  let writes = 0
+  await page.route('**/api/v1/inventory/stocktakes/stocktake-fixture/counts', route => {
+    writes++
+    return route.fulfill({ json: envelope(stocktake) })
+  })
+  const detail = page.getByRole('dialog', { name: stocktake.stocktakeNumber, exact: true })
+  const count = detail.getByLabel(`Số lượng thực đếm ${item.name}`, { exact: true })
+  const discard = page.getByRole('dialog', { name: 'Bỏ thay đổi kiểm kê chưa lưu?', exact: true })
+  const unloadPrevented = () => page.evaluate(() => {
+    const event = new Event('beforeunload', { cancelable: true })
+    window.dispatchEvent(event)
+    return event.defaultPrevented
+  })
+  await page.getByRole('button', { name: 'Chi tiết', exact: true }).click()
+  await expect(count).toHaveValue('0.2344')
+  expect(await unloadPrevented()).toBe(false)
+  await count.fill('123.4567')
+  expect(await unloadPrevented()).toBe(true)
+  await count.press('Escape')
+  await expect(discard).toBeVisible()
+  await discard.getByRole('button', { name: 'Tiếp tục chỉnh sửa', exact: true }).click()
+  await expect(count).toHaveValue('123.4567')
+  await page.mouse.click(1, 1)
+  await expect(discard).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(discard).toHaveCount(0)
+  await expect(count).toHaveValue('123.4567')
+  await count.fill('0.2344')
+  expect(await unloadPrevented()).toBe(false)
+  await count.press('Escape')
+  await expect(detail).toHaveCount(0)
+  await page.getByRole('button', { name: 'Chi tiết', exact: true }).click()
+  await count.fill('99')
+  await detail.getByRole('button', { name: 'Đóng', exact: true }).click()
+  await expect(discard).toBeVisible()
+  await page.screenshot({ path: info.outputPath('stocktake-discard-confirmation.png') })
+  await discard.getByRole('button', { name: 'Bỏ thay đổi', exact: true }).click()
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+  expect(await unloadPrevented()).toBe(false)
+  expect(writes).toBe(0)
+})
+
 for (const failure of ['network', 'invalid-response'] as const) {
   test(`uncertain receipt creation freezes the original intent after ${failure}`, async ({ page }) => {
     await mockInventory(page)

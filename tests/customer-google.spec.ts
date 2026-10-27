@@ -120,6 +120,64 @@ for (const entry of ['/wishlist', '/menu', '/order']) {
   })
 }
 
+test('customer Google sign-in respects Retry-After and exposes the support ID', async ({ page, context }) => {
+  await mockIdentity(context)
+  let calls = 0
+  await page.route('**/api/v1/**', route => {
+    const path = new URL(route.request().url()).pathname
+    if (path.endsWith('/customers/me')) return route.fulfill({ status: 401, json: {} })
+    if (path.endsWith('/customers/auth/google')) {
+      calls++
+      return route.fulfill({ status: 429, headers: { 'retry-after': '60', 'x-request-id': 'customer-login-429' }, json: { message: 'Too many requests' } })
+    }
+    return route.fulfill({ json: envelope({ name: 'Coffee Homes', address: null, phone: null }) })
+  })
+  await page.goto('/customer/sign-in')
+  await expect(page.getByRole('button', { name: 'Google customer fixture' })).toBeVisible()
+  await page.clock.install()
+  await page.getByRole('button', { name: 'Google customer fixture' }).click()
+  await expect(page.getByRole('alert')).toContainText('customer-login-429')
+  await expect(page.getByRole('button', { name: 'Google customer fixture' })).toHaveCount(0)
+  await page.clock.runFor(59_000)
+  expect(calls).toBe(1)
+  await expect(page.getByRole('button', { name: 'Google customer fixture' })).toHaveCount(0)
+  await page.clock.runFor(2_000)
+  await page.getByRole('button', { name: 'Google customer fixture' }).click()
+  await expect.poll(() => calls).toBe(2)
+})
+
+test('a favorite rate limit does not prevent the customer from signing out', async ({ page, context }) => {
+  await mockIdentity(context)
+  const customerId = '80000000-0000-4000-8000-000000000001'
+  const favoriteItemId = '82000000-0000-4000-8000-000000000001'
+  let signedIn = true
+  let logouts = 0
+  await page.addInitScript(favoriteItemId => {
+    history.replaceState({ usr: { returnTo: '/wishlist', favoriteItemId }, key: 'fixture', idx: 0 }, '')
+  }, favoriteItemId)
+  await page.route('**/api/v1/**', route => {
+    const path = new URL(route.request().url()).pathname
+    if (path.endsWith('/customers/me')) return signedIn
+      ? route.fulfill({ json: envelope({ id: customerId, email: 'customer@example.test' }) })
+      : route.fulfill({ status: 401, json: {} })
+    if (path.endsWith('/customers/wishlist/' + favoriteItemId))
+      return route.fulfill({ status: 429, headers: { 'retry-after': '60' }, json: { message: 'Too many requests' } })
+    if (path.endsWith('/customers/auth/logout')) {
+      signedIn = false
+      logouts++
+      return route.fulfill({ json: envelope({ success: true }) })
+    }
+    return route.fulfill({ json: envelope({ name: 'Coffee Homes', address: null, phone: null }) })
+  })
+  await page.goto('/customer/sign-in')
+  await page.getByRole('button', { name: 'Thêm vào yêu thích', exact: true }).click()
+  await expect(page.getByRole('alert')).toContainText('thao tác quá nhanh')
+  await expect(page.getByRole('button', { name: 'Thêm vào yêu thích', exact: true })).toBeDisabled()
+  await page.getByRole('button', { name: 'Đổi tài khoản', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Google customer fixture' })).toBeVisible()
+  expect(logouts).toBe(1)
+})
+
 test('switching customer accounts handles logout failure and preserves the pending favorite', async ({ page, context }) => {
   const firstId = '80000000-0000-4000-8000-000000000001'
   const secondId = '80000000-0000-4000-8000-000000000002'

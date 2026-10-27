@@ -147,6 +147,41 @@ test('online offer options, exact price and checkout share one request identity'
   ])
 })
 
+test('online offers refresh availability without changing the basket assignment', async ({ page }) => {
+  const offers: Record<string, unknown>[] = []
+  await page.route('**/api/v1/recommendations/online', route => {
+    offers.push(route.request().postDataJSON())
+    return route.fulfill({ json: envelope({ variant: 'TREATMENT', recommendations: offers.length === 1 ? [{ ...candidate, menuItemId: candidate.id }] : [] }) })
+  })
+  await openCheckout(page)
+  await page.clock.install()
+  await page.getByRole('button', { name: 'Xem lại đơn', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Thêm Cake fixture', exact: true })).toBeVisible()
+  await page.clock.runFor(31_000)
+  await expect.poll(() => offers.length).toBe(2)
+  await expect(page.getByRole('button', { name: 'Thêm Cake fixture', exact: true })).toHaveCount(0)
+  expect(offers[1]).toEqual(offers[0])
+})
+
+test('a failed background offer hides stale suggestions and stops automatic polling', async ({ page }) => {
+  let calls = 0
+  await page.route('**/api/v1/recommendations/online', route => {
+    calls++
+    return calls === 1
+      ? route.fulfill({ json: envelope({ variant: 'TREATMENT', recommendations: [{ ...candidate, menuItemId: candidate.id }] }) })
+      : route.fulfill({ status: 503, json: {} })
+  })
+  await openCheckout(page)
+  await page.clock.install()
+  await page.getByRole('button', { name: 'Xem lại đơn', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Thêm Cake fixture', exact: true })).toBeVisible()
+  await page.clock.runFor(31_000)
+  await expect(page.getByRole('status').filter({ hasText: 'Gợi ý tạm thời' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Thêm Cake fixture', exact: true })).toHaveCount(0)
+  await page.clock.runFor(61_000)
+  expect(calls).toBe(2)
+})
+
 test('control checkout gets no offer and sends the same assignment key', async ({ page }) => {
   let assignment: Record<string, unknown> | undefined
   let order: Record<string, unknown> | undefined
@@ -164,6 +199,37 @@ test('control checkout gets no offer and sends the same assignment key', async (
   await expect(page.getByRole('region', { name: 'Gọi kèm', exact: true })).toHaveCount(0)
   await page.getByRole('button', { name: 'Gửi đơn mang đi', exact: true }).click()
   await expect.poll(() => order?.clientRequestId).toBe(assignment!.clientRequestId)
+})
+
+test('the control group does not poll a permanently empty offer', async ({ page }) => {
+  let calls = 0
+  await page.route('**/api/v1/recommendations/online', route => {
+    calls++
+    return route.fulfill({ json: envelope({ variant: 'CONTROL', recommendations: [] }) })
+  })
+  await openCheckout(page)
+  await page.clock.install()
+  await page.getByRole('button', { name: 'Xem lại đơn', exact: true }).click()
+  await expect.poll(() => calls).toBe(1)
+  await page.clock.runFor(91_000)
+  expect(calls).toBe(1)
+})
+
+test('an uncertain submitted checkout stops refreshing its treatment offers', async ({ page }) => {
+  let calls = 0
+  await page.route('**/api/v1/recommendations/online', route => {
+    calls++
+    return route.fulfill({ json: envelope({ variant: 'TREATMENT', recommendations: [{ ...candidate, menuItemId: candidate.id }] }) })
+  })
+  await page.route('**/api/v1/online-orders/requests', route => route.abort())
+  await openCheckout(page)
+  await page.getByRole('button', { name: 'Xem lại đơn', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Thêm Cake fixture', exact: true })).toBeVisible()
+  await page.getByRole('button', { name: 'Gửi đơn mang đi', exact: true }).click()
+  await expect(page.getByRole('alert')).toBeVisible()
+  await page.clock.install()
+  await page.clock.runFor(91_000)
+  expect(calls).toBe(1)
 })
 
 test('offer failure does not block ordering or trigger automatic retries', async ({ page }) => {

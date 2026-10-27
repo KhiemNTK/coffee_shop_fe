@@ -113,7 +113,7 @@ const mockHandovers = [
     retainedCash: '500000',
     transferAmount: '2150000',
     status: 'PENDING',
-    settlementStatus: 'PENDING',
+    settlementStatus: 'NOT_REQUIRED',
     settlementDueAt: null,
     resolvedAt: null,
     resolutionNote: null,
@@ -166,12 +166,12 @@ const mockExpenseRequests = [
     requestedById: 'other-emp-001',
     shiftId: 'shift-open-001',
     fundId: 'f-001',
-    reviewedById: null,
-    reviewedAt: null,
-    reviewNote: null,
+    resolvedById: null,
+    resolvedAt: null,
+    resolutionNote: null,
     createdAt: '2026-10-02T09:15:00.000Z',
     requestedBy: { id: 'other-emp-001', fullName: 'Nguyễn Thu Ngân' },
-    reviewedBy: null,
+    resolvedBy: null,
     fund: { id: 'f-001', name: 'Quỹ Tiền mặt Quầy Thu ngân 1' },
   },
 ]
@@ -231,7 +231,9 @@ test.describe('Cash & Shifts Management Feature (Slice 1)', () => {
     await page.route(/\/api\/v1\/cashier-shifts/, async (route) => {
       const url = route.request().url()
 
-      if (url.includes('/current/expense-requests')) {
+      if (url.includes('/mine/closed')) {
+        await route.fulfill({ json: envelope({ list: [mockClosedShift], totalItems: 1, totalPages: 1, currentPage: 1 }) })
+      } else if (url.includes('/current/expense-requests')) {
         await route.fulfill({
           json: envelope({
             list: mockExpenseRequests,
@@ -425,8 +427,8 @@ test.describe('Cash & Shifts Management Feature (Slice 1)', () => {
     await expect(dialog).toBeVisible()
     await expect(dialog.getByText('Lập biên bản Bàn giao Két tiền mặt')).toBeVisible()
 
-    await dialog.getByPlaceholder('UUID ca làm việc...').fill('shift-closed-001')
-    await dialog.locator('select').selectOption('f-002')
+    await dialog.getByLabel('Ca đã đóng của bạn').selectOption('shift-closed-001')
+    await dialog.getByLabel('Quỹ tiếp nhận bàn giao').selectOption('f-002')
     await dialog.getByPlaceholder('Ví dụ: 500000').fill('500000')
     await dialog.getByPlaceholder('Ghi chú người nhận, niêm phong túi tiền...').fill('Bàn giao nộp két an toàn')
 
@@ -600,14 +602,84 @@ test.describe('Cash & Shifts Management Feature (Slice 1)', () => {
     await expect(page.getByText('Đã tiếp nhận yêu cầu thu / chi tiền mặt!')).toHaveCount(0)
   })
 
-  test('pending expense approval does not claim that the cash fund was debited', async ({ page }) => {
-    await page.route('**/api/v1/cashier-shifts/current/transactions', route => route.fulfill({ json: envelope({ movement: null, fundBalance: '1500000', expenseRequest: mockExpenseRequests[0] }) }))
+  test('cashiers only request their own handovers and can recover a closed shift without a UUID', async ({ page }, testInfo) => {
+    await page.route('**/api/v1/auth/me/permissions', route => route.fulfill({ json: envelope({
+      employeeId: employee.id, employeeEmail: employee.email, roleNames: ['CASHIER'],
+      permissionKeys: ['/cashier-shifts_current', '/cashier-shifts_close', '/cash-handovers_create', '/funds_read'],
+    }) }))
+    const requests: string[] = []
+    await page.route(/\/api\/v1\/cash-handovers/, route => {
+      requests.push(new URL(route.request().url()).pathname)
+      return route.fulfill({ json: envelope({ list: [mockHandovers[1]], currentPage: 1, totalPages: 1, totalItems: 1 }) })
+    })
+    await page.goto('/staff/shifts?tab=handovers')
+    await expect(page.getByRole('button', { name: 'Của tôi', exact: true })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Tất cả biên bản', exact: true })).not.toBeVisible()
+    await expect(page.getByRole('button', { name: 'Quá hạn SLA', exact: true })).not.toBeVisible()
+    await expect.poll(() => requests.length).toBeGreaterThan(0)
+    expect(requests.every(path => path.endsWith('/cash-handovers/mine'))).toBe(true)
+    await page.getByRole('button', { name: 'Lập biên bản bàn giao', exact: true }).click()
+    await page.getByLabel('Ca đã đóng của bạn').selectOption(mockClosedShift.id)
+    await expect(page.getByRole('dialog').getByText(/Quỹ Tiền mặt Quầy Thu ngân 1/)).toContainText('2.650.000')
+    await expect(page.getByPlaceholder('UUID ca làm việc...')).not.toBeVisible()
+    await page.screenshot({ path: testInfo.outputPath('cashier-handover.png'), fullPage: true })
+  })
+
+  test('a successful close keeps the closed shift for immediate handover', async ({ page }) => {
+    let closed = false
+    const closedShift = { ...mockClosedShift, id: mockOpenShift.id }
+    await page.route('**/api/v1/cashier-shifts/current', route => route.fulfill(closed ? { status: 404, json: {} } : { json: envelope(mockOpenShift) }))
+    await page.route('**/api/v1/cashier-shifts/current/close', route => { closed = true; return route.fulfill({ json: envelope(closedShift) }) })
+    await page.route('**/api/v1/cashier-shifts/mine/closed?*', route => route.fulfill({ json: envelope({ list: [closedShift], currentPage: 1, totalPages: 1, totalItems: 1 }) }))
     await page.goto('/staff/shifts')
+    await page.getByPlaceholder('Ví dụ: 2500000').fill('2650000')
+    await page.getByRole('button', { name: 'Xác nhận đóng ca & Chốt sổ', exact: true }).click()
+    await expect(page.getByText('Ca làm việc vừa kết thúc', { exact: true })).toBeVisible()
+    await page.getByRole('button', { name: 'Bàn giao két cho ca mới', exact: true }).click()
+    await expect(page.getByLabel('Ca đã đóng của bạn')).toHaveValue(mockOpenShift.id)
+  })
+
+  for (const kind of ['handovers', 'expenses'] as const) {
+    test(`${kind} lists support page two and show read failures separately from empty results`, async ({ page }) => {
+      let available = true
+      const pages: string[] = []
+      await page.route(kind === 'handovers' ? /\/api\/v1\/cash-handovers/ : /\/api\/v1\/cashier-shifts\/expense-requests/, route => {
+        const requestedPage = new URL(route.request().url()).searchParams.get('page') ?? '1'
+        pages.push(requestedPage)
+        return available ? route.fulfill({ json: envelope({ list: kind === 'handovers' ? mockHandovers : mockExpenseRequests, currentPage: Number(requestedPage), totalPages: 2, totalItems: 51 }) })
+          : route.fulfill({ status: 503, json: {} })
+      })
+      await page.goto(`/staff/shifts?tab=${kind}`)
+      await page.getByRole('button', { name: 'Trang sau', exact: true }).click()
+      await expect.poll(() => pages.includes('2')).toBe(true)
+      available = false
+      await page.reload()
+      await expect(page.getByRole('alert')).toBeVisible()
+      await expect(page.getByText(kind === 'handovers' ? 'Không có biên bản bàn giao nào.' : 'Không có yêu cầu chi tiền nào.')).not.toBeVisible()
+      available = true
+      await page.getByRole('button', { name: 'Thử lại', exact: true }).click()
+      await expect(page.getByRole('alert')).not.toBeVisible()
+    })
+  }
+
+  test('pending expense approval does not claim that the cash fund was debited', async ({ page }) => {
+    let requested = false
+    await page.route('**/api/v1/cashier-shifts/expense-requests?*', route => route.fulfill({ json: envelope({ list: requested ? mockExpenseRequests : [], totalItems: requested ? 1 : 0, totalPages: 1, currentPage: 1 }) }))
+    await page.route('**/api/v1/cashier-shifts/current/transactions', route => {
+      requested = true
+      return route.fulfill({ json: envelope({ movement: null, fundBalance: '1500000', expenseRequest: mockExpenseRequests[0] }) })
+    })
+    await page.goto('/staff/shifts')
+    await page.getByRole('button', { name: /Duyệt phiếu chi tiền/i }).click()
+    await expect(page.getByText('Không có yêu cầu chi tiền nào.')).toBeVisible()
+    await page.getByRole('button', { name: /Ca làm việc của tôi/i }).click()
     await page.getByRole('button', { name: 'Thêm giao dịch' }).click()
     await page.getByPlaceholder('Ví dụ: 100000').fill('150000')
     await page.getByRole('button', { name: /EXPENSE/ }).click()
     await page.getByPlaceholder('Ví dụ: Mua đá lạnh khẩn cấp...').fill(mockExpenseRequests[0]!.description)
     await page.getByRole('button', { name: 'Lưu giao dịch' }).click()
     await expect(page.getByText('Đã gửi phiếu chi chờ phê duyệt; chưa trừ quỹ.')).toBeVisible()
+    await page.getByRole('button', { name: /Duyệt phiếu chi tiền/i }).click()
+    await expect(page.getByRole('cell', { name: mockExpenseRequests[0]!.description, exact: true })).toBeVisible()
   })
 })

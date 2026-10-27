@@ -145,7 +145,7 @@ test('reports missing authorization and exception fields without accepting an ol
   expect(failures).toEqual([
     { code: 'CLIENT_RESPONSE_INVALID', issues: ['data.canManagePermissions: invalid_type'] },
     { code: 'CLIENT_RESPONSE_INVALID', issues: ['data.canManageRoles: invalid_type', 'data.assignableRoleIds: invalid_type'] },
-    { code: 'CLIENT_RESPONSE_INVALID', issues: ['data.counts.KITCHEN_OVERDUE: invalid_type', 'data.counts.ONLINE_PICKUP_LATE: invalid_type', 'data.counts.OUTBOX_DEAD_LETTER: invalid_type'] },
+    { code: 'CLIENT_RESPONSE_INVALID', issues: ['data.counts.KITCHEN_OVERDUE: invalid_type', 'data.counts.ONLINE_PICKUP_LATE: invalid_type', 'data.counts.OUTBOX_DEAD_LETTER: invalid_type', 'data.counts.PRINT_REVIEW: invalid_type'] },
   ])
 })
 

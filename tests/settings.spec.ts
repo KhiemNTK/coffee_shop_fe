@@ -34,6 +34,7 @@ const mockEquipment = [
   {
     id: 'eq-001',
     assetCode: 'EQ-ESPRESSO-01',
+    updatedAt: '2026-10-01T00:00:00.000Z',
     serialNumber: 'SN-LM-9921',
     name: 'Máy Pha Cà Phê La Marzocco',
     status: 'IN_USE',
@@ -51,6 +52,7 @@ const mockEquipment = [
   {
     id: 'eq-002',
     assetCode: 'EQ-GRINDER-01',
+    updatedAt: '2026-10-01T00:00:00.000Z',
     serialNumber: 'SN-MK-4412',
     name: 'Máy Xay Cà Phê Mahlkonig',
     status: 'MAINTENANCE',
@@ -68,6 +70,7 @@ const mockEquipment = [
   {
     id: 'eq-003',
     assetCode: 'EQ-BLENDER-01',
+    updatedAt: '2026-10-01T00:00:00.000Z',
     serialNumber: 'SN-VM-1102',
     name: 'Máy Xay Sinh Tố Vitamix',
     status: 'BROKEN',
@@ -157,6 +160,7 @@ const mockExceptionsSummary = {
     KITCHEN_OVERDUE: 0,
     ONLINE_PICKUP_LATE: 0,
     OUTBOX_DEAD_LETTER: 0,
+    PRINT_REVIEW: 0,
   },
   total: 4,
 }
@@ -240,6 +244,7 @@ test.describe('Settings, Equipment and Exceptions Management', () => {
         return route.fulfill({
           json: envelope({
             id: 'eq-new',
+            updatedAt: '2026-10-01T00:00:00.000Z',
             assetCode: body.assetCode || 'EQ-NEW-01',
             name: body.name || 'Thiết bị mới',
             status: 'IN_USE',
@@ -435,6 +440,24 @@ test.describe('Settings, Equipment and Exceptions Management', () => {
     await expect(
       page.getByText('Đã thêm thiết bị "Máy Lọc Nước Công Nghiệp" thành công'),
     ).toBeVisible()
+  })
+
+  test('equipment edits send the reviewed version and normalize cleared optional fields', async ({ page }) => {
+    let body: Record<string, unknown> | undefined
+    await page.route('**/api/v1/equipment/eq-001', route => {
+      body = route.request().postDataJSON()
+      return route.fulfill({ status: 409, json: { code: 'EQUIPMENT_CHANGED' } })
+    })
+    await page.goto('/staff/settings')
+    await page.getByTitle('Chỉnh sửa thiết bị').first().click()
+    const dialog = page.getByRole('dialog')
+    const fields = dialog.getByRole('textbox')
+    await fields.nth(1).fill('   ')
+    await fields.nth(2).fill('')
+    await dialog.getByRole('button', { name: 'Lưu thay đổi', exact: true }).click()
+    await expect(dialog).toContainText('Thiết bị đã thay đổi')
+    expect(body).toMatchObject({ expectedUpdatedAt: mockEquipment[0]!.updatedAt, serialNumber: null, location: null })
+    await expect(dialog).toBeVisible()
   })
 
   test('transitions equipment status to maintenance', async ({ page }) => {

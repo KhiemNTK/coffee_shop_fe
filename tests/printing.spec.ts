@@ -71,9 +71,11 @@ const mockDevices = [
   },
 ]
 
+const receiptJobId = '30000000-0000-4000-8000-000000000001'
+const kitchenJobId = '30000000-0000-4000-8000-000000000002'
 const mockJobs = [
   {
-    id: 'job-001',
+    id: receiptJobId,
     type: 'RECEIPT',
     status: 'PRINTED',
     copies: 1,
@@ -95,7 +97,7 @@ const mockJobs = [
     reprintOfId: null,
   },
   {
-    id: 'job-002',
+    id: kitchenJobId,
     type: 'KITCHEN_TICKET',
     status: 'FAILED',
     copies: 1,
@@ -218,6 +220,9 @@ test.describe('Printing & Print Jobs Management', () => {
       }
 
       if (method === 'GET') {
+        const id = new URL(url).pathname.split('/').at(-1)
+        const detail = mockJobs.find((job) => job.id === id)
+        if (detail) return route.fulfill({ json: envelope(detail) })
         return route.fulfill({
           json: envelope({
             list: mockJobs,
@@ -246,7 +251,7 @@ test.describe('Printing & Print Jobs Management', () => {
           deviceId: 'dev-001',
           requestedById: employee.id,
           invoiceId: 'inv-1001',
-          reprintOfId: 'job-001',
+          reprintOfId: receiptJobId,
         }),
       })
     })
@@ -345,8 +350,8 @@ test.describe('Printing & Print Jobs Management', () => {
     await page.getByRole('button', { name: /Hàng đợi Lệnh in/i }).click()
 
     // Check table rows
-    await expect(page.getByText('job-001')).toBeVisible()
-    await expect(page.getByText('job-002')).toBeVisible()
+    await expect(page.getByText(receiptJobId)).toBeVisible()
+    await expect(page.getByText(kitchenJobId)).toBeVisible()
     await expect(page.getByText('Đã in', { exact: true })).toBeVisible()
     await expect(page.getByText('Thất bại', { exact: true })).toBeVisible()
 
@@ -360,6 +365,53 @@ test.describe('Printing & Print Jobs Management', () => {
 
     await retryDialog.getByRole('button', { name: /Thực hiện lại/i }).click()
     await expect(retryDialog).not.toBeVisible()
+  })
+
+  test('refreshes an open job detail from the server instead of keeping a stale list snapshot', async ({ page }) => {
+    let status = 'PROCESSING'
+    await page.route('**/api/v1/printing/jobs/' + receiptJobId, (route) => route.fulfill({ json: envelope({ ...mockJobs[0], status }) }))
+    await page.goto('/staff/printing')
+    await page.getByRole('button', { name: /Hàng đợi Lệnh in/i }).click()
+    await page.getByRole('row').filter({ hasText: receiptJobId }).getByRole('button', { name: 'Chi tiết', exact: true }).click()
+    const dialog = page.getByRole('dialog')
+    await expect(dialog.getByText('PROCESSING', { exact: true })).toBeVisible()
+    status = 'PRINTED'
+    await dialog.getByRole('button', { name: 'Làm mới chi tiết' }).click()
+    await expect(dialog.getByText('PRINTED', { exact: true })).toBeVisible()
+  })
+
+  test('requires a note and explicit reconciliation before an uncertain job can be retried', async ({ page }, info) => {
+    let job = { ...mockJobs[0], status: 'REQUIRES_REVIEW', printedAt: null as string | null }
+    const writes: unknown[] = []
+    await page.route('**/api/v1/printing/jobs**', (route) => {
+      const path = new URL(route.request().url()).pathname
+      if (path.endsWith('/resolve')) {
+        const body = route.request().postDataJSON()
+        writes.push(body)
+        job = { ...job, status: body.outcome === 'PRINTED' ? 'PRINTED' : 'FAILED' }
+        return route.fulfill({ json: envelope(job) })
+      }
+      return route.fulfill({ json: envelope(path.endsWith('/' + receiptJobId) ? job : { list: [job], totalPages: 1, totalItems: 1, currentPage: 1 }) })
+    })
+    await page.goto('/staff/printing')
+    await page.getByRole('button', { name: /Hàng đợi Lệnh in/i }).click()
+    await expect(page.getByRole('button', { name: 'Thử lại', exact: true })).toHaveCount(0)
+    await expect(page.getByRole('table').getByText('Cần đối soát', { exact: true })).toBeVisible()
+    await page.getByRole('button', { name: 'Đối soát lệnh in', exact: true }).click()
+    const dialog = page.getByRole('dialog')
+    const confirm = dialog.getByRole('button', { name: 'Đã kiểm tra: chưa in' })
+    await expect(confirm).toBeDisabled()
+    await expect(dialog.getByText(/dừng agent cũ/)).toBeVisible()
+    await dialog.getByLabel('Ghi chú đối soát').fill('Đã dừng agent và kiểm tra khay giấy')
+    await expect(confirm).toBeEnabled()
+    expect(await dialog.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true)
+    await page.screenshot({ path: info.outputPath('print-review.png') })
+    await confirm.click()
+    await expect(dialog.getByText('FAILED', { exact: true })).toBeVisible()
+    expect(writes).toEqual([{ outcome: 'NOT_PRINTED', reason: 'Đã dừng agent và kiểm tra khay giấy', expectedUpdatedAt: mockJobs[0]!.updatedAt }])
+    await dialog.getByRole('button', { name: 'Đóng', exact: true }).last().click()
+    await expect(page.getByRole('button', { name: 'Thử lại', exact: true })).toBeVisible()
+    expect(writes).toHaveLength(1)
   })
 
   test('reprint submits with Enter and announces success without mobile overflow', async ({

@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import type { ApiError as ClientApiError } from '../src/shared/api/client.js'
 import vi from '../src/shared/i18n/locales/vi.js'
 import en from '../src/shared/i18n/locales/en.js'
 import { i18n } from '../src/shared/i18n/index.js'
@@ -59,6 +60,51 @@ test('catalogs have identical keys and interpolation variables', () => {
     expect(variables(en[key]), key).toEqual(variables(vi[key]))
     expect(en[key].trim(), key).not.toBe('')
   }
+})
+
+test('database failures keep safe localized messages and never automatically replay writes', async ({ page }) => {
+  const calls: { path: string; body: Record<string, unknown> }[] = []
+  await page.route('**/api/v1/prisma-error-*', route => {
+    const path = new URL(route.request().url()).pathname
+    const busy = !calls.some(call => call.path === path)
+    calls.push({ path, body: route.request().postDataJSON() as Record<string, unknown> })
+    return route.fulfill({ status: busy ? 503 : 409, headers: busy ? { 'retry-after': '1' } : {},
+      json: { data: null, message: 'ERROR', code: busy ? 'DATABASE_BUSY' : 'TRANSACTION_CONFLICT', requestId: 'db-operation-request' } })
+  })
+  await page.goto('/')
+  const messages = await page.evaluate(async () => {
+    const clientPath = '/src/shared/api/client.ts'
+    const idempotencyPath = '/src/shared/api/idempotency.ts'
+    const localePath = '/src/shared/i18n/index.ts'
+    const schemaPath = '/src/features/operations/operations.api.ts'
+    const { ApiError, errorMessage } = await import(clientPath)
+    const { apiIdempotentMutate } = await import(idempotencyPath)
+    const { changeLanguage } = await import(localePath)
+    const { ManagementExceptionsSummarySchema } = await import(schemaPath)
+    const messages = []
+    for (const language of ['vi', 'en']) {
+      await changeLanguage(language)
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          await apiIdempotentMutate('/prisma-error-' + language, ManagementExceptionsSummarySchema, { command: 'same-body' }, { authenticated: false })
+          throw new Error('The fixture must reject this command')
+        } catch (error) {
+          if (!(error instanceof ApiError)) throw error
+          const detail = error as ClientApiError
+          messages.push({ message: errorMessage(error), code: detail.code, requestId: detail.requestId, hasRetryDeadline: detail.retryAt !== undefined })
+        }
+      }
+    }
+    return messages
+  })
+  expect(messages.map(item => item.message)).toEqual([
+    vi['error.databaseBusy'], vi['error.transactionConflict'], en['error.databaseBusy'], en['error.transactionConflict'],
+  ])
+  expect(messages.every(item => item.requestId === 'db-operation-request')).toBe(true)
+  expect(messages.map(item => item.hasRetryDeadline)).toEqual([true, false, true, false])
+  expect(calls).toHaveLength(4)
+  expect(calls[0]?.body).toEqual(calls[1]?.body)
+  expect(calls[2]?.body).toEqual(calls[3]?.body)
 })
 
 test('locale formatting keeps exact money, quantities and Vietnam business time', async () => {

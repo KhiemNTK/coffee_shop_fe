@@ -5,8 +5,8 @@ const menu = { id: '30000000-0000-4000-8000-000000000001', name: 'Fixture drink'
 const unit = { id: '40000000-0000-4000-8000-000000000001', name: 'kg' }
 const bean = { id: '50000000-0000-4000-8000-000000000001', name: 'Fixture beans', stock: '1.2345', reservedStock: '0', unit, categoryId: 'category', unitId: unit.id }
 const milk = { ...bean, id: '50000000-0000-4000-8000-000000000002', name: 'Fixture milk' }
-const recipe = { id: menu.id, name: menu.name, ingredients: [{ inventoryItemId: bean.id, quantity: '0.1234', inventoryItem: bean }] }
-const options = { id: menu.id, name: menu.name, optionGroups: [{ name: 'Topping', minSelected: 0, maxSelected: 1,
+const recipe = { id: menu.id, name: menu.name, revision: 'a'.repeat(64), ingredients: [{ inventoryItemId: bean.id, quantity: '0.1234', inventoryItem: bean }] }
+const options = { id: menu.id, name: menu.name, revision: 'b'.repeat(64), optionGroups: [{ name: 'Topping', minSelected: 0, maxSelected: 1,
   options: [{ name: 'Extra shot', priceDelta: '1500.25', ingredients: [{ inventoryItemId: bean.id, quantity: '0.0001', inventoryItem: bean }] }] }] }
 const permissions = ['/menu_read', '/menu_update', '/inventory_read']
 const paginated = (list: unknown[], currentPage = 1, totalPages = 1) => ({ list, currentPage, totalPages, totalItems: totalPages === 1 ? list.length : 51 })
@@ -82,13 +82,38 @@ for (const kind of ['recipe', 'options'] as const) {
     await expect(input).toBeEnabled()
     expect(writes).toBe(1)
   })
+
+  test(`${kind} stale revision requires a fresh read before saving again`, async ({ page }) => {
+    await openMenu(page)
+    let writes = 0
+    const nextRevision = 'c'.repeat(64)
+    await page.route(`**/api/v1/menu/items/${menu.id}/${kind}`, route => {
+      if (route.request().method() === 'GET') return route.fulfill({ json: envelope({ ...detail, revision: writes ? nextRevision : detail.revision }) })
+      writes++
+      expect(route.request().postDataJSON().expectedRevision).toBe(writes === 1 ? detail.revision : nextRevision)
+      return writes === 1
+        ? route.fulfill({ status: 409, json: { code: 'MENU_CONFIGURATION_CHANGED', message: 'Cấu hình đã thay đổi. Đọc lại trước khi lưu.' } })
+        : route.fulfill({ json: envelope({ ...detail, revision: nextRevision }) })
+    })
+    await page.getByTitle(title).click()
+    const dialog = page.getByRole('dialog')
+    await dialog.getByRole('button', { name: save, exact: true }).click()
+    await expect(dialog.getByRole('alert')).toContainText('Cấu hình đã thay đổi')
+    await expect(dialog.getByRole('button', { name: save, exact: true })).toHaveCount(0)
+    expect(writes).toBe(1)
+    await dialog.getByRole('button', { name: reload, exact: true }).click()
+    await expect(dialog.getByRole('button', { name: save, exact: true })).toBeEnabled()
+    await dialog.getByRole('button', { name: save, exact: true }).click()
+    await expect(dialog).not.toBeVisible()
+    expect(writes).toBe(2)
+  })
 }
 
 test('recipe saves exact four-decimal quantities and keeps draft edits on window focus', async ({ page }, info) => {
   await openMenu(page)
   let writes = 0
   await page.route(`**/api/v1/menu/items/${menu.id}/recipe`, route => {
-    if (route.request().method() === 'PUT') { writes++; expect(route.request().postDataJSON()).toEqual({ ingredients: [{ inventoryItemId: bean.id, quantity: '0.2345' }] }) }
+    if (route.request().method() === 'PUT') { writes++; expect(route.request().postDataJSON()).toEqual({ expectedRevision: recipe.revision, ingredients: [{ inventoryItemId: bean.id, quantity: '0.2345' }] }) }
     return route.fulfill({ json: envelope(recipe) })
   })
   await page.getByTitle('Công thức nguyên liệu').click()
@@ -124,7 +149,7 @@ test('saving options preserves and edits topping ingredients instead of deleting
   await page.route(`**/api/v1/menu/items/${menu.id}/options`, route => {
     if (route.request().method() === 'PUT') {
       writes++
-      expect(route.request().postDataJSON()).toEqual({ groups: [{ name: 'Topping', minSelected: 0, maxSelected: 1, options: [{ name: 'Extra shot', priceDelta: '2500.25', ingredients: [{ inventoryItemId: bean.id, quantity: '0.0002' }] }] }] })
+      expect(route.request().postDataJSON()).toEqual({ expectedRevision: options.revision, groups: [{ name: 'Topping', minSelected: 0, maxSelected: 1, options: [{ name: 'Extra shot', priceDelta: '2500.25', ingredients: [{ inventoryItemId: bean.id, quantity: '0.0002' }] }] }] })
     }
     return route.fulfill({ json: envelope(options) })
   })
@@ -144,7 +169,7 @@ test('clearing an existing recipe requires explicit confirmation', async ({ page
   await openMenu(page)
   let writes = 0
   await page.route(`**/api/v1/menu/items/${menu.id}/recipe`, route => {
-    if (route.request().method() === 'PUT') { writes++; expect(route.request().postDataJSON()).toEqual({ ingredients: [] }) }
+    if (route.request().method() === 'PUT') { writes++; expect(route.request().postDataJSON()).toEqual({ ingredients: [], expectedRevision: recipe.revision }) }
     return route.fulfill({ json: envelope(route.request().method() === 'GET' ? recipe : { ...recipe, ingredients: [] }) })
   })
   await page.getByTitle('Công thức nguyên liệu').click()

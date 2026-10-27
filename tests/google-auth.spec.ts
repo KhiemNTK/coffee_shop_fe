@@ -112,6 +112,18 @@ test('Google login waits for CAPTCHA, submits once and never persists credential
   ).toEqual({ local: { coffee_shop_language: 'vi' }, session: {} })
 })
 
+test('Google staff login restores the remembered location and still enforces route permissions', async ({ page, context }) => {
+  await staff(context)
+  await page.addInitScript(() => sessionStorage.setItem('coffee_shop_staff_return_to', '/staff/menu?category=coffee#items'))
+  await page.route('**/api/v1/auth/google', route => route.fulfill({ json: envelope({}) }))
+  await page.goto('/sign-in')
+  await page.getByRole('button', { name: 'Verify fixture' }).click()
+  await page.getByRole('button', { name: 'Google fixture' }).click()
+  await expect(page).toHaveURL('http://localhost:4173/staff/menu?category=coffee#items')
+  await expect(page.getByRole('heading', { name: 'Không có quyền truy cập', exact: true })).toBeVisible()
+  expect(await page.evaluate(() => sessionStorage.getItem('coffee_shop_staff_return_to'))).toBeNull()
+})
+
 test('blocked Google script can be retried without bypassing CAPTCHA', async ({
   page,
   context,

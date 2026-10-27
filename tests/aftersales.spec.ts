@@ -2,6 +2,7 @@ import { expect, test, type Page } from '@playwright/test'
 import { defaultMockAdminAuth, defaultMockAdminEmployee, envelope } from './helpers.js'
 
 const employeeId = defaultMockAdminEmployee.id
+const shiftId = '60000000-0000-4000-8000-000000000004'
 const invoiceId = 'invoice-aftersales'
 const itemId = '60000000-0000-4000-8000-000000000003'
 const timestamp = '2026-10-11T03:00:00.000Z'
@@ -20,7 +21,7 @@ const paged = (list: unknown[]) => ({ list, totalItems: list.length, totalPages:
 const refundFixture = (amount = '10000.25') => ({ id: 'cash-refund-1', invoiceId, amount, reason: 'Khách yêu cầu hoàn tiền',
   completedAt: timestamp, idempotencyKey: 'key-fixture', requestedById: employeeId,
   requestedBy: { id: employeeId, fullName: defaultMockAdminEmployee.fullName },
-  cashTransaction: { id: 'cash-movement', shiftId: 'shift-current', fundId: 'fund-cash' } })
+  cashTransaction: { id: 'cash-movement', shiftId, fundId: 'fund-cash' } })
 
 async function setup(page: Page, granted = permissions) {
   const state = { invoice: structuredClone(invoiceFixture), refunds: [] as ReturnType<typeof refundFixture>[],
@@ -36,7 +37,7 @@ async function setup(page: Page, granted = permissions) {
     ? route.fulfill({ status: 500, json: { message: 'History unavailable' } })
     : route.fulfill({ json: envelope({ ...paged(state.refunds), ...(state.totalItems === null ? {} : { totalItems: state.totalItems, totalPages: 2 }) }) }))
   await page.route('**/api/v1/cashier-shifts/current', route => state.shiftOpen ? route.fulfill({ json: envelope({
-    id: 'shift-current', employeeId, employee: { id: employeeId, fullName: 'Thu ngân' }, status: 'OPEN',
+    id: shiftId, employeeId, employee: { id: employeeId, fullName: 'Thu ngân' }, status: 'OPEN',
     openedAt: timestamp, startingCash: '200000', fundId: 'fund-cash', fund: { id: 'fund-cash', name: 'Quỹ tiền mặt', type: 'CASH', balance: '200000' },
   }) }) : route.fulfill({ status: 404, json: {} }))
   return state
@@ -76,7 +77,7 @@ test('cash payout requires confirmation and preserves immutable invoice total', 
   await expect(panel.getByText('Còn có thể hoàn').locator('..')).toContainText('50.000,25')
   await expect(page.getByRole('dialog', { name: /Hóa đơn #/ }).getByText('Hoàn một phần', { exact: true })).toBeVisible()
   expect(bodies).toHaveLength(1)
-  expect(bodies[0]).toMatchObject({ amount: '10000.25', reason: 'Khách yêu cầu hoàn tiền' })
+  expect(bodies[0]).toMatchObject({ amount: '10000.25', reason: 'Khách yêu cầu hoàn tiền', expectedShiftId: shiftId })
   await expect(panel.getByText('Đã thu ban đầu').locator('..')).toContainText('60.000,50')
   await page.screenshot({ path: info.outputPath('aftersales-invoice.png') })
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
@@ -135,6 +136,19 @@ test('a failed invoice reread cannot deadlock an already submitted cash refund',
   await expect(confirmation).toHaveCount(0)
   expect(bodies).toHaveLength(2)
   expect(bodies[0]).toEqual(bodies[1])
+})
+
+test('legacy cash refund recovery never substitutes the current shift', async ({ page }) => {
+  await setup(page)
+  const key = `coffee-shop:pending:private:intent:${employeeId}:cash-refund:${invoiceId}`
+  await page.addInitScript(key => sessionStorage.setItem(key, JSON.stringify({
+    payload: { amount: '10000', reason: 'Old pending refund' },
+    createdAt: Date.now(), idempotencyKey: '60000000-0000-4000-8000-000000000099', uncertain: true,
+  })), key)
+  const panel = await openAftersales(page)
+  await expect(panel.getByRole('button', { name: 'Kiểm tra lại cùng yêu cầu' })).toBeDisabled()
+  expect(await page.evaluate(key => sessionStorage.getItem(key), key)).toContain('60000000-0000-4000-8000-000000000099')
+  await expect(panel.getByRole('button', { name: 'Chi hoàn tiền', exact: true })).toBeDisabled()
 })
 
 test('corrupt recovery data fails closed instead of creating a fresh payout', async ({ page }) => {

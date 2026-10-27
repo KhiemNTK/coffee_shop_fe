@@ -71,7 +71,7 @@ test('uncertain KDS status requires a fresh read before the next step', async ({
             id,
             sequence: 1,
             ticketNumber: 'SAFE-1',
-            state: status === 'PENDING' ? 'PENDING' : 'IN_PROGRESS',
+            state: status === 'PENDING' ? 'PENDING' : status === 'READY' ? 'COMPLETED' : 'IN_PROGRESS',
             isOverdue: false,
             dueAt: date,
             createdAt: date,
@@ -253,7 +253,7 @@ test('online queue pages only the active tab and no-show requires review permiss
   await page.getByRole('tab', { name: 'Đang chế biến & Chờ nhận' }).click()
   await expect(page.getByRole('button', { name: 'Báo vắng mặt (No-show)' })).toBeEnabled()
   expect(reads[0]?.searchParams.get('page')).toBe('1')
-  await page.getByRole('checkbox', { name: 'Chỉ hiển thị đơn trễ hẹn' }).check()
+  await page.getByRole('checkbox', { name: 'Chỉ hiển thị đơn quá hạn', exact: true }).check()
   await expect
     .poll(() => reads.some((url) => url.searchParams.get('overdueOnly') === 'true'))
     .toBe(true)

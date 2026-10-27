@@ -82,6 +82,14 @@ The payment panel reopens the existing attempt URL through an explicit protected
 POST, without creating another payment. Pin CI `BACKEND_REF` to that backend
 revision before running the live contract suite.
 
+POS session opening requires the matching backend's `idempotencyKey` contract.
+The actor-scoped opening intent survives reload/logout in this tab. Unknown
+results resend only the original payload/key; corrupt or expired recovery data
+blocks a replacement opening. Unsent draft items block checkout buttons and F2.
+An online queue selection never moves to another order when polling removes it.
+Refund exceptions show their refund ID and manual-reconciliation limit, not a
+payment-reconciliation button; this does not add a refund-recovery API.
+
 Checkout and reorder read public intake availability. New ASAP orders stop
 outside configured shop hours; uncertain existing submissions keep their original
 identity and can be checked again. KDS events coalesce refreshes over 250 ms,
@@ -205,11 +213,20 @@ fixture runner on the same port.
 - Queries have a 30-second freshness window; private query data is cleared on
   identity changes and is never persisted. Cookie auth uses CSRF and coordinated
   refresh. Mutations are not automatically retried after timeout.
+- Staff session expiry keeps a validated `/staff` destination in tab-local
+  sessionStorage. Password and Google login restore it once, through normal route
+  permissions, without replaying writes. Explicit logout or cross-tab identity
+  changes clear it. Customer login and password recovery honor `Retry-After`
+  and show the backend support ID; security tokens are still discarded after use.
 - Idempotent operations retain a UUID and payload digest in sessionStorage until
   a valid success response. They do not persist raw request bodies or passwords.
 - Online checkout reviews the cart before submission and requests optional
   recommendations using the same `clientRequestId`. Required item options and
-  exact subtotal are supported. Uncertain submission locks the original payload
+  exact subtotal are supported. Visible treatment offers refresh every 30 seconds
+  and when returning online/focusing a stale tab, preserving their assignment.
+  Control cohorts, failed offers and locked submissions do not poll. A failed
+  refresh hides stale suggestions; final quotes still validate stock and prices.
+  Uncertain submission locks the original payload
   for explicit retry; offer failure does not prevent ordering. Experiment reports
   count server-confirmed paid orders, not client clicks or assumed sales lift.
 - Staff POS/invoices share the payment gateway panel. Provider readiness,

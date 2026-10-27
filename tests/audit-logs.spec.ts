@@ -82,13 +82,19 @@ test.describe('Audit Logs & System Trail Management', () => {
     await page.route('**/api/v1/audit-logs**', (route) => {
       const url = new URL(route.request().url())
       const actionType = url.searchParams.get('actionType')
+      const prefix = url.searchParams.get('actionPrefix')
+      const keyword = url.searchParams.get('keyword')
+      const requestId = url.searchParams.get('requestId')
 
       let filtered = [...mockAuditLogs]
       if (actionType) {
         filtered = filtered.filter((log) =>
-          log.actionType.toLowerCase().includes(actionType.toLowerCase()),
+          log.actionType === actionType,
         )
       }
+      if (prefix) filtered = filtered.filter(log => log.actionType.startsWith(`${prefix}_`))
+      if (keyword) filtered = filtered.filter(log => log.actionType.toLowerCase().includes(keyword.toLowerCase()) || log.requestId === keyword)
+      if (requestId) filtered = filtered.filter(log => log.requestId === requestId)
 
       return route.fulfill({
         json: envelope({
@@ -153,6 +159,22 @@ test.describe('Audit Logs & System Trail Management', () => {
 
     await expect(page.getByText('SYSTEM_SETTING_UPDATED')).toBeVisible()
     await expect(page.getByText('PROMOTION_CREATED')).not.toBeVisible()
+    await searchInput.fill('req-alpha-001')
+    await expect(page.getByText('PROMOTION_CREATED')).toBeVisible()
+    await expect(page.getByText('SYSTEM_SETTING_UPDATED')).not.toBeVisible()
+  })
+
+  test('an audit read failure shows retry instead of claiming there are no logs', async ({ page }) => {
+    let available = false
+    await page.route('**/api/v1/audit-logs**', route => available
+      ? route.fulfill({ json: envelope({ list: mockAuditLogs, totalPages: 1, totalItems: mockAuditLogs.length, currentPage: 1 }) })
+      : route.fulfill({ status: 503, json: {} }))
+    await page.goto('/staff/audit-logs')
+    await expect(page.getByRole('alert')).toBeVisible()
+    await expect(page.getByText('Không tìm thấy nhật ký kiểm toán nào')).not.toBeVisible()
+    available = true
+    await page.getByRole('button', { name: 'Thử lại', exact: true }).click()
+    await expect(page.getByText('PROMOTION_CREATED')).toBeVisible()
   })
 
   test('opens audit log detail dialog and views formatted payload', async ({ page }) => {

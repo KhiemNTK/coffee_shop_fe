@@ -22,7 +22,13 @@ test('wishlist is server-owned, survives reload, uses customer CSRF, and never r
   let employeeCalls = 0
   const pictured = { ...item, imageUrl: 'https://images.fixture.test/wishlist-latte.jpg' }
   if (info.project.name === 'mobile') await page.setViewportSize({ width: 320, height: 844 })
-  await page.route(pictured.imageUrl, (route) => route.fulfill({ path: 'public/iced-coffee.jpg', contentType: 'image/jpeg' }))
+  await page.route(pictured.imageUrl, (route) => route.fulfill({
+    contentType: 'image/png',
+    body: Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jS1sAAAAASUVORK5CYII=',
+      'base64',
+    ),
+  }))
   await context.addCookies([
     { name: 'customerCsrfToken', value: 'customer-csrf', url: 'http://localhost:4173' },
   ])
@@ -56,6 +62,8 @@ test('wishlist is server-owned, survives reload, uses customer CSRF, and never r
   })
   await page.goto('/wishlist')
   await expect(page.getByRole('heading', { name: item.name })).toBeVisible()
+  const image = page.locator(`img[src="${pictured.imageUrl}"]`)
+  await expect.poll(() => image.evaluate((node: HTMLImageElement) => node.naturalWidth)).toBeGreaterThan(0)
   await page.reload()
   await expect(page.getByRole('button', { name: 'Bỏ yêu thích' })).toHaveAttribute(
     'aria-pressed',

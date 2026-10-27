@@ -67,7 +67,7 @@ test('cards, detail and cart use a neutral placeholder for missing or failed ima
 
 test('storefront localizes its controls and loads responsive WebP artwork', async ({ page }, info) => {
   await page.addInitScript(() => localStorage.setItem('coffee_shop_language', 'en'))
-  await page.goto('/menu')
+  await page.goto('/')
   await expect(page.getByRole('heading', { name: 'A cup of coffee, a wonderful day.' })).toBeVisible()
   await expect(page.getByRole('article').getByText('Price', { exact: true })).toBeVisible()
   await expect(page.getByRole('link', { name: 'Customer sign-in', exact: true })).toBeVisible()

@@ -49,6 +49,33 @@ const paged = (list: unknown[]) => ({
   currentPage: 1,
 })
 
+for (const result of [
+  { name: 'confirmed', status: 'SUCCEEDED', signatureValid: true, message: 'Server đã ghi nhận thanh toán thành công.' },
+  { name: 'review', status: 'REQUIRES_REVIEW', signatureValid: true, message: 'Giao dịch cần được cửa hàng đối soát.' },
+  { name: 'unverified', status: 'SUCCEEDED', signatureValid: false, message: 'Không xác minh được liên kết thanh toán.' },
+]) {
+  test(`payment result presentation stays authoritative for ${result.name}`, async ({ page }, info) => {
+    await page.addInitScript(() => localStorage.setItem('coffee_theme', 'dark'))
+    if (info.project.name === 'mobile') await page.setViewportSize({ width: 320, height: 844 })
+    await page.emulateMedia({ reducedMotion: 'reduce' })
+    const methods: string[] = []
+    await page.route('**/api/v1/payments/momo/return*', (route) => {
+      methods.push(route.request().method())
+      return route.fulfill({ json: envelope({ signatureValid: result.signatureValid, attempt: { id: attempt.id, invoiceId: invoice.id, status: result.status } }) })
+    })
+    await page.goto('/payment/momo/return?resultCode=0')
+    await expect(page.getByRole('heading', { name: 'Kết quả thanh toán' })).toBeVisible()
+    await expect(page.getByRole('status')).toHaveText(result.message)
+    if (!result.signatureValid) await expect(page.getByText('Server đã ghi nhận thanh toán thành công.')).toHaveCount(0)
+    await expect(page.getByRole('link', { name: 'Về thực đơn' })).toHaveAttribute('href', '/menu')
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+    await page.getByRole('button', { name: 'Kiểm tra trạng thái', exact: true }).focus()
+    await expect(page.getByRole('button', { name: 'Kiểm tra trạng thái', exact: true })).toBeFocused()
+    await page.screenshot({ path: info.outputPath(`payment-result-${result.name}.png`) })
+    expect(methods.every((method) => method === 'GET')).toBe(true)
+  })
+}
+
 async function setup(
   page: Page,
   options: {
@@ -147,7 +174,7 @@ for (const paymentMethod of ['TRANSFER', 'CASH']) {
     await expect(page.getByRole('button', { name: 'Kiểm tra trạng thái', exact: true })).toBeEnabled()
     paid = true
     await page.getByRole('button', { name: 'Kiểm tra trạng thái', exact: true }).click()
-    await expect(page.getByText('Tổng hóa đơn:', { exact: false })).toContainText('Đã thanh toán')
+    await expect(page.getByRole('group', { name: 'Tổng quan thanh toán', exact: true })).toContainText('Đã thanh toán')
     await expect.poll(plays).toBe(paymentMethod === 'TRANSFER' ? 2 : 1)
     await page.getByRole('button', { name: 'Kiểm tra trạng thái', exact: true }).click()
     await expect(page.getByRole('button', { name: 'Kiểm tra trạng thái', exact: true })).toBeEnabled()
@@ -164,7 +191,7 @@ test('enabling payment sound does not replay an invoice paid while muted', async
   await openGateway(page)
   paid = true
   await page.getByRole('button', { name: 'Kiểm tra trạng thái', exact: true }).click()
-  await expect(page.getByText('Tổng hóa đơn:', { exact: false })).toContainText('Đã thanh toán')
+  await expect(page.getByRole('group', { name: 'Tổng quan thanh toán', exact: true })).toContainText('Đã thanh toán')
   expect(await page.evaluate(() => Reflect.get(window, 'audioFixture').plays)).toBe(0)
   await page.getByRole('button', { name: 'Bật và thử âm báo thanh toán' }).click()
   await expect(page.getByRole('button', { name: 'Tắt âm báo thanh toán' })).toHaveAttribute('aria-pressed', 'true')
@@ -236,9 +263,14 @@ test('payOS uses the shared gateway, preserves the link across reload, and stays
     'true'
   )
   await expect(page.getByRole('button', { name: 'payOS', exact: true })).toBeEnabled()
+  expect(
+    await page.getByRole('group', { name: 'Chọn cổng thanh toán' }).evaluate((element) =>
+      [...element.querySelectorAll('button')].every((button) =>
+        button.scrollWidth <= button.clientWidth && button.scrollHeight <= button.clientHeight))
+  ).toBe(true)
   await page.screenshot({ path: info.outputPath('payos-provider-options.png') })
   await page.getByRole('button', { name: 'Tạo phiên PAYOS', exact: true }).click()
-  await expect(page.getByRole('link', { name: 'Mở thanh toán PAYOS' })).toHaveAttribute(
+  await expect(page.getByRole('link', { name: 'Mở thanh toán payOS' })).toHaveAttribute(
     'href',
     payosLink
   )
@@ -248,7 +280,7 @@ test('payOS uses the shared gateway, preserves the link across reload, and stays
     .getByRole('button', { name: 'Cổng thanh toán (VNPay / MoMo / payOS)', exact: true })
     .click()
   await page.getByRole('button', { name: 'Mở lại QR thanh toán', exact: true }).click()
-  const paymentLink = page.getByRole('link', { name: 'Mở thanh toán PAYOS' })
+  const paymentLink = page.getByRole('link', { name: 'Mở thanh toán payOS' })
   await expect(paymentLink).toHaveAttribute('href', payosLink)
   await paymentLink.scrollIntoViewIfNeeded()
   await expect(paymentLink).toBeInViewport({ ratio: 1 })
@@ -260,16 +292,15 @@ test('payOS uses the shared gateway, preserves the link across reload, and stays
     .getContext('2d')!.getImageData(0, 0, 1, 1).data))).toEqual([255, 255, 255, 255])
   await expect(page.getByText('Đây là QR liên kết', { exact: false })).toBeVisible()
   expect({ creations, recoveries }).toEqual({ creations: 1, recoveries: 1 })
-  expect(
-    await page
-      .getByRole('group', { name: 'Chọn cổng thanh toán' })
-      .evaluate((element) =>
-        [...element.querySelectorAll('button')].every(
-          (button) =>
-            button.scrollWidth <= button.clientWidth && button.scrollHeight <= button.clientHeight
-        )
-      )
-  ).toBe(true)
+  await expect(page.getByRole('group', { name: 'Chọn cổng thanh toán' })).toHaveCount(0)
+  await qr.scrollIntoViewIfNeeded()
+  await expect(qr).toBeInViewport({ ratio: 1 })
+  await qr.locator('..').scrollIntoViewIfNeeded()
+  await expect.poll(() => qr.locator('..').evaluate((element) => {
+    const rect = element.getBoundingClientRect()
+    return [rect.top + 2, rect.bottom - 2].every((y) => element.contains(document.elementFromPoint(rect.left + rect.width / 2, y)))
+  })).toBe(true)
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
   await page.screenshot({ path: info.outputPath('payos-gateway.png') })
 })
 
@@ -287,7 +318,7 @@ test('created link survives reads without paymentUrl and paid UI waits for the i
   })
   await openGateway(page)
   await page.getByRole('button', { name: 'Tạo phiên VNPAY', exact: true }).click()
-  await expect(page.getByRole('link', { name: 'Mở thanh toán VNPAY' })).toHaveAttribute(
+  await expect(page.getByRole('link', { name: 'Mở thanh toán VNPay' })).toHaveAttribute(
     'href',
     link
   )
@@ -308,17 +339,17 @@ test('created link survives reads without paymentUrl and paid UI waits for the i
     .toBeGreaterThan(100)
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
   await qr.scrollIntoViewIfNeeded()
-  await page.getByRole('link', { name: 'Mở thanh toán VNPAY' }).scrollIntoViewIfNeeded()
+  await page.getByRole('link', { name: 'Mở thanh toán VNPay' }).scrollIntoViewIfNeeded()
   await expect(qr).toBeInViewport({ ratio: 1 })
-  await expect(page.getByRole('link', { name: 'Mở thanh toán VNPAY' })).toBeInViewport({ ratio: 1 })
+  await expect(page.getByRole('link', { name: 'Mở thanh toán VNPay' })).toBeInViewport({ ratio: 1 })
   await page.screenshot({ path: info.outputPath('payment-gateway.png') })
   status = 'SUCCEEDED'
   await page.getByRole('button', { name: 'Kiểm tra trạng thái', exact: true }).click()
-  await expect(page.getByRole('link', { name: 'Mở thanh toán VNPAY' })).toHaveCount(0)
-  await expect(page.getByText('Tổng hóa đơn:', { exact: false })).toContainText('Chờ thanh toán')
+  await expect(page.getByRole('link', { name: 'Mở thanh toán VNPay' })).toHaveCount(0)
+  await expect(page.getByRole('group', { name: 'Tổng quan thanh toán', exact: true })).toContainText('Chờ thanh toán')
   paid = true
   await page.getByRole('button', { name: 'Kiểm tra trạng thái', exact: true }).click()
-  await expect(page.getByText('Tổng hóa đơn:', { exact: false })).toContainText('Đã thanh toán')
+  await expect(page.getByRole('group', { name: 'Tổng quan thanh toán', exact: true })).toContainText('Đã thanh toán')
 })
 
 for (const status of ['PENDING', 'EXPIRED', 'REQUIRES_REVIEW']) {
@@ -342,7 +373,7 @@ test('an expired attempt offers reconciliation instead of a second payment', asy
   })
   await openGateway(page)
   await expect(page.getByRole('button', { name: 'Tạo phiên VNPAY', exact: true })).toBeDisabled()
-  await expect(page.getByRole('button', { name: 'Đối soát VNPAY', exact: true })).toBeEnabled()
+  await expect(page.getByRole('button', { name: 'Đối soát VNPay', exact: true })).toBeEnabled()
   await expect(page.getByRole('link', { name: /^Mở thanh toán/ })).toHaveCount(0)
 })
 
@@ -520,7 +551,7 @@ test('uncertain creation freezes provider and retry reuses the same key', async 
   await page.getByRole('button', { name: 'Kiểm tra lại lần tạo phiên', exact: true }).click()
   await expect.poll(() => bodies.length).toBe(2)
   expect(bodies[1]).toEqual(bodies[0])
-  await expect(page.getByRole('link', { name: 'Mở thanh toán VNPAY' })).toBeVisible()
+  await expect(page.getByRole('link', { name: 'Mở thanh toán VNPay' })).toBeVisible()
 })
 
 test('missing configuration and permissions do not expose unsafe commands', async ({ page }) => {
@@ -553,16 +584,16 @@ test('expired URL disappears on time without creating a replacement', async ({ p
   })
   await openGateway(page)
   await page.getByRole('button', { name: 'Tạo phiên VNPAY', exact: true }).click()
-  await expect(page.getByRole('link', { name: 'Mở thanh toán VNPAY' })).toBeVisible()
+  await expect(page.getByRole('link', { name: 'Mở thanh toán VNPay' })).toBeVisible()
   await page.clock.fastForward(65_000)
-  await expect(page.getByRole('link', { name: 'Mở thanh toán VNPAY' })).toHaveCount(0)
+  await expect(page.getByRole('link', { name: 'Mở thanh toán VNPay' })).toHaveCount(0)
   await expect(page.getByRole('status').filter({ hasText: 'Liên kết đã hết hạn' })).toBeVisible()
   expect(posts).toBe(1)
 })
 
 test('MoMo creation has a 35 second budget without changing default GET deadlines', async ({
   page,
-}) => {
+}, info) => {
   await setup(page)
   await page.route('**/api/v1/invoices/invoice-gateway/payment-attempts', (route) =>
     route.request().method() === 'GET'
@@ -586,7 +617,12 @@ test('MoMo creation has a 35 second budget without changing default GET deadline
   })
   await page.getByRole('button', { name: 'MoMo', exact: true }).click()
   await page.getByRole('button', { name: 'Tạo phiên MOMO', exact: true }).click()
-  await expect(page.getByRole('link', { name: 'Mở thanh toán MOMO' })).toBeVisible()
+  await expect(page.getByRole('link', { name: 'Mở thanh toán MoMo' })).toBeVisible()
+  const qr = page.getByRole('img', { name: 'Mã QR mở trang thanh toán' })
+  await expect(qr).toBeVisible()
+  await expect.poll(() => qr.evaluate((node) => Array.from((node as HTMLCanvasElement).getContext('2d')!.getImageData(0, 0, 1, 1).data))).toEqual([255, 255, 255, 255])
+  await qr.scrollIntoViewIfNeeded()
+  await page.screenshot({ path: info.outputPath('momo-gateway.png') })
   const budgets = await page.evaluate(() => (window as unknown as { budgets: number[] }).budgets)
   expect(budgets).toContain(35000)
   expect(budgets).toContain(10000)
@@ -610,7 +646,7 @@ test('reopens the same payment QR after a detail-tab change and reload', async (
   })
   await openGateway(page)
   await page.getByRole('button', { name: 'Tạo phiên VNPAY', exact: true }).click()
-  await expect(page.getByRole('link', { name: 'Mở thanh toán VNPAY' })).toHaveAttribute(
+  await expect(page.getByRole('link', { name: 'Mở thanh toán VNPay' })).toHaveAttribute(
     'href',
     link
   )
@@ -619,7 +655,7 @@ test('reopens the same payment QR after a detail-tab change and reload', async (
     .getByRole('button', { name: 'Cổng thanh toán (VNPay / MoMo / payOS)', exact: true })
     .click()
   await page.getByRole('button', { name: 'Mở lại QR thanh toán', exact: true }).click()
-  await expect(page.getByRole('link', { name: 'Mở thanh toán VNPAY' })).toHaveAttribute(
+  await expect(page.getByRole('link', { name: 'Mở thanh toán VNPay' })).toHaveAttribute(
     'href',
     link
   )
@@ -629,7 +665,7 @@ test('reopens the same payment QR after a detail-tab change and reload', async (
     .getByRole('button', { name: 'Cổng thanh toán (VNPay / MoMo / payOS)', exact: true })
     .click()
   await page.getByRole('button', { name: 'Mở lại QR thanh toán', exact: true }).click()
-  await expect(page.getByRole('link', { name: 'Mở thanh toán VNPAY' })).toHaveAttribute(
+  await expect(page.getByRole('link', { name: 'Mở thanh toán VNPay' })).toHaveAttribute(
     'href',
     link
   )
@@ -805,10 +841,10 @@ test('POS reuses the gateway panel after reviewing an actual invoice', async ({ 
   await openPos(page)
   await page.getByRole('button', { name: 'Quét mã QR', exact: true }).click()
   await page.getByRole('button', { name: 'Kiểm tra hóa đơn trước khi tạo QR', exact: true }).click()
-  await expect(page.getByText('Tổng hóa đơn:', { exact: false })).toContainText('35.000')
+  await expect(page.getByRole('group', { name: 'Tổng quan thanh toán', exact: true })).toContainText('35.000')
   expect(posts).toBe(0)
   await page.getByRole('button', { name: 'Tạo phiên VNPAY', exact: true }).click()
-  await expect(page.getByRole('link', { name: 'Mở thanh toán VNPAY' })).toBeVisible()
+  await expect(page.getByRole('link', { name: 'Mở thanh toán VNPay' })).toBeVisible()
   expect(posts).toBe(1)
 })
 

@@ -282,6 +282,14 @@ test('reorder shows unavailable selections and never silently creates an order',
 test('receipt posting confirms once and accepts the backend movement result', async ({ page }) => {
   let posted = false
   let writes = 0
+  const receipt = {
+    id: 'receipt-fixture', receiptNumber: 'PR-FIXTURE', status: 'DRAFT',
+    updatedAt: '2026-10-23T00:00:00.000Z', receivedAt: '2026-10-03T02:00:00.000Z',
+    supplierId: 'supplier-fixture', totalAmount: '123.45',
+    supplier: { id: 'supplier-fixture', code: 'SUP-FIXTURE', name: 'Fixture supplier' },
+    items: [{ inventoryItemId: 'item-fixture', inventoryItemName: 'Fixture beans', unitName: 'kg',
+      quantity: '1.2345', unitPrice: '100', totalAmount: '123.45' }],
+  }
   const paginated = (list: unknown[]) => ({
     list,
     currentPage: 1,
@@ -308,25 +316,18 @@ test('receipt posting confirms once and accepts the backend movement result', as
     if (url.pathname.endsWith('/receipt-fixture/post')) {
       writes++
       expect(route.request().postDataJSON().idempotencyKey).toMatch(/^[a-f0-9-]{36}$/)
+      expect(route.request().postDataJSON().expectedUpdatedAt).toBe(receipt.updatedAt)
       posted = true
       return route.fulfill({
         json: envelope({ id: 'receipt-fixture', status: 'POSTED', movements: [] }),
       })
     }
+    if (url.pathname.endsWith('/purchase-receipts/receipt-fixture'))
+      return route.fulfill({ json: envelope({ ...receipt, status: posted ? 'POSTED' : 'DRAFT' }) })
     if (url.pathname.endsWith('/purchase-receipts'))
       return route.fulfill({
         json: envelope(
-          paginated([
-            {
-              id: 'receipt-fixture',
-              receiptNumber: 'PR-FIXTURE',
-              updatedAt: '2026-10-23T00:00:00.000Z',
-              supplierId: 'supplier-fixture',
-              totalAmount: '123.45',
-              receivedAt: '2026-10-03T02:00:00.000Z',
-              status: posted ? 'POSTED' : 'DRAFT',
-            },
-          ])
+          paginated([{ ...receipt, status: posted ? 'POSTED' : 'DRAFT' }])
         ),
       })
     return route.fulfill({ json: envelope(paginated([])) })
@@ -337,6 +338,7 @@ test('receipt posting confirms once and accepts the backend movement result', as
   await page.getByRole('button', { name: 'Ghi sổ', exact: true }).click()
   expect(writes).toBe(0)
   const dialog = page.getByRole('dialog', { name: 'Xác nhận ghi sổ' })
+  await expect(dialog.getByRole('table', { name: 'Nội dung phiếu nhập cần xác nhận' })).toContainText('Fixture beans')
   await dialog.getByRole('button', { name: 'Xác nhận', exact: true }).click()
   await expect(page.getByText('Đã ghi sổ', { exact: false })).toBeVisible()
   expect(writes).toBe(1)
