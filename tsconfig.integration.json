@@ -4,5 +4,5 @@
     "types": ["node", "vite/client"],
     "paths": { "@/*": ["./src/*"], "/src/*": ["./src/*"] }
   },
-  "include": ["playwright*.config.ts", "tests/live-backend.spec.ts", "tests/backend-environment*.ts"]
+  "include": ["playwright*.config.ts", "tests/integration/**/*.ts", "tests/fixtures/live-backend.ts", "tests/backend-environment*.ts"]
 }

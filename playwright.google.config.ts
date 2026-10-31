@@ -9,6 +9,7 @@ export default defineConfig({
   webServer: {
     command: 'pnpm dev --port 4173 --mode browser-google',
     env: {
+      CI: 'true',
       VITE_TURNSTILE_SITE_KEY: 'browser-fixture-site-key',
       VITE_GOOGLE_CLIENT_ID: 'browser-fixture.apps.googleusercontent.com',
     },

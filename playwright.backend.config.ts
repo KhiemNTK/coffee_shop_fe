@@ -3,7 +3,7 @@ import { backendTestEnvironment } from './tests/backend-environment.ts'
 
 const env = backendTestEnvironment()
 export default defineConfig({
-  testDir: './tests', testMatch: '**/live-backend.spec.ts', outputDir: './test-results/backend',
+  testDir: './tests/integration', outputDir: './test-results/backend',
   fullyParallel: false, workers: 1, retries: 0,
   timeout: 120_000, expect: { timeout: 15_000 },
   forbidOnly: Boolean(process.env.CI), reporter: 'list',
@@ -18,6 +18,7 @@ export default defineConfig({
   webServer: [
     { command: 'pnpm --dir ../coffee_shop_be start:prod', env,
       url: 'http://127.0.0.1:8889/api/v1/health/ready', timeout: 120_000, reuseExistingServer: false },
-    { command: 'pnpm dev --port 4174 --mode browser-integration', env, url: 'http://localhost:4174', reuseExistingServer: false },
+    // Vite must not stop when the non-interactive runner closes stdin.
+    { command: 'pnpm dev --port 4174 --mode browser-integration', env: { ...env, CI: 'true' }, url: 'http://localhost:4174', reuseExistingServer: false },
   ],
 })

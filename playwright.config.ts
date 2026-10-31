@@ -3,7 +3,7 @@ import { defineConfig } from '@playwright/test'
 export default defineConfig({
   testDir: './tests',
   outputDir: './test-results/fixtures',
-  testIgnore: ['**/live-backend.spec.ts', '**/google-auth.spec.ts', '**/customer-google.spec.ts'],
+  testIgnore: ['**/integration/**', '**/google-auth.spec.ts', '**/customer-google.spec.ts'],
   fullyParallel: true,
   workers: 1,
   tsconfig: './tsconfig.app.json',
@@ -29,7 +29,8 @@ export default defineConfig({
   ],
   webServer: {
     command: 'pnpm dev --port 4173 --mode browser-fixtures',
-    env: { VITE_TURNSTILE_SITE_KEY: 'browser-fixture-site-key', VITE_GOOGLE_CLIENT_ID: '' },
+    // Keep the non-interactive Vite server independent of runner stdin.
+    env: { CI: 'true', VITE_TURNSTILE_SITE_KEY: 'browser-fixture-site-key', VITE_GOOGLE_CLIENT_ID: '' },
     url: 'http://localhost:4173',
     reuseExistingServer: false,
   },
