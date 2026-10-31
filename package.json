@@ -7,6 +7,8 @@
   "scripts": {
     "permissions:sync": "node tools/sync-permissions.mjs",
     "permissions:check": "node tools/sync-permissions.mjs --check",
+    "boundaries:check": "node tools/check-boundaries.mjs",
+    "test:architecture": "node --test --test-concurrency=1 tools/check-boundaries.test.mjs",
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "oxlint --deny-warnings",

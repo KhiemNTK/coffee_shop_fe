@@ -115,6 +115,35 @@ and the canonical backend skill for cross-repo work.
 
 ## Verification
 
+### Module Boundaries
+
+- `app/` composes routes, providers and application startup.
+- `features/<domain>/` owns API schemas, queries and workflows. Root files are
+  public entry points; `components/` and `hooks/` are private to that feature.
+  Other features import public entries directly, not pages or private folders.
+- `shared/` contains business-independent UI and infrastructure. It must not
+  import features or app code. Money validation lives in `shared/api/money.ts`;
+  exact arithmetic and display live in `shared/lib/money.ts` and `format.ts`.
+- Keep business components such as the storefront header in their feature.
+  Do not add feature-wide barrels or duplicate a component to shorten an import.
+
+Run `pnpm boundaries:check` and `pnpm test:architecture` before pushing.
+CI checks dependency direction, private imports and runtime import cycles.
+Checkout rendering and its workflow are separated into `cart-checkout-drawer.tsx`
+and the feature-private `hooks/use-cart-checkout.ts`; API contracts, CAPTCHA and
+same-key recovery remain unchanged.
+
+Real-backend tests live in `tests/integration/`, grouped by business workflow.
+Each test receives its own actor, catalog and funds from
+`tests/fixtures/live-backend.ts`. Tests needing cash collection open their own
+shift through the API; none depends on an earlier test having succeeded.
+Each worker owns one Prisma Client and disconnects it at teardown; test data
+remains independent without creating a new connection pool for every case.
+Data stays in the guarded,
+disposable test database; immutable ledgers are not deleted between tests.
+Run a focused group with
+`pnpm test:integration tests/integration/checkout.spec.ts --workers=1`.
+
 Purchase receipts use server-computed totals and costing. An uncertain draft
 creation freezes its original payload for an explicit same-key retry; posted
 documents are read-only. Receipt posting, duplicate requests and atomic stock,
@@ -189,6 +218,8 @@ tests run on four independent shards with one worker each; Google fixtures and
 the real-backend contract have separate jobs. The final `verify` check requires
 all jobs to succeed, preserving the required-check name used by branch protection.
 Each browser job uploads its HTML report and available traces/screenshots.
+Playwright starts Vite with `CI=true`, including local runs, so closing the
+runner's stdin cannot stop the frontend server midway through a suite.
 Run one shard locally with `pnpm test:e2e --shard=1/4 --workers=1`, changing the
 index through `4/4` to cover the suite. Do not combine the Google suite with a
 fixture runner on the same port.
