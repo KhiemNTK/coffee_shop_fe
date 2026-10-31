@@ -1,3 +1,4 @@
+import { moneySchema } from '@/shared/api/money'
 import { useId, useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import { X } from 'lucide-react'
@@ -5,7 +6,6 @@ import { type InventoryItem, createInventoryItem, updateInventoryItem } from '..
 import { errorMessage } from '../../../shared/api/client'
 import { Button, Dialog, Input } from '../../../shared/ui'
 import { quantitySchema } from '../quantity'
-import { moneySchema } from '../../menu/menu.api'
 
 export function CreateItemDialog({
   categories,

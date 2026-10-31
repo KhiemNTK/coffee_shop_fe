@@ -1,9 +1,9 @@
+import { decimalAmount, minorAmount } from '@/shared/lib/money'
+import { moneySchema } from '@/shared/api/money'
 import { z } from 'zod'
 import { apiGet, apiMutate, ApiError } from '../../shared/api/client'
 import { apiIdempotentMutate, clearPendingOperationByKey, findPendingOperationKey } from '../../shared/api/idempotency'
 import { readPendingIntent, writePendingIntent } from '../../shared/api/pending-intent'
-import { decimalAmount, minorAmount } from '../../shared/lib/money'
-import { moneySchema } from '../menu/menu.api'
 import { selectedOptionsSchema } from '../../shared/api/order-options'
 import { publicFeedbackSchema } from './feedback'
 

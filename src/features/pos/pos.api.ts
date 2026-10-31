@@ -1,7 +1,8 @@
+import { moneySchema } from '@/shared/api/money'
 import { z } from 'zod'
 import { apiGet, apiMutate } from '../../shared/api/client'
 import { apiIdempotentMutate } from '../../shared/api/idempotency'
-import { itemSchema, moneySchema } from '../menu/menu.api'
+import { itemSchema } from '../menu/menu.api'
 import { selectedOptionsSchema } from '../../shared/api/order-options'
 import { originalRemakeSchema, replacementRemakeSchema } from '../../shared/api/order-remakes'
 

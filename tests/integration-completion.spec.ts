@@ -275,7 +275,7 @@ test('an uncertain promoted checkout freezes its quote and retries the same inte
   await expect(dialog.getByRole('alert')).toBeVisible()
   const quoteCount = quotes
   await page.evaluate(async (actorId) => {
-    const path = '/src/app/query-client.ts'
+    const path = '/src/shared/api/query-client.ts'
     const { queryClient } = await import(/* @vite-ignore */ path)
     await queryClient.invalidateQueries({ queryKey: ['private', actorId, 'pos-quote'] })
   }, defaultMockAdminEmployee.id)

@@ -1,5 +1,5 @@
+import { moneySchema } from '@/shared/api/money'
 import { z } from 'zod'
-import { moneySchema } from '../menu/menu.api'
 import {
   inventoryItemSchema,
   reorderAlertRowSchema,

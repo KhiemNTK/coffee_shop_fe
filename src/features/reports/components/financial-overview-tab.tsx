@@ -1,3 +1,4 @@
+import { formatPrice } from '@/shared/lib/format'
 import {
   AlertTriangle,
   CreditCard,
@@ -9,7 +10,6 @@ import {
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { DashboardReport } from '../reports.api'
-import { formatPrice } from '../../menu/menu.api'
 import { formatQuantity } from '../../inventory/quantity'
 import { errorMessage } from '../../../shared/api/client'
 import { AdminTable, Badge, Button, OperationsSummary, cn } from '../../../shared/ui'

@@ -1,8 +1,8 @@
 import { Link, useOutletContext } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { ArrowRight } from 'lucide-react'
-import type { Session } from '../../auth/session'
-import { buttonVariants } from '../../../shared/ui'
+import type { Session } from '@/features/auth/session'
+import { buttonVariants } from '@/shared/ui/index'
 
 export function ShiftRequiredLink() {
   const { access } = useOutletContext<Session>()

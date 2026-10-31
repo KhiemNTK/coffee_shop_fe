@@ -9,6 +9,11 @@ const tab = (page: Page) => page.getByRole('tab', { name: 'Phân tích kinh doan
 const panel = (page: Page) => page.getByRole('region', { name: 'Phân tích kinh doanh', exact: true })
 const create = (page: Page) => panel(page).getByRole('button', { name: 'Tạo phân tích', exact: true })
 
+async function showMetrics(page: Page) {
+  const details = panel(page).locator('details').filter({ has: page.locator('summary', { hasText: 'Số liệu hệ thống' }) })
+  if (await details.getAttribute('open') === null) await details.locator('summary').click()
+}
+
 function queued(body: BusinessInsightRequest): BusinessInsight {
   return {
     id, status: 'QUEUED', requestedAt: now, model: 'gemini-3.5-flash-lite', promptVersion: 'business-finance-v2',
@@ -91,6 +96,7 @@ test('config is lazy; success polls to completion and preserves plain-text evide
   await expect(panel(page).getByRole('button', { name: 'Đang phân tích...' })).toBeDisabled()
   await page.clock.runFor(2_100)
   await expect(panel(page).getByRole('heading', { name: 'Quan sát và giả thuyết', exact: true })).toBeVisible()
+  await showMetrics(page)
   const row = panel(page).getByRole('row').filter({ hasText: 'Thực thu sau hoàn tiền' })
   await expect(row).toContainText('150.000,25')
   await expect(row).toContainText('120.000,10')
@@ -152,7 +158,7 @@ test('removing generation permission does not block viewing or polling an owned 
   await expect(panel(page).getByText('Đang xử lý phân tích.', { exact: true })).toBeVisible()
   currentPermissions.splice(1, 1)
   await page.evaluate(async () => {
-    const path = '/src/app/query-client.ts'
+    const path = '/src/shared/api/query-client.ts'
     const { queryClient } = await import(path)
     await queryClient.invalidateQueries({ queryKey: ['private', 'session'] })
   })
@@ -245,7 +251,7 @@ test('identity changes cannot display another employee result', async ({ page })
   await page.route('**/api/v1/auth/me', route => route.fulfill({ json: envelope({ ...defaultMockAdminEmployee, id: otherId }) }))
   await page.route('**/api/v1/auth/me/permissions', route => route.fulfill({ json: envelope({ ...defaultMockAdminAuth(permissions), employeeId: otherId }) }))
   await page.evaluate(async () => {
-    const path = '/src/app/query-client.ts'
+    const path = '/src/shared/api/query-client.ts'
     const { queryClient } = await import(path)
     await queryClient.invalidateQueries({ queryKey: ['private', 'session'] })
   })
@@ -265,6 +271,7 @@ test('money stays exact for signed and large decimals and unknown metric labels 
   })
   await open(page)
   await create(page).click()
+  await showMetrics(page)
   const row = panel(page).getByRole('row').filter({ hasText: 'Thực thu sau hoàn tiền' })
   await expect(row).toContainText('-12.345.678.901.234.567.890,12')
   await expect(row).toContainText('100.000')
@@ -396,6 +403,7 @@ test('contract accepts additional bounded metrics without changing the thirteen-
   })
   await open(page)
   await create(page).click()
+  await showMetrics(page)
   await expect(panel(page).getByRole('row').filter({ hasText: 'Chỉ số mở rộng 9' })).toBeVisible()
 })
 
@@ -411,9 +419,11 @@ test('reload recovers an accepted job using GET only and never persists business
   await page.route('**/api/v1/reports/insights/' + id, route => route.fulfill({ json: envelope(completed(body!)) }))
   await open(page)
   await create(page).click()
+  await showMetrics(page)
   await expect(panel(page).getByRole('table')).toBeVisible()
   await page.reload()
   await tab(page).click()
+  await showMetrics(page)
   await expect(panel(page).getByRole('table')).toBeVisible()
   expect(posts).toBe(1)
   const stored = await page.evaluate(() => JSON.stringify(Object.entries(sessionStorage)))
@@ -440,6 +450,7 @@ test('reload after an uncertain POST preserves its UUID and needs explicit retry
   await page.clock.runFor(5_000)
   expect(bodies).toHaveLength(1)
   await retry.click()
+  await showMetrics(page)
   await expect(panel(page).getByRole('table')).toBeVisible()
   expect(bodies).toHaveLength(2)
   expect(bodies[1]).toEqual(bodies[0])
@@ -536,6 +547,7 @@ test('server history opens across sessions with GET only, paginates and labels i
   await history.getByRole('button').filter({ hasText: 'Hoàn tất' }).click()
   await expect(panel(page).getByRole('heading', { name: 'Quan sát và giả thuyết', exact: true })).toBeVisible()
   await expect(panel(page).getByText('Kỳ của phân tích đã lưu', { exact: true })).toBeVisible()
+  await showMetrics(page)
   await panel(page).getByRole('combobox', { name: 'Nhóm chỉ số' }).selectOption('item')
   await expect(panel(page).getByRole('row').filter({ hasText: 'Món: Cà phê sữa' })).toContainText('99.000')
   await expect(panel(page).getByRole('row').filter({ hasText: 'Thực thu sau hoàn tiền' })).toHaveCount(0)
@@ -596,4 +608,219 @@ test('pending analysis has accessible reduced-motion loading without a fake perc
   await expect(panel(page).getByRole('progressbar')).toHaveCount(0)
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
   await page.screenshot({ path: info.outputPath('insight-loading.png'), fullPage: true })
+})
+
+async function savedHistory(page: Page) {
+  const body: BusinessInsightRequest = {
+    clientRequestId: '10000000-0000-4000-8000-000000000099',
+    from: '2026-10-08T17:00:00.000Z', to: '2026-10-09T17:00:00.000Z', timeZone: 'Asia/Ho_Chi_Minh',
+  }
+  const saved = { ...completed(body), id: 'b'.repeat(64) }
+  await page.route('**/api/v1/reports/insights?*', route => route.fulfill({ json: envelope({
+    items: [{ id: saved.id, status: saved.status, requestedAt: now, expiresAt: '2026-10-17T05:00:00.000Z', period: saved.period }],
+    nextCursor: null,
+  }) }))
+  await page.route('**/api/v1/reports/insights/' + saved.id, route => route.fulfill({ json: envelope(saved) }))
+  return saved
+}
+
+for (const failure of ['daily-limit', 'network'] as const) {
+  test(`history remains readable after ${failure} without losing the original retry`, async ({ page }) => {
+    await setup(page)
+    await savedHistory(page)
+    const bodies: BusinessInsightRequest[] = []
+    await page.route('**/api/v1/reports/insights', route => {
+      const body = route.request().postDataJSON() as BusinessInsightRequest
+      bodies.push(body)
+      if (bodies.length > 1) return route.fulfill({ status: 202, json: envelope(completed(body)) })
+      return failure === 'network' ? route.abort() : route.fulfill({ status: 429, json: { code: 'AI_DAILY_LIMIT' } })
+    })
+    await open(page)
+    await create(page).click()
+    await expect(panel(page).getByRole('alert')).toBeVisible()
+    const saved = panel(page).getByRole('region', { name: 'Lịch sử phân tích', exact: true }).getByRole('button').filter({ hasText: 'Hoàn tất' })
+    await expect(saved).toBeEnabled()
+    await saved.click()
+    await expect(panel(page).getByRole('heading', { name: 'Quan sát và giả thuyết', exact: true })).toBeVisible()
+    await expect(panel(page).getByRole('button', { name: 'Quay lại yêu cầu đang theo dõi', exact: true })).toBeVisible()
+    const reference = await page.evaluate(employeeId => sessionStorage.getItem(`coffee-shop:pending:private:intent:${employeeId}:business-insight`), defaultMockAdminEmployee.id)
+    expect(JSON.parse(reference!)).toMatchObject({ payload: { request: bodies[0], jobId: null } })
+    await page.reload()
+    await tab(page).click()
+    await saved.click()
+    await expect(panel(page).getByRole('heading', { name: 'Quan sát và giả thuyết', exact: true })).toBeVisible()
+    expect(bodies).toHaveLength(1)
+    await panel(page).getByRole('button', { name: 'Gửi lại yêu cầu', exact: true }).click()
+    await expect(panel(page).getByRole('heading', { name: 'Quan sát và giả thuyết', exact: true })).toBeVisible()
+    expect(bodies).toHaveLength(2)
+    expect(bodies[1]).toEqual(bodies[0])
+  })
+}
+
+test('browsing history keeps a queued request polling and reload restores it without another POST', async ({ page }) => {
+  await setup(page)
+  await savedHistory(page)
+  let body: BusinessInsightRequest | undefined
+  let posts = 0
+  let polls = 0
+  let finish = false
+  await page.route('**/api/v1/reports/insights', route => {
+    posts++
+    body = route.request().postDataJSON() as BusinessInsightRequest
+    return route.fulfill({ status: 202, json: envelope(queued(body)) })
+  })
+  await page.route('**/api/v1/reports/insights/' + id, route => {
+    polls++
+    const result = finish ? completed(body!) : queued(body!)
+    if (result.analysis) result.analysis.summary = 'Báo cáo mới đã hoàn tất.'
+    return route.fulfill({ json: envelope(result) })
+  })
+  await open(page)
+  await create(page).click()
+  await expect(panel(page).getByText('Yêu cầu đang chờ xử lý.', { exact: true })).toBeVisible()
+  const saved = panel(page).getByRole('region', { name: 'Lịch sử phân tích', exact: true }).getByRole('button').filter({ hasText: 'Hoàn tất' })
+  await expect(saved).toBeEnabled()
+  await saved.click()
+  await expect(panel(page).getByRole('heading', { name: 'Quan sát và giả thuyết', exact: true })).toBeVisible()
+  const before = polls
+  await page.clock.runFor(6_100)
+  expect(polls).toBeGreaterThan(before)
+  finish = true
+  await page.clock.runFor(2_100)
+  await expect(saved).toHaveAttribute('aria-pressed', 'true')
+  await expect(panel(page).getByText('Báo cáo mới đã hoàn tất.', { exact: true })).toHaveCount(0)
+  await panel(page).getByRole('button', { name: 'Quay lại yêu cầu đang theo dõi', exact: true }).click()
+  await expect(panel(page).getByText('Báo cáo mới đã hoàn tất.', { exact: true })).toBeVisible()
+  await page.reload()
+  await tab(page).click()
+  await expect(panel(page).getByText('Báo cáo mới đã hoàn tất.', { exact: true })).toBeVisible()
+  expect(posts).toBe(1)
+})
+
+test('the report refresh reloads AI reads without regenerating or changing the request period', async ({ page }) => {
+  const configs = await setup(page, [...permissions, '/reports_export'])
+  const bodies: BusinessInsightRequest[] = []
+  let restored = false
+  let polls = 0
+  await page.route('**/api/v1/reports/insights', route => {
+    const body = route.request().postDataJSON() as BusinessInsightRequest
+    bodies.push(body)
+    return route.fulfill({ status: 202, json: envelope(queued(body)) })
+  })
+  await page.route('**/api/v1/reports/insights/' + id, route => {
+    polls++
+    return restored ? route.fulfill({ json: envelope(completed(bodies[0]!)) }) : route.fulfill({ status: 503, json: { code: 'AI_QUEUE_UNAVAILABLE' } })
+  })
+  await open(page)
+  await expect(page.getByRole('button', { name: 'Xuất Excel', exact: true })).toHaveCount(0)
+  await create(page).click()
+  await expect(panel(page).getByRole('alert')).toContainText('Dịch vụ phân tích hiện không khả dụng.')
+  const before = polls
+  restored = true
+  await page.getByRole('button', { name: 'Làm mới dữ liệu', exact: true }).click()
+  await expect(panel(page).getByRole('heading', { name: 'Quan sát và giả thuyết', exact: true })).toBeVisible()
+  expect(polls).toBeGreaterThan(before)
+  expect(configs).toHaveLength(2)
+  expect(bodies).toHaveLength(1)
+  const reference = await page.evaluate(employeeId => sessionStorage.getItem(`coffee-shop:pending:private:intent:${employeeId}:business-insight`), defaultMockAdminEmployee.id)
+  expect(JSON.parse(reference!)).toMatchObject({ payload: { request: bodies[0], jobId: id } })
+})
+
+test('completed insights prioritise findings and switch UI language without translating or regenerating saved content', async ({ page }, info) => {
+  await setup(page)
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: {
+      writeText: async (text: string) => { (window as Window & { copiedInsight?: string }).copiedInsight = text },
+    } })
+  })
+  let posts = 0
+  await page.route('**/api/v1/reports/insights', route => {
+    posts++
+    return route.fulfill({ status: 202, json: envelope(completed(route.request().postDataJSON() as BusinessInsightRequest)) })
+  })
+  await open(page)
+  await create(page).click()
+  const findings = panel(page).getByRole('heading', { name: 'Quan sát và giả thuyết', exact: true })
+  await expect(findings).toBeVisible()
+  await expect(panel(page).getByRole('table')).toHaveCount(0)
+  await expect(panel(page).getByText(/Có snapshot chi phí bằng 0/)).toBeVisible()
+  const details = panel(page).locator('summary', { hasText: 'Số liệu hệ thống' })
+  expect((await findings.boundingBox())!.y).toBeLessThan((await details.boundingBox())!.y)
+  await page.getByRole('combobox', { name: 'Ngôn ngữ', exact: true }).selectOption('en')
+  const english = page.getByRole('region', { name: 'Business insights', exact: true })
+  await expect.poll(() => page.getByRole('tab', { name: 'Business insights', exact: true }).evaluate(element => {
+    const bounds = element.closest('[role="tablist"]')!.getBoundingClientRect()
+    const tabBounds = element.getBoundingClientRect()
+    return tabBounds.left >= bounds.left - 1 && tabBounds.right <= bounds.right + 1
+  })).toBe(true)
+  await expect(english.getByRole('button', { name: 'Generate insights', exact: true })).toBeEnabled()
+  await expect(english.getByRole('heading', { name: 'Observations and hypotheses', exact: true })).toBeVisible()
+  await expect(english.getByText('Saved analysis and catalog labels remain in Vietnamese.', { exact: true })).toBeVisible()
+  await expect(english.getByText('Có thể do thay đổi nhu cầu', { exact: true })).toBeVisible()
+  await english.getByRole('button', { name: 'Copy insights', exact: true }).click()
+  await expect(english.getByRole('button', { name: 'Insights copied', exact: true })).toBeVisible()
+  const copied = await page.evaluate(() => (window as Window & { copiedInsight?: string }).copiedInsight)
+  expect(copied).toContain('Coffee Homes - Business insights')
+  expect(copied).toContain('System observation')
+  expect(copied).toContain('150,000.25')
+  expect(copied).toContain('Có thể do thay đổi nhu cầu')
+  await english.locator('summary', { hasText: 'System metrics' }).click()
+  await expect(english.getByRole('row').filter({ hasText: 'Net receipts after refunds' })).toContainText('150,000.25')
+  expect(posts).toBe(1)
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+  await english.locator('summary', { hasText: 'System metrics' }).click()
+  await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }))
+  await page.screenshot({ path: info.outputPath('insight-english-summary.png'), fullPage: true })
+})
+
+test('disabled generation and corrupt recovery do not prevent opening server history', async ({ page }) => {
+  await setup(page, ['/reports_read'], false)
+  await savedHistory(page)
+  let posts = 0
+  await page.route('**/api/v1/reports/insights', route => { posts++; return route.abort() })
+  await page.goto('/staff/reports')
+  await page.evaluate(employeeId => sessionStorage.setItem(`coffee-shop:pending:private:intent:${employeeId}:business-insight`, '{broken'), defaultMockAdminEmployee.id)
+  await page.reload()
+  await tab(page).click()
+  await expect(create(page)).toBeDisabled()
+  await panel(page).getByRole('region', { name: 'Lịch sử phân tích', exact: true }).getByRole('button').filter({ hasText: 'Hoàn tất' }).click()
+  await expect(panel(page).getByRole('heading', { name: 'Quan sát và giả thuyết', exact: true })).toBeVisible()
+  await expect(create(page)).toBeDisabled()
+  await expect(panel(page).getByRole('alert')).toContainText('Tham chiếu phân tích không đọc được')
+  expect(posts).toBe(0)
+})
+
+test('an accepted POST arriving during history browsing preserves the selection and recovery reference', async ({ page }) => {
+  await setup(page)
+  await savedHistory(page)
+  let pending: Route | undefined
+  let body: BusinessInsightRequest | undefined
+  let posts = 0
+  await page.route('**/api/v1/reports/insights', route => {
+    posts++
+    body = route.request().postDataJSON() as BusinessInsightRequest
+    pending = route
+  })
+  await page.route('**/api/v1/reports/insights/' + id, route => {
+    const result = completed(body!)
+    result.analysis!.summary = 'Yêu cầu đang theo dõi đã hoàn tất.'
+    return route.fulfill({ json: envelope(result) })
+  })
+  await open(page)
+  await create(page).click()
+  await expect.poll(() => !!pending).toBe(true)
+  const saved = panel(page).getByRole('region', { name: 'Lịch sử phân tích', exact: true }).getByRole('button').filter({ hasText: 'Hoàn tất' })
+  await expect(saved).toBeEnabled()
+  await saved.click()
+  await expect(panel(page).getByRole('heading', { name: 'Quan sát và giả thuyết', exact: true })).toBeVisible()
+  await pending!.fulfill({ status: 202, json: envelope(queued(body!)) })
+  await expect.poll(() => page.evaluate(employeeId => {
+    const reference = sessionStorage.getItem(`coffee-shop:pending:private:intent:${employeeId}:business-insight`)
+    return reference ? (JSON.parse(reference) as { payload: { jobId: string | null } }).payload.jobId : null
+  }, defaultMockAdminEmployee.id)).toBe(id)
+  await expect(saved).toHaveAttribute('aria-pressed', 'true')
+  await expect(panel(page).getByText('Yêu cầu đang theo dõi đã hoàn tất.', { exact: true })).toHaveCount(0)
+  await panel(page).getByRole('button', { name: 'Quay lại yêu cầu đang theo dõi', exact: true }).click()
+  await expect(panel(page).getByText('Yêu cầu đang theo dõi đã hoàn tất.', { exact: true })).toBeVisible()
+  expect(posts).toBe(1)
 })

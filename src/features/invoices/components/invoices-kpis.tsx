@@ -1,5 +1,5 @@
+import { formatPrice } from '@/shared/lib/format'
 import { Ban, Clock, Coins, FileText } from 'lucide-react'
-import { formatPrice } from '../../menu/menu.api'
 
 export function InvoicesKpis({ totalPaidAmount, totalItems, unpaidCount, voidedCount }: {
   totalPaidAmount: string; totalItems: number; unpaidCount: number; voidedCount: number

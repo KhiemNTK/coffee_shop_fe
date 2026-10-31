@@ -1,3 +1,4 @@
+import { formatPrice } from '@/shared/lib/format'
 import { useState, useDeferredValue } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
@@ -7,7 +8,6 @@ import {
   Trash2,
 } from 'lucide-react'
 import { errorMessage } from '../../../shared/api/client'
-import { formatPrice } from '../../menu/menu.api'
 import {
   createFund,
   deleteFund,

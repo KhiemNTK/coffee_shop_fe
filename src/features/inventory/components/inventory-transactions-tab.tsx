@@ -1,10 +1,9 @@
+import { formatPrice, formatDateTime } from '@/shared/lib/format'
 import { ArrowDownToLine, ArrowUpFromLine, RefreshCw } from 'lucide-react'
 import { type InventoryTransactionsResponse } from '../inventory.api'
-import { formatPrice } from '../../menu/menu.api'
 import { formatQuantity } from '../quantity'
 import { Badge, Button, Card, CardContent, cn } from '../../../shared/ui'
 import { errorMessage } from '../../../shared/api/client'
-import { formatDateTime } from '../../../shared/lib/format'
 
 interface InventoryTransactionsTabProps {
   data?: InventoryTransactionsResponse

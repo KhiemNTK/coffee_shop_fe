@@ -1,7 +1,7 @@
 import { useTranslation } from 'react-i18next'
 import { useMemo, useRef, useState } from 'react'
 import { Link, Navigate, NavLink, Outlet, useLocation, useNavigate, useOutletContext } from 'react-router-dom'
-import { AppErrorBoundary } from '../../app/error-boundary'
+import { AppErrorBoundary } from '@/shared/ui/error-boundary'
 import {
   Coffee,
   ExternalLink,
@@ -16,7 +16,7 @@ import {
 import { useSession, type Session } from './session'
 import { visibleGroupedStaffDestinations, visibleStaffDestinations } from './staff-navigation'
 import { authCommand, ApiError, errorMessage } from '../../shared/api/client'
-import { announceSessionChange, clearIdentity } from '../../app/query-client'
+import { announceSessionChange, clearIdentity } from '@/shared/api/query-client'
 import { clearPrivatePendingOperations } from '../../shared/api/idempotency'
 import { Button } from '../../shared/ui/button'
 import { buttonVariants } from '../../shared/ui/button-variants'

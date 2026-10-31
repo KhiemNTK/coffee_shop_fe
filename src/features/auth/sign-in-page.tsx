@@ -5,7 +5,7 @@ import { ArrowLeft, ArrowRight, Coffee, Eye, EyeOff, LockKeyhole, LogIn, Mail } 
 import { authCommand } from '../../shared/api/client'
 import { ApiErrorAlert } from '../../shared/ui/api-error-alert'
 import { useRetryAfter } from '../../shared/api/use-retry-after'
-import { announceSessionChange, clearIdentity } from '../../app/query-client'
+import { announceSessionChange, clearIdentity } from '@/shared/api/query-client'
 import { Turnstile } from './turnstile'
 import { Button } from '../../shared/ui/button'
 import { buttonVariants } from '../../shared/ui/button-variants'

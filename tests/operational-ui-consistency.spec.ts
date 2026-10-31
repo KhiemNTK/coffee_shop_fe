@@ -108,7 +108,7 @@ test('printing uses store time and translated pagination without losing seconds 
   expect(pages.slice(previousReads)).toEqual([2])
   await expect(page.getByText('Page 2 / 2 · 21 records')).toBeVisible()
   const keys = await page.evaluate(async () => {
-    const path = '/src/app/query-client.ts'
+    const path = '/src/shared/api/query-client.ts'
     const { queryClient } = await import(path) as { queryClient: QueryClient }
     return queryClient.getQueryCache().getAll().map(query => query.queryKey).filter(key => key.includes('printing'))
   })
@@ -165,7 +165,7 @@ test('audit Today uses the store day and keeps pagination and dates reactive to 
   expect(queries.at(-1)?.get('from')).toBe('2026-10-21T17:00:00.000Z')
   expect(queries.at(-1)?.get('page')).toBe('2')
   const scoped = await page.evaluate(async () => {
-    const path = '/src/app/query-client.ts'
+    const path = '/src/shared/api/query-client.ts'
     const { queryClient } = await import(path) as { queryClient: QueryClient }
     return queryClient.getQueryCache().getAll().filter(query => query.queryKey.includes('audit-logs')).map(query => query.queryKey.slice(0, 2))
   })

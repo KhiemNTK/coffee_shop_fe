@@ -1,7 +1,7 @@
+import { moneySchema } from '@/shared/api/money'
 import { z } from 'zod'
 import { apiGet, apiMutate } from '../../shared/api/client'
 import { apiIdempotentMutate } from '../../shared/api/idempotency'
-import { moneySchema } from '../menu/menu.api'
 import { paginatedResponseSchema } from '../../shared/api/types'
 import { quantitySchema } from './quantity'
 

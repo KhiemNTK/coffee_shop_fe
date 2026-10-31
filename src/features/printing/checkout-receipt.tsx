@@ -3,10 +3,10 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useOutletContext } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { Printer, RefreshCw } from 'lucide-react'
-import type { Session } from '../../auth/session'
-import { ApiError, errorMessage } from '../../../shared/api/client'
-import { Button, Input } from '../../../shared/ui'
-import { printingApi, printingKeys, type ReprintReceiptDto } from '../printing.api'
+import type { Session } from '@/features/auth/session'
+import { ApiError, errorMessage } from '@/shared/api/client'
+import { Button, Input } from '@/shared/ui/index'
+import { printingApi, printingKeys, type ReprintReceiptDto } from '@/features/printing/printing.api'
 
 export function CheckoutReceipt({ invoiceId }: { invoiceId: string }) {
   const { employee, access } = useOutletContext<Session>()

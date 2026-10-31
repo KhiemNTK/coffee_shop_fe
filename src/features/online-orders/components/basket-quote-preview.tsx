@@ -1,8 +1,8 @@
+import { formatPrice } from '@/shared/lib/format'
 import { useRef } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { quoteOnlineOrder, type PublicOrderItemPayload } from '../online-orders.api'
-import { formatPrice } from '../../menu/menu.api'
 
 export function BasketQuotePreview({ items }: { items: PublicOrderItemPayload[] }) {
   const { t } = useTranslation()

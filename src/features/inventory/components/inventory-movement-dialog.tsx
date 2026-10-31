@@ -1,3 +1,6 @@
+import { decimalAmount, minorAmount } from '@/shared/lib/money'
+import { formatPrice } from '@/shared/lib/format'
+import { moneySchema } from '@/shared/api/money'
 import { useId, useRef, useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
@@ -11,9 +14,6 @@ import {
   type PendingIntent,
 } from '@/shared/api/pending-intent'
 import { pendingOperationPrefix } from '@/shared/api/idempotency'
-import { decimalAmount, minorAmount } from '@/shared/lib/money'
-import { formatPrice } from '@/shared/lib/format'
-import { moneySchema } from '../../menu/menu.api'
 import { exportInventory, importInventory } from '../inventory.api'
 import { formatQuantity, quantityDifference, quantitySchema } from '../quantity'
 import {

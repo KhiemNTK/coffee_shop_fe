@@ -1,6 +1,7 @@
+import { moneySchema } from '@/shared/api/money'
 import { z } from 'zod'
 import { apiGet, apiMutate } from '../../shared/api/client'
-import { menuImageUrlSchema, moneySchema } from './menu.api'
+import { menuImageUrlSchema } from './menu.api'
 import { quantitySchema } from '../inventory/quantity'
 
 // --- Categories ---

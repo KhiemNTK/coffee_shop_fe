@@ -121,7 +121,7 @@ test('pickup link keeps credentials off query strings, storage and read cache ke
   await expect(page.getByRole('heading', { name: 'Sẵn sàng nhận tại quán' })).toBeVisible()
   await expect(page.getByRole('heading', { name: 'Đánh giá đơn hàng' })).toHaveCount(0)
   const privateData = await page.evaluate(async () => {
-    const path = '/src/app/query-client.ts'
+    const path = '/src/shared/api/query-client.ts'
     const { queryClient } = await import(path)
     return JSON.stringify({ local: { ...localStorage }, session: { ...sessionStorage }, keys: queryClient.getQueryCache().getAll().map((query: { queryKey: unknown }) => query.queryKey) })
   })
@@ -280,7 +280,7 @@ test('kitchen event invalidates the current actor POS keys without invalidating 
   await page.goto('/staff/kitchen')
   await expect(page.getByRole('heading', { name: /Bếp|pha chế/i }).first()).toBeVisible()
   const keys = await page.evaluate(async ({ actor, sessionId }) => {
-    const path = '/src/app/query-client.ts'
+    const path = '/src/shared/api/query-client.ts'
     const { queryClient } = await import(path)
     const keys = [['private', actor, 'orders', 'session', sessionId], ['private', actor, 'dining-tables'],
       ['private', actor, 'orders', 'active-sessions'], ['private', 'another-employee', 'orders', 'session', sessionId],
@@ -291,7 +291,7 @@ test('kitchen event invalidates the current actor POS keys without invalidating 
     return keys
   }, { actor: defaultMockAdminEmployee.id, sessionId: id })
   await expect.poll(() => page.evaluate(async keys => {
-    const path = '/src/app/query-client.ts'
+    const path = '/src/shared/api/query-client.ts'
     const { queryClient } = await import(path)
     return keys.map(key => queryClient.getQueryState(key)?.isInvalidated)
   }, keys)).toEqual([true, true, true, false, true, false])

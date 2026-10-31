@@ -1,6 +1,6 @@
+import { moneySchema } from '@/shared/api/money'
 import { z } from 'zod'
 import { apiGet } from '@/shared/api/client'
-import { moneySchema } from '../menu/menu.api'
 
 export const storefrontPromotionKey = ['public', 'storefront-promotion'] as const
 const responseSchema = z.object({

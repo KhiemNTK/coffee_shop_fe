@@ -2,7 +2,7 @@ import { useTranslation } from 'react-i18next'
 import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { CalendarDays, CheckCircle2, Copy, RefreshCw, Search, Sparkles } from 'lucide-react'
-import { SiteHeader } from '@/shared/components/site-header'
+import { SiteHeader } from '@/features/storefront/site-header'
 import {
   createPublicReservationRequest,
   trackPublicReservationRequest,

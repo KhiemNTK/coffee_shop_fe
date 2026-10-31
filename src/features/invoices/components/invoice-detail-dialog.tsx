@@ -1,3 +1,6 @@
+import { formatPrice, formatLineAmount } from '@/shared/lib/format'
+import { moneySchema } from '@/shared/api/money'
+import { decimalAmount, minorAmount } from '@/shared/lib/money'
 import { useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { OrderOptions } from '../../../shared/ui/order-options'
@@ -7,8 +10,8 @@ import type { Session } from '../../auth/session'
 import { RefundsPanel } from './refunds-panel'
 import { CashRefundsPanel } from './cash-refunds-panel'
 import { RemakesPanel } from './remakes-panel'
-import { PaymentGatewayPanel } from './payment-gateway-panel'
-import { PickupCodePanel } from '../../online-orders/components/pickup-panels'
+import { PaymentGatewayPanel } from '@/features/invoices/payment-gateway-panel'
+import { PickupCodePanel } from '@/features/online-orders/pickup-panels'
 import {
   AlertCircle,
   Ban,
@@ -29,15 +32,11 @@ import {
   getInvoicePaymentAttempts,
   type UpdateInvoicePaymentPayload,
 } from '../invoices.api'
-import { formatPrice } from '../../menu/menu.api'
-import { formatLineAmount } from '../../../shared/lib/format'
 import { ApiError, errorMessage } from '../../../shared/api/client'
 import { Button, Dialog, Input, cn } from '../../../shared/ui'
 import { PaymentMethodBadge, PaymentStatusBadge } from './invoice-badges'
 import { formatStoreDateTime } from '../../../shared/lib/store-time'
 import { isUnresolvedPayment } from '../payment-status'
-import { moneySchema } from '../../menu/menu.api'
-import { decimalAmount, minorAmount } from '../../../shared/lib/money'
 
 interface InvoiceDetailDialogProps {
   invoiceId: string

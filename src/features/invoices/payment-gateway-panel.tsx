@@ -1,3 +1,4 @@
+import { formatDateTime, formatPrice } from '@/shared/lib/format'
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -12,13 +13,12 @@ import {
   Volume2,
   VolumeX,
 } from 'lucide-react'
-import type { Session } from '../../auth/session'
-import { ApiError } from '../../../shared/api/client'
-import { ApiErrorAlert } from '../../../shared/ui/api-error-alert'
-import { useRetryAfter } from '../../../shared/api/use-retry-after'
-import { formatDateTime, formatPrice } from '../../../shared/lib/format'
-import { Button } from '../../../shared/ui'
-import { PaymentQr } from '../../../shared/ui/payment-qr'
+import type { Session } from '@/features/auth/session'
+import { ApiError } from '@/shared/api/client'
+import { ApiErrorAlert } from '@/shared/ui/api-error-alert'
+import { useRetryAfter } from '@/shared/api/use-retry-after'
+import { Button } from '@/shared/ui/index'
+import { PaymentQr } from '@/shared/ui/payment-qr'
 import {
   createPaymentAttempt,
   getInvoiceById,
@@ -30,11 +30,11 @@ import {
   type Invoice,
   type PaymentAttempt,
   type PaymentProvider,
-} from '../invoices.api'
-import { AttemptStatusBadge, PaymentStatusBadge } from './invoice-badges'
-import { isUnresolvedPayment, paymentProviderNames } from '../payment-status'
-import { enableNotificationSound, playNotificationChime } from '../../../shared/lib/sound'
-import { PaymentProviderMark } from './payment-provider-mark'
+} from '@/features/invoices/invoices.api'
+import { AttemptStatusBadge, PaymentStatusBadge } from '@/features/invoices/components/invoice-badges'
+import { isUnresolvedPayment, paymentProviderNames } from '@/features/invoices/payment-status'
+import { enableNotificationSound, playNotificationChime } from '@/shared/lib/sound'
+import { PaymentProviderMark } from '@/features/invoices/components/payment-provider-mark'
 
 const soundedPayments = new Set<string>()
 let paymentSoundEnabled = false

@@ -3,10 +3,10 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useOutletContext } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { Printer } from 'lucide-react'
-import type { Session } from '../../auth/session'
-import { ApiError, errorMessage } from '../../../shared/api/client'
-import { Button } from '../../../shared/ui'
-import { printingApi, printingKeys, type CreatePrecheckDto } from '../printing.api'
+import type { Session } from '@/features/auth/session'
+import { ApiError, errorMessage } from '@/shared/api/client'
+import { Button } from '@/shared/ui/index'
+import { printingApi, printingKeys, type CreatePrecheckDto } from '@/features/printing/printing.api'
 
 export function PrecheckPrint({
   input,

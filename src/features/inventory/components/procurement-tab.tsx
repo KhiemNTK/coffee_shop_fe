@@ -1,3 +1,4 @@
+import { formatPrice, formatDate } from '@/shared/lib/format'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useDebouncedSearch } from '../../../shared/lib/use-debounced-search'
@@ -15,7 +16,6 @@ import {
 import { getInventoryItems, type InventoryItem } from '../inventory.api'
 import { formatQuantity, quantityDifference } from '../quantity'
 import { ApiError, errorMessage } from '../../../shared/api/client'
-import { formatPrice, formatDate } from '../../../shared/lib/format'
 import { Button, Dialog, Input } from '../../../shared/ui'
 import { Pagination } from '../../../shared/ui/pagination'
 

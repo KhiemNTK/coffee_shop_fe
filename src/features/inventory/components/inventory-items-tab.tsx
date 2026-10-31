@@ -1,3 +1,4 @@
+import { formatPrice } from '@/shared/lib/format'
 import { ArrowDownToLine, ArrowLeft, ArrowUpFromLine, Edit2, Search, Trash2 } from 'lucide-react'
 import {
   type InventoryItem,
@@ -5,7 +6,6 @@ import {
   type Unit,
   type InventoryItemsResponse,
 } from '../inventory.api'
-import { formatPrice } from '../../menu/menu.api'
 import { formatQuantity, quantityDifference } from '../quantity'
 import { errorMessage } from '../../../shared/api/client'
 import { AdminTable, Badge, Button, Input } from '../../../shared/ui'

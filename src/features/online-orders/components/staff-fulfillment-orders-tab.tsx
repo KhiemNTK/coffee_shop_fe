@@ -1,7 +1,7 @@
+import { formatPrice } from '@/shared/lib/format'
 import { useTranslation } from 'react-i18next'
 import { AlertCircle, Ban, Clock, DollarSign, Package, Phone, UserX } from 'lucide-react'
 import type { FulfillmentOrder } from '../online-orders.api'
-import { formatPrice } from '../../menu/menu.api'
 import { errorMessage } from '../../../shared/api/client'
 import { formatStoreDateTime } from '../../../shared/lib/store-time'
 import { OrderOptions } from '../../../shared/ui/order-options'

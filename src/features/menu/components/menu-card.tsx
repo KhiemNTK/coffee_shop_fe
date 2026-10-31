@@ -1,10 +1,11 @@
+import { formatPrice } from '@/shared/lib/format'
 import { useTranslation } from 'react-i18next'
 import { Plus } from 'lucide-react'
 import { Card, CardHeader, CardTitle, CardContent } from '@/shared/ui/card'
 import { Button } from '@/shared/ui/button'
 import { Badge } from '@/shared/ui/badge'
-import { formatPrice, type MenuItem } from '../menu.api'
-import { ProductImage } from './product-image'
+import { type MenuItem } from '../menu.api'
+import { ProductImage } from '@/features/menu/product-image'
 import { FavoriteButton } from '@/features/customers/favorite-button'
 
 export function MenuCard({

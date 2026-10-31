@@ -1,15 +1,15 @@
-import { useTranslation } from 'react-i18next'
 import { formatDateTime } from '@/shared/lib/format'
+import { useTranslation } from 'react-i18next'
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useOutletContext } from 'react-router-dom'
 import { Copy, QrCode, RefreshCw, RotateCw, Ban, Check } from 'lucide-react'
-import type { Session } from '../../auth/session'
-import { Button, Input } from '../../../shared/ui'
-import { PaymentQr } from '../../../shared/ui/payment-qr'
-import { errorMessage } from '../../../shared/api/client'
-import { onlineOrderKeys } from '../online-orders.api'
-import { kitchenKeys } from '../../kitchen/kitchen.api'
+import type { Session } from '@/features/auth/session'
+import { Button, Input } from '@/shared/ui/index'
+import { PaymentQr } from '@/shared/ui/payment-qr'
+import { errorMessage } from '@/shared/api/client'
+import { onlineOrderKeys } from '@/features/online-orders/online-orders.api'
+import { kitchenKeys } from '@/features/kitchen/kitchen.api'
 import {
   collectPickupItem,
   getPickupStatus,
@@ -19,7 +19,7 @@ import {
   revokePickupCode,
   rotatePickupCode,
   type PickupCredential,
-} from '../pickup.api'
+} from '@/features/online-orders/pickup.api'
 
 export function PickupCodePanel({ invoiceId }: { invoiceId: string }) {
   const { t: translate } = useTranslation()

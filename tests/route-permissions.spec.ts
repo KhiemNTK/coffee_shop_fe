@@ -19,7 +19,7 @@ async function staff(page: Page, initial: string[]) {
     async replace(next: string[]) {
       keys = next
       await page.evaluate(async () => {
-        const path = '/src/app/query-client.ts'
+        const path = '/src/shared/api/query-client.ts'
         const { queryClient } = await import(path)
         await queryClient.invalidateQueries({ queryKey: ['private', 'session'] })
       })

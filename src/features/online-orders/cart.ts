@@ -1,9 +1,8 @@
+import { moneySchema } from '@/shared/api/money'
+import { decimalAmount, minorAmount } from '@/shared/lib/money'
 import { useState, useEffect } from 'react'
 import { z } from 'zod'
-import { itemSchema, moneySchema, type MenuItem } from '../menu/menu.api'
-import { decimalAmount, minorAmount } from '../../shared/lib/money'
-
-export { decimalAmount, minorAmount } from '../../shared/lib/money'
+import { itemSchema, type MenuItem } from '../menu/menu.api'
 
 export interface CartItem {
   id: string

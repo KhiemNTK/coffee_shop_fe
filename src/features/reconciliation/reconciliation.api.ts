@@ -1,7 +1,7 @@
+import { moneySchema } from '@/shared/api/money'
 import { z } from 'zod'
 import { apiGet, apiMutate } from '@/shared/api/client'
 import { paginatedResponseSchema } from '@/shared/api/types'
-import { moneySchema } from '../menu/menu.api'
 
 export const incidentSchema = z.object({
   id: z.string(), type: z.string(), status: z.enum(['OPEN', 'RESOLVED', 'IGNORED']),

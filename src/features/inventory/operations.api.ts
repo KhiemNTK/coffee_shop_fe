@@ -1,8 +1,8 @@
+import { moneySchema } from '@/shared/api/money'
 import { z } from 'zod'
 import { apiGet } from '../../shared/api/client'
 import { apiIdempotentMutate } from '../../shared/api/idempotency'
 import { paginatedResponseSchema } from '../../shared/api/types'
-import { moneySchema } from '../menu/menu.api'
 import { quantitySchema as signedQuantitySchema } from './quantity'
 
 const quantitySchema = signedQuantitySchema.refine(value => !value.startsWith('-'))

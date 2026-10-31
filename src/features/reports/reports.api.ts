@@ -1,9 +1,8 @@
+import { moneySchema, signedMoneySchema } from '@/shared/api/money'
 import { z } from 'zod'
 import { apiDownload, apiGet, apiMutate } from '../../shared/api/client'
-import { moneySchema } from '../menu/menu.api'
 import { quantitySchema } from '../inventory/quantity'
 
-import { signedMoneySchema } from '../../shared/api/money'
 
 // --- Dashboard Report Schemas ---
 

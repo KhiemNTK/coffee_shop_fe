@@ -1,6 +1,6 @@
+import { moneySchema } from '@/shared/api/money'
 import { z } from 'zod'
 import { apiGet, ApiError } from '../../shared/api/client'
-import { moneySchema } from '../menu/menu.api'
 import { TrackOrderResponseSchema, reorderTemplateSchema } from '../online-orders/online-orders.api'
 
 const customerOrdersSchema = z.object({

@@ -1,3 +1,5 @@
+import { decimalAmount, minorAmount } from '@/shared/lib/money'
+import { formatPrice } from '@/shared/lib/format'
 import { useTranslation } from 'react-i18next'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useParams, useNavigate, useOutletContext, Link } from 'react-router-dom'
@@ -19,8 +21,7 @@ import {
   isPendingIntentExpired,
   type PendingIntent,
 } from '../../shared/api/pending-intent'
-import { decimalAmount, minorAmount } from '../../shared/lib/money'
-import { getCategories, getMenu, formatPrice, type MenuItem } from '../menu/menu.api'
+import { getCategories, getMenu, type MenuItem } from '../menu/menu.api'
 import { CheckoutModal } from './checkout-modal'
 import { kitchenKeys } from '../kitchen/kitchen.api'
 import {
@@ -42,7 +43,7 @@ import type { DraftItem } from './pos.types'
 import { PosMenuCatalog } from './components/pos-menu-catalog'
 import { PosOrderItemsList } from './components/pos-order-items-list'
 import { PosDraftItemsList } from './components/pos-draft-items-list'
-import { PrecheckPrint } from '../printing/components/precheck-print'
+import { PrecheckPrint } from '@/features/printing/precheck-print'
 import { PosItemOptionsDialog } from './components/pos-item-options-dialog'
 import { PosTransferDialog } from './components/pos-transfer-dialog'
 import { WorkflowPermissions } from '@/shared/auth/workflow-permissions'

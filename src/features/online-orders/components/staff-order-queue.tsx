@@ -1,8 +1,8 @@
+import { formatPrice } from '@/shared/lib/format'
 import { useRef, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ChevronRight, Clock } from 'lucide-react'
 import type { PendingOrder } from '../online-orders.api'
-import { formatPrice } from '../../menu/menu.api'
 import { formatStoreDateTime } from '../../../shared/lib/store-time'
 import { cn } from '../../../shared/ui'
 

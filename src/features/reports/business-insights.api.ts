@@ -1,5 +1,14 @@
 import { z } from 'zod'
 import { apiGet, apiMutate, ApiError, sessionEvents } from '../../shared/api/client.js'
+import { i18n } from '../../shared/i18n/index.js'
+
+const insightRoot = (employeeId: string) => ['private', employeeId, 'business-insights'] as const
+export const businessInsightKeys = {
+  all: insightRoot,
+  config: (employeeId: string) => [...insightRoot(employeeId), 'config'] as const,
+  history: (employeeId: string) => [...insightRoot(employeeId), 'history'] as const,
+  job: (employeeId: string, id: string | null) => [...insightRoot(employeeId), 'job', id] as const,
+}
 
 const isoDate = z.iso.datetime({ offset: true })
 const dateWindow = z.object({ from: isoDate, to: isoDate }).refine(
@@ -101,11 +110,11 @@ export function getBusinessInsightHistory(cursor: string | null, signal?: AbortS
 
 export function insightRangeError(from: string, to: string, now = Date.now()) {
   if (!dateWindow.safeParse({ from, to }).success)
-    return 'Khoảng thời gian không hợp lệ: thời điểm kết thúc phải sau thời điểm bắt đầu.'
+    return i18n.t('insights.rangeInvalid')
   if (Date.parse(to) > now)
-    return 'Không thể phân tích khoảng thời gian trong tương lai.'
+    return i18n.t('insights.rangeFuture')
   if (Date.parse(to) - Date.parse(from) > 31 * 86_400_000)
-    return 'Phân tích chỉ hỗ trợ khoảng thời gian tối đa 31 ngày.'
+    return i18n.t('insights.rangeTooLong')
   return null
 }
 

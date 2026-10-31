@@ -1,3 +1,4 @@
+import { formatDateTime } from '@/shared/lib/format'
 import { useState, useMemo, useDeferredValue } from 'react'
 import { posKeys } from '../pos/pos.keys'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -24,7 +25,6 @@ import {
 } from './dining-tables.api'
 import { errorMessage } from '../../shared/api/client'
 import type { Session } from '../auth/session'
-import { formatDateTime } from '../../shared/lib/format'
 import { Button, Card, CardContent, Input } from '../../shared/ui'
 import { DiningTableKpis } from './components/dining-table-kpis'
 import { DiningTablesGrid } from './components/dining-tables-grid'

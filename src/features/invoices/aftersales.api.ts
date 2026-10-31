@@ -1,8 +1,8 @@
+import { moneySchema } from '@/shared/api/money'
+import { minorAmount } from '@/shared/lib/money'
 import { z } from 'zod'
 import { apiGet, ApiError } from '../../shared/api/client'
 import { apiIdempotentMutate } from '../../shared/api/idempotency'
-import { moneySchema } from '../menu/menu.api'
-import { minorAmount } from '../../shared/lib/money'
 
 export const reasonSchema = z.string().trim().min(3).max(500)
 export const cashRefundInputSchema = z.object({

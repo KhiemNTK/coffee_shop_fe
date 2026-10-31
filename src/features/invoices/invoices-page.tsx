@@ -1,3 +1,4 @@
+import { decimalAmount, minorAmount } from '@/shared/lib/money'
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useOutletContext } from 'react-router-dom'
@@ -12,7 +13,6 @@ import { Button, cn } from '../../shared/ui'
 import { InvoicesKpis } from './components/invoices-kpis'
 import { InvoicesListTable } from './components/invoices-list-table'
 import { InvoiceDetailDialog } from './components/invoice-detail-dialog'
-import { decimalAmount, minorAmount } from '../../shared/lib/money'
 import { useDebouncedSearch } from '../../shared/lib/use-debounced-search'
 import { getCurrentShift } from '../cashier-shifts/cashier-shifts.api'
 

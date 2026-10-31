@@ -1,8 +1,8 @@
+import { moneySchema } from '@/shared/api/money'
 import { z } from 'zod'
 import { apiGet } from '../../shared/api/client'
 import { apiIdempotentMutate } from '../../shared/api/idempotency'
 import { paginatedResponseSchema } from '../../shared/api/types'
-import { moneySchema } from '../menu/menu.api'
 
 export const refundSchema = z.object({
   id: z.string(), paymentAttemptId: z.string(), amount: moneySchema, reason: z.string(),

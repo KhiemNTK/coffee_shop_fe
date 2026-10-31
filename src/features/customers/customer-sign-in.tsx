@@ -7,13 +7,13 @@ import { ArrowRight, Heart, LogOut, UserRound } from 'lucide-react'
 import { authConfig } from '../auth/auth.config'
 import { GoogleButton } from '../auth/google-button'
 import { Turnstile } from '../auth/turnstile'
-import { SiteHeader } from '../../shared/components/site-header'
+import { SiteHeader } from '@/features/storefront/site-header'
 import { SignInScene } from '../auth/sign-in-scene'
 import { buttonVariants } from '../../shared/ui/button-variants'
 import { ApiErrorAlert, Button } from '../../shared/ui'
 import { ApiError } from '../../shared/api/client'
 import { useRetryAfter } from '../../shared/api/use-retry-after'
-import { announceCustomerSessionChange } from '../../app/query-client'
+import { announceCustomerSessionChange } from '@/shared/api/query-client'
 import {
   customerKey,
   customerSignIn,

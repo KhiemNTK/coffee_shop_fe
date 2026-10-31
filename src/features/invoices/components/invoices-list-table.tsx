@@ -1,3 +1,4 @@
+import { formatPrice } from '@/shared/lib/format'
 import { AlertCircle, Eye, FilterX, RefreshCw, Search } from 'lucide-react'
 import type { Dispatch, SetStateAction, ReactNode } from 'react'
 import type {
@@ -7,7 +8,6 @@ import type {
   PaymentMethod,
   PaymentStatus,
 } from '../invoices.api'
-import { formatPrice } from '../../menu/menu.api'
 import { formatStoreDateTime, fromStoreLocal, toStoreLocal } from '../../../shared/lib/store-time'
 import { errorMessage } from '../../../shared/api/client'
 import { Button, Input } from '../../../shared/ui'

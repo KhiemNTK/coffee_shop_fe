@@ -1,6 +1,6 @@
+import { moneySchema } from '@/shared/api/money'
 import { z } from 'zod'
 import { apiGet } from '../../shared/api/client'
-import { moneySchema } from '../menu/menu.api'
 
 const count = z.number().int().nonnegative()
 const percent = z.string().nullable()

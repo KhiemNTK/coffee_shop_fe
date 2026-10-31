@@ -6,7 +6,7 @@ import { RefreshCw, Send } from 'lucide-react'
 import { Button, Textarea } from '../../shared/ui'
 import { errorMessage } from '../../shared/api/client'
 import { getPickupStatus, parsePickupLink, submitPickupFeedback } from './pickup.api'
-import { FeedbackResponse } from './components/feedback-response'
+import { FeedbackResponse } from '@/features/online-orders/feedback-response'
 import { formatStoreDateTime } from '../../shared/lib/store-time.js'
 
 const labels = {

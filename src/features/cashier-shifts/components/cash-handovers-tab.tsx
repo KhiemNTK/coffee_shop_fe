@@ -1,6 +1,6 @@
+import { formatDate, formatDateTime, formatPrice } from '@/shared/lib/format'
 import { useState, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
-import { formatDate, formatDateTime } from '@/shared/lib/format'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   AlertTriangle,
@@ -12,7 +12,6 @@ import {
   RefreshCw,
 } from 'lucide-react'
 import { errorMessage } from '../../../shared/api/client'
-import { formatPrice } from '../../menu/menu.api'
 import {
   approveCashHandover,
   cancelCashHandover,

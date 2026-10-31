@@ -1,6 +1,6 @@
 import { QueryClient } from '@tanstack/react-query'
-import { resetSessionRequests, sessionEvents } from '../shared/api/client'
-import { clearStaffDestination, rememberStaffDestination } from '../shared/auth/staff-destination'
+import { resetSessionRequests, sessionEvents } from '@/shared/api/client'
+import { clearStaffDestination, rememberStaffDestination } from '@/shared/auth/staff-destination'
 
 export const queryClient = new QueryClient({
   defaultOptions: {

@@ -1,10 +1,11 @@
+import { formatPrice, formatLineAmount } from '@/shared/lib/format'
+import { decimalAmount, minorAmount } from '@/shared/lib/money'
 import { useTranslation } from 'react-i18next'
 import { useState } from 'react'
 import { Check, Minus, Plus, X } from 'lucide-react'
-import { formatPrice, type MenuItem } from '../../menu/menu.api'
-import { formatLineAmount } from '../../../shared/lib/format'
+import { type MenuItem } from '../../menu/menu.api'
 import { Button, Dialog, Input, cn } from '../../../shared/ui'
-import { type CartItem, decimalAmount, minorAmount } from '../cart'
+import { type CartItem } from '../cart'
 
 export function ItemCustomizerModal({
   item,

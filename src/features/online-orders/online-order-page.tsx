@@ -6,7 +6,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, Coffee, Package } from 'lucide-react'
 import { Badge, Button } from '../../shared/ui'
 import { TakeawayMenuView } from './components/takeaway-menu-view'
-import { OrderTrackingView } from './components/order-tracking-view'
+import { OrderTrackingView } from '@/features/online-orders/order-tracking-view'
 import { OrderLookupView } from './components/order-lookup-view'
 import { rememberOrder, storedOrders, type OrderAccess } from './order-access-storage'
 

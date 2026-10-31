@@ -32,7 +32,7 @@ export function TabsList({
   className,
   onKeyDown,
   ...props
-}: React.HTMLAttributes<HTMLDivElement>) {
+}: React.ComponentProps<'div'>) {
   return (
     <div
       className={cn(

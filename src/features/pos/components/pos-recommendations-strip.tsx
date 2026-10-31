@@ -1,6 +1,7 @@
+import { formatPrice } from '@/shared/lib/format'
 import { useTranslation } from 'react-i18next'
 import { Sparkles, Plus } from 'lucide-react'
-import { formatPrice, type MenuItem } from '../../menu/menu.api'
+import { type MenuItem } from '../../menu/menu.api'
 
 interface PosRecommendationsStripProps {
   recommendations?: MenuItem[]

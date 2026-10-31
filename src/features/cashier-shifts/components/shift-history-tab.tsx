@@ -1,3 +1,4 @@
+import { formatPrice } from '@/shared/lib/format'
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Eye, RefreshCw } from 'lucide-react'
@@ -11,7 +12,6 @@ import {
   DialogDescription,
 } from '../../../shared/ui'
 import { Pagination } from '../../../shared/ui/pagination'
-import { formatPrice } from '../../menu/menu.api'
 import {
   getCashierShifts,
   getCashierShift,

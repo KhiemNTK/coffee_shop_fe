@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { z } from 'zod'
 import { apiGet, apiMutate, ApiError } from '../../shared/api/client'
 import { itemSchema } from '../menu/menu.api'
-import { announceCustomerSessionChange } from '../../app/query-client'
+import { announceCustomerSessionChange } from '@/shared/api/query-client'
 
 const customerSchema = z.object({ id: z.uuid(), email: z.email() })
 const wishlistSchema = z.object({

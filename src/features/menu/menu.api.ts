@@ -1,18 +1,7 @@
+import { moneySchema } from '@/shared/api/money'
 import { z } from 'zod'
 import { apiGet } from '../../shared/api/client'
 
-const decimalSchema = z.string().regex(/^\d{1,16}(\.\d{1,2})?$/)
-
-export const moneySchema = z.union([
-  decimalSchema,
-  z
-    .number()
-    .finite()
-    .nonnegative()
-    .max(Number.MAX_SAFE_INTEGER / 100)
-    .transform(String)
-    .pipe(decimalSchema),
-])
 const categorySchema = z.object({ id: z.uuid(), name: z.string() })
 export const menuImageUrlSchema = z.url().max(2048).refine(value => {
   try {
@@ -76,5 +65,3 @@ export function getMenu(filters: MenuFilters, signal: AbortSignal) {
   if (filters.sortOrder) params.set('sortOrder', filters.sortOrder)
   return apiGet(`/menu/public/items?${params}`, pageSchema, signal)
 }
-
-export { formatPrice, formatVnd } from '@/shared/lib/format'

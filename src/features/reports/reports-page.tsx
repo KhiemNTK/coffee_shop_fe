@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { formatDateTime } from '@/shared/lib/format'
+import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useIsFetching, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useOutletContext } from 'react-router-dom'
 import {
   CalendarCheck,
@@ -21,7 +22,6 @@ import {
   getKitchenSlaReport,
 } from './reports.api'
 import { ApiError, errorMessage } from '../../shared/api/client'
-import { formatDateTime } from '../../shared/lib/format'
 import {
   Button,
   Tabs,
@@ -37,6 +37,7 @@ import { DailySalesCloseTab } from './components/daily-sales-close-tab'
 import { OnlineBusinessTab } from './components/online-business-tab'
 import { FeedbackReport } from './components/feedback-report'
 import { BusinessInsightsTab } from './components/business-insights-tab'
+import { businessInsightKeys } from './business-insights.api'
 
 function getPresetDates(preset: 'today' | '7days' | '30days' | 'month') {
   const now = new Date()
@@ -66,9 +67,10 @@ function getTodayDateString() {
 }
 
 export default function ReportsPage() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const { employee, access } = useOutletContext<Session>()
   const queryClient = useQueryClient()
+  const refreshingInsights = useIsFetching({ queryKey: businessInsightKeys.all(employee.id) }) > 0
 
 
   const canExport = access.has('/reports_export')
@@ -81,6 +83,17 @@ export default function ReportsPage() {
   const [activeTab, setActiveTab] = useState<
     'overview' | 'kitchen' | 'daily-close' | 'online' | 'feedback' | 'insights'
   >('overview')
+  const reportTabs = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const list = reportTabs.current
+    const selected = list?.querySelector<HTMLElement>('[aria-selected="true"]')
+    if (!list || !selected) return
+    // Keep translated tabs visible without scrolling the report vertically.
+    const bounds = list.getBoundingClientRect()
+    const tabBounds = selected.getBoundingClientRect()
+    if (tabBounds.left < bounds.left) list.scrollLeft += tabBounds.left - bounds.left
+    else if (tabBounds.right > bounds.right) list.scrollLeft += tabBounds.right - bounds.right
+  }, [activeTab, i18n.resolvedLanguage])
   const [isExporting, setIsExporting] = useState(false)
   const [exportError, setExportError] = useState<string | null>(null)
 
@@ -170,7 +183,8 @@ export default function ReportsPage() {
   })
 
   function refreshReport() {
-    if (activeTab === 'daily-close') void dailyCloseQuery.refetch()
+    if (activeTab === 'insights') void queryClient.invalidateQueries({ queryKey: businessInsightKeys.all(employee.id) })
+    else if (activeTab === 'daily-close') void dailyCloseQuery.refetch()
     else setDateRange(getPresetDates(preset))
   }
 
@@ -179,7 +193,9 @@ export default function ReportsPage() {
       ? dashboardQuery.isFetching
       : activeTab === 'kitchen'
         ? kitchenSlaQuery.isFetching || kitchenBottlenecksQuery.isFetching
-        : activeTab === 'daily-close' && dailyCloseQuery.isFetching
+        : activeTab === 'insights'
+          ? refreshingInsights
+          : activeTab === 'daily-close' && dailyCloseQuery.isFetching
 
   // Excel download handler
   async function handleExportExcel() {
@@ -284,7 +300,7 @@ export default function ReportsPage() {
               <span className="hidden sm:inline">{t('finance.refresh')}</span>
             </Button>
 
-            {canExport && (
+            {canExport && activeTab !== 'insights' && (
               <Button
                 size="sm"
                 onClick={() => void handleExportExcel()}
@@ -324,7 +340,7 @@ export default function ReportsPage() {
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={(val) => setActiveTab(val as typeof activeTab)}>
-        <TabsList className="admin-tabs mb-4">
+        <TabsList ref={reportTabs} className="admin-tabs reports-tabs mb-4">
           <TabsTrigger value="overview" className="gap-2">
             <TrendingUp className="h-4 w-4" />
             {t('finance.overview')}

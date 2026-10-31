@@ -1,8 +1,9 @@
+import { formatPrice, formatLineAmount } from '@/shared/lib/format'
 import { useTranslation } from 'react-i18next'
-import { FeedbackResponse } from './feedback-response'
+import { FeedbackResponse } from '@/features/online-orders/feedback-response'
 import { useRef, useState } from 'react'
 import { useQuery, useMutation } from '@tanstack/react-query'
-import { ReorderLink } from './reorder-link'
+import { ReorderLink } from '@/features/online-orders/components/reorder-link'
 import {
   AlertCircle,
   ArrowLeft,
@@ -13,14 +14,12 @@ import {
   Download,
   RefreshCw,
 } from 'lucide-react'
-import { trackOnlineOrder, cancelOnlineOrder } from '../online-orders.api'
-import { formatPrice } from '../../menu/menu.api'
-import { errorMessage } from '../../../shared/api/client'
-import { formatLineAmount } from '../../../shared/lib/format'
-import { formatStoreDateTime } from '../../../shared/lib/store-time'
-import { OrderOptions } from '../../../shared/ui/order-options'
-import { TelegramOrderLink } from './telegram-order-link'
-import { PaymentQr } from '../../../shared/ui/payment-qr'
+import { trackOnlineOrder, cancelOnlineOrder } from '@/features/online-orders/online-orders.api'
+import { errorMessage } from '@/shared/api/client'
+import { formatStoreDateTime } from '@/shared/lib/store-time'
+import { OrderOptions } from '@/shared/ui/order-options'
+import { TelegramOrderLink } from '@/features/online-orders/components/telegram-order-link'
+import { PaymentQr } from '@/shared/ui/payment-qr'
 import {
   Badge,
   Button,
@@ -30,7 +29,7 @@ import {
   CardTitle,
   Dialog,
   cn,
-} from '../../../shared/ui'
+} from '@/shared/ui/index'
 
 export function OrderStatusBadge({
   status,

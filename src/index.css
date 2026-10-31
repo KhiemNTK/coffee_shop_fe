@@ -351,6 +351,14 @@ body:has(.staff-workspace) > dialog [data-badge] {
   border-bottom: 2px solid transparent;
   padding: 10px 14px;
 }
+.admin-tabs.reports-tabs {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+}
+.admin-tabs.reports-tabs > button {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
 .admin-tabs > button[aria-selected='true'],
 .admin-tabs > button[aria-pressed='true'] {
   border-bottom-color: var(--color-primary);

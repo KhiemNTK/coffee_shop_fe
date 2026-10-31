@@ -1,8 +1,7 @@
+import { moneySchema, signedMoneySchema } from '@/shared/api/money'
 import { z } from 'zod'
 import { apiGet, apiMutate, ApiError } from '../../shared/api/client'
 import { apiIdempotentMutate } from '../../shared/api/idempotency'
-import { moneySchema } from '../menu/menu.api'
-import { signedMoneySchema } from '../../shared/api/money'
 
 // --- Funds Schemas ---
 

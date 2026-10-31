@@ -1,7 +1,7 @@
+import { formatLineAmount } from '@/shared/lib/format'
 import { useTranslation } from 'react-i18next'
 import { Minus, Plus, Send } from 'lucide-react'
 import { Button } from '../../../shared/ui/button'
-import { formatLineAmount } from '../../../shared/lib/format'
 import type { DraftItem } from '../pos.types'
 
 interface PosDraftItemsListProps {

@@ -1,12 +1,12 @@
+import { decimalAmount, minorAmount } from '@/shared/lib/money'
+import { formatPrice } from '@/shared/lib/format'
 import { useTranslation } from 'react-i18next'
 import { useId, useRef, useState, type FormEvent } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import { Check, RefreshCw } from 'lucide-react'
 import { collectOnlineOrder, trackOnlineOrder, type FulfillmentOrder } from '../online-orders.api'
-import { decimalAmount, minorAmount } from '../cart'
-import { formatPrice } from '../../../shared/lib/format'
 import { ApiError, errorMessage } from '../../../shared/api/client'
-import { ShiftRequiredLink } from '../../cashier-shifts/components/shift-required-link'
+import { ShiftRequiredLink } from '@/features/cashier-shifts/shift-required-link'
 import { PickupCodeScanner } from './pickup-code-scanner'
 import {
   Button,

@@ -1,10 +1,11 @@
+import { formatPrice } from '@/shared/lib/format'
 import { useTranslation } from 'react-i18next'
 import { Coffee, Search } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { Button } from '../../../shared/ui/button'
 import { Card, CardContent } from '../../../shared/ui/card'
 import { Input } from '../../../shared/ui/input'
-import { formatPrice, type MenuItem } from '../../menu/menu.api'
+import { type MenuItem } from '../../menu/menu.api'
 import { PosRecommendationsStrip } from './pos-recommendations-strip'
 
 interface CategoryOption {

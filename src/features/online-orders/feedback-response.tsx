@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next'
-import type { PublicFeedback } from '../feedback'
-import { formatStoreDateTime } from '../../../shared/lib/store-time'
+import type { PublicFeedback } from '@/features/online-orders/feedback'
+import { formatStoreDateTime } from '@/shared/lib/store-time'
 
 export function FeedbackResponse({ feedback }: { feedback: PublicFeedback }) {
   const { t } = useTranslation()

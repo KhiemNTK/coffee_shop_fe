@@ -1,3 +1,5 @@
+import { formatPrice } from '@/shared/lib/format'
+import { decimalAmount, minorAmount } from '@/shared/lib/money'
 import { useTranslation } from 'react-i18next'
 import { useState } from 'react'
 import {
@@ -10,8 +12,7 @@ import {
 import { Button } from '../../../shared/ui/button'
 import { Input } from '../../../shared/ui/input'
 import { cn } from '../../../shared/ui/utils'
-import { formatPrice, type MenuItem } from '../../menu/menu.api'
-import { decimalAmount, minorAmount } from '../../../shared/lib/money'
+import { type MenuItem } from '../../menu/menu.api'
 
 interface PosItemOptionsDialogProps {
   item: MenuItem | null

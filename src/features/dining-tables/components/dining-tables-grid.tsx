@@ -1,3 +1,4 @@
+import { formatSessionDuration, isSessionOver24h } from '@/shared/lib/format'
 import { useNavigate } from 'react-router-dom'
 import {
   Armchair,
@@ -15,7 +16,6 @@ import {
 import { type DiningTableAdmin } from '../dining-tables.api'
 import { Badge, Button } from '../../../shared/ui'
 import { cn } from '../../../shared/ui/utils'
-import { formatSessionDuration, isSessionOver24h } from '../../../shared/lib/format'
 
 interface DiningTablesGridProps {
   tables: DiningTableAdmin[]

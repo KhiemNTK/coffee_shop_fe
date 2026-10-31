@@ -1,8 +1,8 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ImageOff } from 'lucide-react'
-import type { MenuItem } from '../menu.api'
-import { cn } from '../../../shared/ui/utils'
+import type { MenuItem } from '@/features/menu/menu.api'
+import { cn } from '@/shared/ui/utils'
 
 export function ProductImage({ item, className }: {
   item: Pick<MenuItem, 'name' | 'imageUrl'>

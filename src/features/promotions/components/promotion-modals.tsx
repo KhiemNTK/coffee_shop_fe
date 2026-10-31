@@ -1,3 +1,4 @@
+import { formatPrice } from '@/shared/lib/format'
 import { useId, useRef, useState, type ReactNode } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { RefreshCw, RotateCcw, Trash2 } from 'lucide-react'
@@ -15,7 +16,6 @@ import {
   type UpdatePromotionPayload,
 } from '../promotions.api'
 import { ApiError, errorMessage } from '../../../shared/api/client'
-import { formatPrice } from '../../../shared/lib/format'
 import { fromStoreLocal, toStoreLocal, formatStoreDateTime } from '../../../shared/lib/store-time'
 import { Button, Dialog, DialogHeader, DialogFooter, DialogTitle, Input } from '../../../shared/ui'
 

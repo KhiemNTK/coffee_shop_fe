@@ -214,7 +214,7 @@ test('uncertain receipt posting retries the reviewed body even when a newer vers
   await dialog.getByRole('button', { name: 'Xác nhận', exact: true }).click()
   await expect(dialog.getByRole('alert')).toBeVisible()
   await page.evaluate(async () => {
-    const path = '/src/app/query-client.ts'
+    const path = '/src/shared/api/query-client.ts'
     const { queryClient } = await import(path)
     await queryClient.invalidateQueries({ queryKey: ['private'] })
   })

@@ -1,7 +1,7 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react'
 import { Translation } from 'react-i18next'
 import { RefreshCw } from 'lucide-react'
-import { Button } from '../shared/ui/button'
+import { Button } from '@/shared/ui/button'
 
 export class AppErrorBoundary extends Component<
   { children: ReactNode; scope?: 'app' | 'page' },

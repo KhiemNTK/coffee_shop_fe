@@ -15,9 +15,9 @@ import { Button, Input } from '../../shared/ui'
 import { authConfig } from '../auth/auth.config'
 import { Turnstile } from '../auth/turnstile'
 import { rememberOrder, type OrderAccess } from './order-access-storage'
-import { OrderTrackingView } from './components/order-tracking-view'
+import { OrderTrackingView } from '@/features/online-orders/order-tracking-view'
 import { useCart } from './cart'
-import { SiteHeader } from '../../shared/components/site-header'
+import { SiteHeader } from '@/features/storefront/site-header'
 
 export default function OnlineOrderRecoveryGate() {
   const location = useLocation()

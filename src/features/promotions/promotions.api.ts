@@ -1,6 +1,6 @@
+import { moneySchema } from '@/shared/api/money'
 import { z } from 'zod'
 import { apiGet, apiMutate } from '../../shared/api/client'
-import { moneySchema } from '../menu/menu.api'
 
 export const promotionKeys = {
   list: (employeeId: string) => ['private', employeeId, 'promotions'] as const,

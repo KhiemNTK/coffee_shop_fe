@@ -1,3 +1,5 @@
+import { formatPrice } from '@/shared/lib/format'
+import { decimalAmount, minorAmount } from '@/shared/lib/money'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
@@ -5,11 +7,11 @@ import {
   Plus,
   X,
 } from 'lucide-react'
-import { formatPrice, type MenuItem } from '../menu.api'
-import { Button, Dialog, cn } from '../../../shared/ui'
-import { type CartItem, decimalAmount, minorAmount } from '../../online-orders/cart'
-import { FavoriteButton } from '../../customers/favorite-button'
-import { ProductImage } from './product-image'
+import { type MenuItem } from '@/features/menu/menu.api'
+import { Button, Dialog, cn } from '@/shared/ui/index'
+import { type CartItem } from '@/features/online-orders/cart'
+import { FavoriteButton } from '@/features/customers/favorite-button'
+import { ProductImage } from '@/features/menu/product-image'
 
 export function ProductDetailModal({
   item,

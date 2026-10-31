@@ -278,7 +278,7 @@ test('merge retains the destination session chosen before a concurrent table ref
     .selectOption(targetTableId)
   targetSessionId = newTargetId
   await page.evaluate(async (employeeId) => {
-    const path = '/src/app/query-client.ts'
+    const path = '/src/shared/api/query-client.ts'
     const { queryClient } = await import(path)
     await queryClient.invalidateQueries({ queryKey: ['private', employeeId, 'dining-tables'] })
   }, defaultMockAdminEmployee.id)

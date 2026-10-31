@@ -1,3 +1,4 @@
+import { formatPrice } from '@/shared/lib/format'
 import { Edit2, Megaphone, Plus, RotateCcw, Search, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type {
@@ -6,7 +7,6 @@ import type {
   PromotionStatus,
   PaginatedPromotions,
 } from '../promotions.api'
-import { formatPrice } from '../../../shared/lib/format'
 import { formatStoreDateTime } from '../../../shared/lib/store-time'
 import { Badge, Button, Card, Input } from '../../../shared/ui'
 import { Pagination } from '../../../shared/ui/pagination'
