@@ -1,4 +1,5 @@
 import { Ban, CheckCircle2, Clock, Phone, Users } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import type {
   ReservationRequest,
   ReservationRequestStatus,
@@ -39,13 +40,14 @@ export function RequestsTab({
   onApproveClick,
   onRejectClick,
 }: RequestsTabProps) {
+  const { t } = useTranslation()
   const list = requestsData?.list ?? []
   return (
     <div className="space-y-4">
       <label className="block border-y border-border bg-card px-4 py-3 text-xs text-muted-foreground">
-        Bộ lọc trạng thái:
+        {t("reservation.requestFilter")}
         <select
-          aria-label="Lọc theo trạng thái yêu cầu"
+          aria-label={t("reservation.requestFilterLabel")}
           value={reqStatus}
           onChange={(event) => {
             onReqStatusChange(event.target.value as ReservationRequestStatus | 'ALL')
@@ -53,21 +55,21 @@ export function RequestsTab({
           }}
           className="mt-1 h-12 w-full rounded-md border border-input bg-card px-3 text-sm text-foreground"
         >
-          <option value="ALL">Tất cả yêu cầu</option>
-          <option value="PENDING">Chờ duyệt (PENDING)</option>
-          <option value="APPROVED">Đã phê duyệt (APPROVED)</option>
-          <option value="REJECTED">Đã từ chối (REJECTED)</option>
-          <option value="CANCELLED">Khách tự hủy (CANCELLED)</option>
-          <option value="EXPIRED">Đã hết hạn (EXPIRED)</option>
+          <option value="ALL">{t("reservation.allRequests")}</option>
+          <option value="PENDING">{t("reservation.requestPendingOption")}</option>
+          <option value="APPROVED">{t("reservation.requestApprovedOption")}</option>
+          <option value="REJECTED">{t("reservation.requestRejectedOption")}</option>
+          <option value="CANCELLED">{t("reservation.requestCancelledOption")}</option>
+          <option value="EXPIRED">{t("reservation.requestExpiredOption")}</option>
         </select>
       </label>
       {isLoading ? (
         <p role="status" className="py-12 text-center text-sm text-muted-foreground">
-          Đang tải danh sách yêu cầu…
+          {t("reservation.requestsLoading")}
         </p>
       ) : hasError ? null : !list.length ? (
         <p className="py-12 text-center text-sm text-muted-foreground">
-          Không có yêu cầu đặt bàn nào
+          {t("reservation.noRequests")}
         </p>
       ) : (
         <div className="divide-y divide-border border-y border-border bg-card">
@@ -91,11 +93,11 @@ export function RequestsTab({
                 >
                   {
                     {
-                      PENDING: 'Chờ phê duyệt',
-                      APPROVED: 'Đã duyệt',
-                      REJECTED: 'Đã từ chối',
-                      CANCELLED: 'Khách đã hủy',
-                      EXPIRED: 'Quá hạn',
+                      PENDING: t("reservation.awaitingReview"),
+                      APPROVED: t("reservation.approved"),
+                      REJECTED: t("reservation.rejectedShort"),
+                      CANCELLED: t("reservation.customerCancelled"),
+                      EXPIRED: t("reservation.expiredShort"),
                     }[request.status]
                   }
                 </Badge>
@@ -110,7 +112,7 @@ export function RequestsTab({
                 </a>
                 <span className="flex items-center gap-1">
                   <Users size={13} aria-hidden="true" />
-                  {request.guestCount} người
+                  {request.guestCount} {t("reservation.peopleLabel")}
                 </span>
               </div>
               <p className="flex flex-wrap items-center gap-1.5 text-sm font-medium">
@@ -127,7 +129,7 @@ export function RequestsTab({
               )}
               {request.rejectionReason && (
                 <p className="break-words text-xs text-destructive">
-                  Lý do từ chối: {request.rejectionReason}
+                  {t("reservation.rejectReasonPrefix")} {request.rejectionReason}
                 </p>
               )}
               {request.status === 'PENDING' && (canCreate || canUpdate) && (
@@ -135,7 +137,7 @@ export function RequestsTab({
                   {canCreate && (
                     <Button className="min-h-11 flex-1" onClick={() => onApproveClick(request)}>
                       <CheckCircle2 size={16} aria-hidden="true" />
-                      Duyệt & Xếp bàn
+                      {t("reservation.approve")}
                     </Button>
                   )}
                   {canUpdate && (
@@ -145,13 +147,13 @@ export function RequestsTab({
                       onClick={() => onRejectClick(request)}
                     >
                       <Ban size={16} aria-hidden="true" />
-                      Từ chối
+                      {t("reservation.reject")}
                     </Button>
                   )}
                 </div>
               )}
               <p className="break-words text-xs text-muted-foreground" title={request.id}>
-                #{request.id.slice(-8).toUpperCase()} · Gửi lúc: {formatDateTime(request.createdAt)}
+                #{request.id.slice(-8).toUpperCase()} · {t('reservation.sentAt', { time: formatDateTime(request.createdAt) })}
               </p>
             </article>
           ))}
@@ -160,8 +162,7 @@ export function RequestsTab({
       {!hasError && requestsData && (requestsData.totalPages > 1 || reqPage > 1) && (
         <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border pt-3 text-xs text-muted-foreground">
           <span>
-            Trang {requestsData.currentPage} / {requestsData.totalPages} (Tổng{' '}
-            {requestsData.totalItems} yêu cầu)
+            {t('reservation.pageSummary', { page: requestsData.currentPage, pages: requestsData.totalPages, total: requestsData.totalItems, kind: t('reservation.requestNoun') })}
           </span>
           <Pagination
             page={reqPage}

@@ -88,7 +88,11 @@ test.describe('Public Customer Table Reservations', () => {
 
     // Fill booking form
     await page.getByPlaceholder('Nguyễn Văn A').fill('Trần Thị Bình')
-    await page.getByPlaceholder('0912 345 678').fill('0987654321')
+    await expect(page.getByText('Yêu cầu chưa giữ bàn. Quán sẽ xác nhận sau khi kiểm tra lịch trống.')).toBeVisible()
+    await page.getByPlaceholder('0912 345 678').fill('++++++++')
+    await page.getByRole('button', { name: 'Gửi yêu cầu đặt bàn ngay' }).click()
+    expect(createdRequests).toBe(0)
+    await page.getByPlaceholder('0912 345 678').fill('0987 654-321')
     await page.getByRole('spinbutton').fill('4')
     await page.getByLabel('Ngày và giờ đến (Việt Nam)').fill('2026-10-06T18:00')
     await page.getByPlaceholder('Ví dụ: Ghế em bé, bàn gần cửa sổ...').fill('Cần 1 ghế trẻ em')
@@ -186,6 +190,9 @@ test.describe('Staff Reservations Management', () => {
     )
     await page.route('**/api/v1/dining-tables', (route) =>
       route.fulfill({ json: envelope(mockDiningTables) }),
+    )
+    await page.route('**/api/v1/reservations/available-tables?*', (route) =>
+      route.fulfill({ json: envelope({ list: mockDiningTables.map(({ id, name }) => ({ id, name })), totalItems: 3, totalPages: 1, currentPage: 1 }) }),
     )
     await page.route('**/api/v1/reservations/requests?*', route =>
       route.fulfill({ json: envelope({ list: [], totalItems: 0, totalPages: 0, currentPage: 1 }) }),
@@ -445,7 +452,7 @@ test.describe('Staff Reservations Management', () => {
     await page.getByRole('button', { name: 'Đón khách', exact: true }).click()
     await page.getByRole('button', { name: 'Xác nhận đón khách' }).click()
     await page.getByRole('button', { name: 'Đối chiếu trạng thái' }).click()
-    await expect(page.getByRole('dialog').getByRole('status')).toContainText('ARRIVED')
+    await expect(page.getByRole('dialog').getByRole('status')).toContainText('Đã đón vào bàn')
     await expect(page.getByRole('button', { name: 'Mở phiên POS ngay' })).toHaveCount(0)
     expect(writes).toBe(1)
   })

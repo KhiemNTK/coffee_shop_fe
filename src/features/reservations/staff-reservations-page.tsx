@@ -14,6 +14,7 @@ import { reservationDayBounds } from './reservation-time'
 import { getDiningTables } from '../pos/pos.api'
 import { posKeys } from '../pos/pos.keys'
 import { errorMessage } from '../../shared/api/client'
+import { formatDateTime } from '@/shared/lib/format'
 import type { Session } from '../auth/session'
 import { Button, OperationsHeader, OperationsSummary } from '../../shared/ui'
 import { ReservationsTab } from './components/reservations-tab'
@@ -99,12 +100,16 @@ export default function StaffReservationsPage() {
         signal,
       ),
     staleTime: 15_000,
+    refetchInterval: 20_000,
+    refetchIntervalInBackground: false,
   })
   const requests = useQuery({
     queryKey: ['private', employeeId, 'reservation-requests', reqPage, reqStatus],
     queryFn: ({ signal }) =>
       getReservationRequests({ page: reqPage, itemPerPage: 15, status: reqStatus }, signal),
     staleTime: 15_000,
+    refetchInterval: 20_000,
+    refetchIntervalInBackground: false,
   })
   function invalidate() {
     void client.invalidateQueries({ queryKey: ['private', employeeId, 'reservations'] })
@@ -129,7 +134,7 @@ export default function StaffReservationsPage() {
   return (
     <div className="space-y-5">
       <OperationsHeader
-        title="Quản lý Đặt bàn"
+        title={t("reservation.staffTitle")}
         meta={t('ops.reservations.timeZone')}
         actions={
           <>
@@ -144,17 +149,22 @@ export default function StaffReservationsPage() {
               }}
             >
               <RefreshCw size={16} />
-              Làm mới
+              {t("staff.refresh")}
             </Button>
             {canCreate && (
               <Button className="min-h-11" onClick={() => setCreateOpen(true)}>
                 <Plus size={16} />
-                Tạo đặt bàn mới
+                {t("reservation.add")}
               </Button>
             )}
           </>
         }
       />
+      <p role="status" className="text-xs text-muted-foreground">
+        {reservations.isFetching || requests.isFetching ? t('reservation.refreshing')
+          : reservations.isError || requests.isError ? t('reservation.refreshFailed')
+            : t('reservation.lastUpdated', { time: formatDateTime(new Date(Math.min(reservations.dataUpdatedAt, requests.dataUpdatedAt)), { seconds: true }) })}
+      </p>
       <OperationsSummary
         label={t('ops.reservations.schedule')}
         metrics={[
@@ -198,7 +208,7 @@ export default function StaffReservationsPage() {
           className={`min-h-11 ${activeTab === 'reservations' ? 'border-b-2 border-primary rounded-none' : ''}`}
         >
           <CalendarDays size={16} />
-          Lịch đặt bàn tại quán
+          {t("reservation.scheduleTab")}
         </Button>
         <Button
           variant="ghost"
@@ -207,7 +217,7 @@ export default function StaffReservationsPage() {
           className={`min-h-11 ${activeTab === 'requests' ? 'border-b-2 border-primary rounded-none' : ''}`}
         >
           <Sparkles size={16} />
-          Yêu cầu từ khách online
+          {t("reservation.requestTab")}
         </Button>
       </div>
       <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
@@ -227,16 +237,16 @@ export default function StaffReservationsPage() {
               <p>{errorMessage(reservations.error)}</p>
               <Button variant="outline" size="sm" onClick={() => void reservations.refetch()}>
                 <RefreshCw size={16} />
-                Tải lại danh sách
+                {t("reservation.reloadList")}
               </Button>
             </div>
           )}
           {canReadTables && tables.isError && (
             <div role="alert" className="text-sm text-destructive">
-              Không tải được danh sách bàn.{' '}
+              {t("reservation.tablesFailed")}{' '}
               <Button variant="outline" size="sm" onClick={() => void tables.refetch()}>
                 <RefreshCw size={16} />
-                Tải lại bàn
+                {t("reservation.reloadTables")}
               </Button>
             </div>
           )}
@@ -286,7 +296,7 @@ export default function StaffReservationsPage() {
               <p>{errorMessage(requests.error)}</p>
               <Button variant="outline" size="sm" onClick={() => void requests.refetch()}>
                 <RefreshCw size={16} />
-                Tải lại yêu cầu
+                {t("reservation.reloadRequests")}
               </Button>
             </div>
           )}

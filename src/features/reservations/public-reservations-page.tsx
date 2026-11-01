@@ -15,6 +15,7 @@ import {
   formatReservationDateTime,
 } from './reservation-time'
 import { ApiError, errorMessage } from '../../shared/api/client'
+import { isValidPhone, normalizePhone } from '@/shared/lib/phone'
 import { authConfig } from '../auth/auth.config'
 import { Turnstile } from '../auth/turnstile'
 import { Button, Dialog, DialogFooter, DialogTitle, Input } from '../../shared/ui'
@@ -186,7 +187,7 @@ export function PublicReservationsPage() {
               </div>
               <div>
                 <h1 className="text-xl font-extrabold text-foreground">{translate('reservation.requestStatus')}</h1>
-                <p className="text-xs text-muted-foreground">Thông tin chi tiết yêu cầu giữ chỗ tại quán</p>
+                <p className="text-xs text-muted-foreground">{translate("reservation.trackingSubtitle")}</p>
               </div>
             </div>
 
@@ -213,7 +214,7 @@ export function PublicReservationsPage() {
                 }}
               >
                 <Copy size={15} />
-                <span className="ml-1 text-xs">Sao chép</span>
+                <span className="ml-1 text-xs">{translate("reservation.copy")}</span>
               </Button>
             </div>
 
@@ -253,7 +254,7 @@ export function PublicReservationsPage() {
                 <div className="space-y-4">
                   <div className="rounded-xl border border-primary/30 bg-primary/5 p-4 flex items-center justify-between">
                     <div>
-                      <span className="text-xs text-muted-foreground block">Trạng thái</span>
+                      <span className="text-xs text-muted-foreground block">{translate("reservation.status")}</span>
                       <p role="status" className="text-base font-extrabold text-primary mt-0.5">
                         {label}
                       </p>
@@ -343,7 +344,7 @@ export function PublicReservationsPage() {
                   const start = fromReservationLocal(startsAt)
                   if (
                     !customerName.trim() ||
-                    !/^[0-9+()\-\s]{8,20}$/.test(phoneNumber.trim()) ||
+                    !isValidPhone(phoneNumber) ||
                     !Number.isInteger(guestCount) ||
                     guestCount < 1 ||
                     guestCount > 50 ||
@@ -362,7 +363,7 @@ export function PublicReservationsPage() {
                     .replace(/=+$/, '')
                   const payload = {
                     customerName: customerName.trim(),
-                    phoneNumber: phoneNumber.trim(),
+                    phoneNumber: normalizePhone(phoneNumber),
                     startsAt: start.toISOString(),
                     endsAt: new Date(start.getTime() + durationHours * 3_600_000).toISOString(),
                     guestCount,
@@ -411,7 +412,7 @@ export function PublicReservationsPage() {
                     type="tel"
                     required
                     minLength={8}
-                    maxLength={20}
+                    maxLength={30}
                     placeholder="0912 345 678"
                     value={phoneNumber}
                     onChange={(event) => setPhoneNumber(event.target.value)}
@@ -528,18 +529,18 @@ export function PublicReservationsPage() {
                 src="/hero-coffee-640.webp"
                 srcSet="/hero-coffee-640.webp 640w, /hero-coffee.webp 1376w"
                 sizes="(min-width: 1024px) 50vw, 100vw"
-                alt="Không gian Coffee Homes"
+                alt={translate("reservation.photoAlt")}
                 className="h-full w-full object-cover"
               />
               <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/40 to-transparent" />
               <div className="absolute bottom-4 left-4 right-4 text-white">
                 <div className="inline-flex items-center gap-1.5 rounded-full bg-accent/90 px-3 py-0.5 text-[11px] font-bold text-black uppercase tracking-wider mb-2">
                   <Sparkles className="h-3 w-3" />
-                  <span>Không gian ấm cúng</span>
+                  <span>{translate("reservation.atmosphere")}</span>
                 </div>
-                <h2 className="text-xl sm:text-2xl font-bold leading-tight">Đặt bàn tại Coffee Homes</h2>
+                <h2 className="text-xl sm:text-2xl font-bold leading-tight">{translate("reservation.storeHeading")}</h2>
                 <p className="text-xs text-emerald-100/90 mt-1">
-                  Giữ chỗ trước để có trải nghiệm trọn vẹn nhất bên tách cà phê thơm ngon và góc ngồi ưng ý.
+                  {translate("reservation.storeDescription")}
                 </p>
               </div>
             </div>
@@ -548,29 +549,29 @@ export function PublicReservationsPage() {
               <div className="flex items-start gap-3">
                 <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0 mt-0.5" />
                 <div>
-                  <p className="text-sm font-bold text-foreground">Xác nhận ngay lập tức</p>
-                  <p className="text-xs text-muted-foreground">Đội ngũ phục vụ tiếp nhận và chuẩn bị bàn kịp thời.</p>
+                  <p className="text-sm font-bold text-foreground">{translate("reservation.confirmationPolicy")}</p>
+                  <p className="text-xs text-muted-foreground">{translate("reservation.confirmationPolicyDetail")}</p>
                 </div>
               </div>
               <div className="flex items-start gap-3">
                 <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0 mt-0.5" />
                 <div>
-                  <p className="text-sm font-bold text-foreground">Giữ chỗ hoàn toàn miễn phí</p>
-                  <p className="text-xs text-muted-foreground">Không yêu cầu phí đặt cọc cho các bàn thông thường.</p>
+                  <p className="text-sm font-bold text-foreground">{translate("reservation.freeBooking")}</p>
+                  <p className="text-xs text-muted-foreground">{translate("reservation.freeBookingDetail")}</p>
                 </div>
               </div>
               <div className="flex items-start gap-3">
                 <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0 mt-0.5" />
                 <div>
-                  <p className="text-sm font-bold text-foreground">Dễ dàng thay đổi &amp; tra cứu lịch</p>
-                  <p className="text-xs text-muted-foreground">Tra cứu tình trạng duyệt bàn dễ dàng qua mã truy cập cá nhân.</p>
+                  <p className="text-sm font-bold text-foreground">{translate("reservation.lookupPolicy")}</p>
+                  <p className="text-xs text-muted-foreground">{translate("reservation.lookupPolicyDetail")}</p>
                 </div>
               </div>
               <div className="flex items-start gap-3">
                 <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0 mt-0.5" />
                 <div>
-                  <p className="text-sm font-bold text-foreground">Không cần đặt cọc</p>
-                  <p className="text-xs text-muted-foreground">Thoải mái đến quán đúng giờ hẹn mà không lo ngại thủ tục.</p>
+                  <p className="text-sm font-bold text-foreground">{translate("reservation.noDeposit")}</p>
+                  <p className="text-xs text-muted-foreground">{translate("reservation.noDepositDetail")}</p>
                 </div>
               </div>
             </div>
@@ -606,7 +607,7 @@ export function PublicReservationsPage() {
                   disabled={locked}
                   maxLength={43}
                   autoComplete="off"
-                  placeholder="Nhập mã truy cập 43 ký tự..."
+                  placeholder={translate("reservation.tokenPlaceholder")}
                   onChange={(event) => setTokenInput(event.target.value)}
                 />
                 <Button type="submit" variant="outline" disabled={locked} className="shrink-0">

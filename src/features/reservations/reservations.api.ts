@@ -179,6 +179,20 @@ export async function getReservationById(id: number, signal?: AbortSignal) {
   return apiGet(`/reservations/${id}`, reservationDetailSchema, signal, true)
 }
 
+export function getAvailableReservationTables(query: {
+  startsAt: string; endsAt: string; excludeReservationId?: number; tableId?: string; keyword?: string; page?: number
+}, signal?: AbortSignal) {
+  const params = new URLSearchParams({ startsAt: query.startsAt, endsAt: query.endsAt, page: String(query.page ?? 1), itemPerPage: '20' })
+  if (query.excludeReservationId) params.set('excludeReservationId', String(query.excludeReservationId))
+  if (query.tableId) params.set('tableId', query.tableId)
+  if (query.keyword) params.set('keyword', query.keyword)
+  return apiGet(`/reservations/available-tables?${params}`, z.object({
+    list: z.array(z.object({ id: z.uuid(), name: z.string() })),
+    totalItems: z.number().int().nonnegative(), totalPages: z.number().int().nonnegative(),
+    currentPage: z.number().int().positive(),
+  }), signal, true)
+}
+
 export function getReservationRequestById(id: string, signal?: AbortSignal) {
   return apiGet(`/reservations/requests/${id}`, reservationRequestSchema, signal, true)
 }
