@@ -1,4 +1,5 @@
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import {
   CalendarDays,
   CheckCircle2,
@@ -73,16 +74,17 @@ export function ReservationsTab({
   onEditClick,
   onCancelClick,
 }: ReservationsTabProps) {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const list = reservationsData?.list ?? []
   return (
     <div className="space-y-4">
       <section
-        aria-label="Bộ lọc lịch đặt bàn"
+        aria-label={t("reservation.filters")}
         className="grid gap-3 border-y border-border bg-card px-4 py-3 sm:grid-cols-2"
       >
         <fieldset className="min-w-0">
-          <legend className="mb-1 text-xs text-muted-foreground">Khung thời gian</legend>
+          <legend className="mb-1 text-xs text-muted-foreground">{t("reservation.timeWindow")}</legend>
           <div className="flex rounded-md border border-input p-0.5">
             {(['today', 'tomorrow', 'all'] as const).map((value, index) => (
               <button
@@ -92,15 +94,15 @@ export function ReservationsTab({
                 onClick={() => onDateFilterChange(value)}
                 className={`min-h-11 flex-1 rounded px-2 text-xs font-medium transition-colors ${dateFilter === value ? 'bg-primary text-white' : 'hover:bg-muted'}`}
               >
-                {['Hôm nay', 'Ngày mai', 'Tất cả'][index]}
+                {[t("reservation.today"), t("reservation.tomorrow"), t("reservation.all")][index]}
               </button>
             ))}
           </div>
         </fieldset>
         <label className="min-w-0 text-xs text-muted-foreground">
-          Trạng thái
+          {t("reservation.status")}
           <select
-            aria-label="Lọc theo trạng thái đặt bàn"
+            aria-label={t("reservation.filterStatus")}
             value={resStatus}
             onChange={(event) => {
               onResStatusChange(event.target.value as ReservationStatus | 'ALL')
@@ -108,17 +110,17 @@ export function ReservationsTab({
             }}
             className="mt-1 h-12 w-full rounded-md border border-input bg-card px-3 text-sm text-foreground"
           >
-            <option value="ALL">Tất cả trạng thái</option>
-            <option value="PENDING">Chờ đón khách (PENDING)</option>
-            <option value="ARRIVED">Đã đón vào bàn (ARRIVED)</option>
-            <option value="CANCELLED">Đã hủy (CANCELLED)</option>
-            <option value="NO_SHOW">Vắng mặt (NO_SHOW)</option>
+            <option value="ALL">{t("reservation.allStatuses")}</option>
+            <option value="PENDING">{t("reservation.pendingOption")}</option>
+            <option value="ARRIVED">{t("reservation.arrivedOption")}</option>
+            <option value="CANCELLED">{t("reservation.cancelledOption")}</option>
+            <option value="NO_SHOW">{t("reservation.noShowOption")}</option>
           </select>
         </label>
         <label className="min-w-0 text-xs text-muted-foreground">
-          Bàn phục vụ
+          {t("reservation.table")}
           <select
-            aria-label="Lọc theo bàn phục vụ"
+            aria-label={t("reservation.filterTable")}
             disabled={!canReadTables}
             value={resTableId}
             onChange={(event) => {
@@ -127,7 +129,7 @@ export function ReservationsTab({
             }}
             className="mt-1 h-12 w-full rounded-md border border-input bg-card px-3 text-sm text-foreground"
           >
-            <option value="ALL">Tất cả các bàn</option>
+            <option value="ALL">{t("reservation.allTables")}</option>
             {tables.map((table) => (
               <option key={table.id} value={table.id}>
                 {table.name}
@@ -136,7 +138,7 @@ export function ReservationsTab({
           </select>
         </label>
         <label className="min-w-0 text-xs text-muted-foreground">
-          Số điện thoại khách
+          {t("reservation.searchPhone")}
           <span className="relative mt-1 block">
             <Search
               size={16}
@@ -145,9 +147,9 @@ export function ReservationsTab({
             />
             <Input
               type="search"
-              aria-label="Số điện thoại khách"
+              aria-label={t("reservation.searchPhone")}
               maxLength={20}
-              placeholder="Tìm theo số điện thoại..."
+              placeholder={t("reservation.searchPhonePlaceholder")}
               value={resSearchPhone}
               onChange={(event) => onResSearchPhoneChange(event.target.value)}
               className="h-12 pl-9 text-sm"
@@ -157,7 +159,7 @@ export function ReservationsTab({
       </section>
       {isLoading ? (
         <p role="status" className="py-12 text-center text-sm text-muted-foreground">
-          Đang tải lịch đặt bàn…
+          {t("reservation.loadingSchedule")}
         </p>
       ) : hasError ? null : !list.length ? (
         <div className="py-12 text-center">
@@ -166,11 +168,11 @@ export function ReservationsTab({
             aria-hidden="true"
             className="mx-auto mb-3 text-muted-foreground"
           />
-          <h3 className="text-sm font-semibold">Không có lịch đặt bàn nào phù hợp</h3>
+          <h3 className="text-sm font-semibold">{t("reservation.noSchedules")}</h3>
           {canCreate && (
             <Button className="mt-4 min-h-11" onClick={onCreateClick}>
               <Plus size={16} aria-hidden="true" />
-              Tạo đặt bàn mới
+              {t("reservation.add")}
             </Button>
           )}
         </div>
@@ -196,7 +198,7 @@ export function ReservationsTab({
               <div className="min-w-0 space-y-3">
                 <header className="flex flex-wrap items-center justify-between gap-2">
                   <h3 className="min-w-0 max-w-full break-words text-base font-bold">
-                    {reservation.table?.name ?? 'Chưa gán bàn'}
+                    {reservation.table?.name ?? t("reservation.unassigned")}
                   </h3>
                   <Badge
                     variant={
@@ -212,21 +214,21 @@ export function ReservationsTab({
                   >
                     {
                       {
-                        PENDING: 'Chờ đón khách',
-                        ARRIVED: 'Đã đón vào bàn',
-                        CANCELLED: 'Đã hủy',
-                        NO_SHOW: 'Vắng mặt',
+                        PENDING: t("reservation.awaitingGuest"),
+                        ARRIVED: t("reservation.arrived"),
+                        CANCELLED: t("reservation.cancelledShort"),
+                        NO_SHOW: t("reservation.noShowShort"),
                       }[reservation.status]
                     }
                   </Badge>
                 </header>
                 <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
                   <strong className="min-w-0 max-w-full break-words">
-                    {reservation.customerName || 'Khách vãng lai'}
+                    {reservation.customerName || t("reservation.walkIn")}
                   </strong>
                   <span className="flex items-center gap-1 text-xs text-muted-foreground">
                     <Users size={13} aria-hidden="true" />
-                    {reservation.guestCount} người
+                    {reservation.guestCount} {t("reservation.peopleLabel")}
                   </span>
                   <a
                     href={`tel:${reservation.phoneNumber}`}
@@ -243,7 +245,7 @@ export function ReservationsTab({
                 )}
                 {reservation.cancellationReason && (
                   <p className="break-words text-xs text-destructive">
-                    Lý do hủy: {reservation.cancellationReason}
+                    {t("reservation.cancelReasonPrefix")} {reservation.cancellationReason}
                   </p>
                 )}
                 <footer className="flex flex-wrap items-center justify-between gap-2">
@@ -257,7 +259,7 @@ export function ReservationsTab({
                         {canCheckIn && (
                           <Button className="min-h-11" onClick={() => onCheckInClick(reservation)}>
                             <LogIn size={16} aria-hidden="true" />
-                            Đón khách
+                            {t("reservation.checkIn")}
                           </Button>
                         )}
                         {canUpdate && (
@@ -266,8 +268,8 @@ export function ReservationsTab({
                             size="icon"
                             className="h-11 w-11"
                             onClick={() => onEditClick(reservation)}
-                            title="Đổi giờ hoặc bàn"
-                            aria-label="Đổi giờ hoặc bàn"
+                            title={t("reservation.changeTableTime")}
+                            aria-label={t("reservation.changeTableTime")}
                           >
                             <Edit2 size={16} aria-hidden="true" />
                           </Button>
@@ -278,8 +280,8 @@ export function ReservationsTab({
                             size="icon"
                             className="h-11 w-11 text-destructive"
                             onClick={() => onCancelClick(reservation)}
-                            title="Hủy đặt bàn"
-                            aria-label="Hủy đặt bàn"
+                            title={t("reservation.cancelStaff")}
+                            aria-label={t("reservation.cancelStaff")}
                           >
                             <XCircle size={16} aria-hidden="true" />
                           </Button>
@@ -297,7 +299,7 @@ export function ReservationsTab({
                           }
                         >
                           <CheckCircle2 size={16} aria-hidden="true" />
-                          Xem phiên POS bàn này
+                          {t("reservation.viewPos")}
                         </Button>
                       )}
                   </div>
@@ -310,8 +312,7 @@ export function ReservationsTab({
       {!hasError && reservationsData && (reservationsData.totalPages > 1 || resPage > 1) && (
         <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border pt-3 text-xs text-muted-foreground">
           <span>
-            Trang {reservationsData.currentPage} / {reservationsData.totalPages} (Tổng{' '}
-            {reservationsData.totalItems} lịch đặt)
+            {t('reservation.pageSummary', { page: reservationsData.currentPage, pages: reservationsData.totalPages, total: reservationsData.totalItems, kind: t('reservation.scheduleNoun') })}
           </span>
           <Pagination
             page={resPage}

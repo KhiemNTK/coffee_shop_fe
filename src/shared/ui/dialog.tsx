@@ -2,6 +2,7 @@ import React, { useEffect, useId, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { cn } from './utils'
 import { X } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 
 export interface DialogProps {
   open: boolean
@@ -19,6 +20,7 @@ export function Dialog({
   label = 'Hộp thoại',
   showCloseButton = true,
 }: DialogProps) {
+  const { t } = useTranslation()
   const dialogRef = useRef<HTMLDialogElement>(null)
   const headingId = useId()
   const handleClose = () => {
@@ -65,8 +67,8 @@ export function Dialog({
         type="button"
         onClick={handleClose}
         className="absolute right-3 top-3 rounded-md p-2 text-muted-foreground hover:bg-muted focus-visible:ring-2 focus-visible:ring-primary"
-        aria-label="Đóng"
-        title="Đóng"
+        aria-label={t('common.close')}
+        title={t('common.close')}
       >
         <X size={18} aria-hidden="true" />
       </button>}

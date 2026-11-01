@@ -288,6 +288,7 @@ export function errorMessage(error: unknown) {
   if (error.code === 'TRANSACTION_CONFLICT') return translate('error.transactionConflict')
   if (error.code === 'DATABASE_BUSY') return translate('error.databaseBusy')
   if (error.code === 'ROLE_IN_USE') return translate('roles.inUse')
+  if (error.code === 'ROLE_CHANGED') return translate('roles.changed')
   if (error.code === 'CASH_HANDOVER_FUND_BUSY') return translate('cash.handoverFundBusy')
   if (error.code === 'POSITION_IN_USE') return translate('positions.inUse')
   if (error.code === 'PRINT_JOB_REQUIRES_REVIEW') return translate('receipt.status.REQUIRES_REVIEW')
