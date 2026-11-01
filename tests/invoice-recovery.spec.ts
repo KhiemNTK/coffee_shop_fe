@@ -412,7 +412,7 @@ test('money adapters keep a wide decimal string without rounding', async ({ page
   await setup(page)
   await page.goto('/staff/invoices')
   const value = await page.evaluate(async () => {
-    const path = '/src/features/menu/menu.api.ts'
+    const path = '/src/shared/api/money.ts'
     const { moneySchema } = await import(path)
     return moneySchema.parse('9999999999999999.99')
   })
