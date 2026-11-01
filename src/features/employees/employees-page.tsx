@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useIsFetching, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useOutletContext } from 'react-router-dom'
 import { Users, Briefcase, Shield, Plus, RefreshCw, CheckCircle2 } from 'lucide-react'
@@ -12,6 +13,7 @@ import { errorMessage } from '../../shared/api/client'
 import { WorkflowPermissions } from '@/shared/auth/workflow-permissions'
 
 export function EmployeesPage() {
+  const { t } = useTranslation()
   const client = useQueryClient()
   const { access } = useOutletContext<Session>()
 
@@ -107,14 +109,14 @@ export function EmployeesPage() {
             onClick={() => setToastMessage(null)}
             className="text-emerald-700 hover:text-emerald-900 dark:text-emerald-300 cursor-pointer"
           >
-            Đóng
+            {t("roles.close")}
           </button>
         </div>
       )}
 
       <OperationsHeader
-        title="Quản lý Nhân sự & Phân quyền"
-        meta="Hồ sơ nhân viên · Vị trí công việc · Vai trò bảo mật"
+        title={t("staff.peopleTitle")}
+        meta={t("staff.peopleMeta")}
         actions={
           <>
             <Button
@@ -122,23 +124,23 @@ export function EmployeesPage() {
               className="min-h-10"
               onClick={handleRefresh}
               disabled={refreshing}
-              aria-label="Làm mới"
-              title="Làm mới"
+              aria-label={t("staff.refresh")}
+              title={t("staff.refresh")}
             >
               <RefreshCw size={16} aria-hidden="true" />
-              Làm mới
+              {t("staff.refresh")}
             </Button>
             {activeTab === 'employees' && canCreateEmployee && (
               <Button className="min-h-10" disabled={!createReady} onClick={() => setIsCreateEmployeeOpen(true)}
-                title={!canReadPositions ? 'Cần quyền đọc vị trí để tạo nhân viên' : 'Cần tải được ít nhất một vị trí công việc'}>
+                title={!canReadPositions ? t("staff.needPositions") : t("staff.needOnePosition")}>
                 <Plus size={16} aria-hidden="true" />
-                Thêm nhân viên
+                {t("staff.addEmployee")}
               </Button>
             )}
             {activeTab === 'positions' && canCreatePosition && (
               <Button className="min-h-10" onClick={() => setIsCreatePositionOpen(true)}>
                 <Plus size={16} aria-hidden="true" />
-                Thêm vị trí mới
+                {t("staff.addPosition")}
               </Button>
             )}
           </>
@@ -147,11 +149,11 @@ export function EmployeesPage() {
 
       {activeTab === 'employees' && canCreateEmployee && !createReady && (
         <p role={positions.isError ? 'alert' : 'status'} className="text-sm text-muted-foreground">
-          {!canReadPositions ? 'Bạn cần quyền đọc vị trí để hoàn tất tạo nhân viên.'
-            : positions.isError ? 'Không tải được vị trí công việc.'
-              : positionsLoaded && !positionsDropdown.length ? 'Tạo ít nhất một vị trí công việc trước khi thêm nhân viên.'
-                : 'Đang tải vị trí công việc…'}
-          {canReadPositions && positions.isError && <Button variant="outline" size="sm" onClick={() => void positions.refetch()}>Tải lại vị trí</Button>}
+          {!canReadPositions ? t("staff.positionsAccess")
+            : positions.isError ? t("staff.positionsFailed")
+              : positionsLoaded && !positionsDropdown.length ? t("staff.positionsEmpty")
+                : t("staff.positionsLoading")}
+          {canReadPositions && positions.isError && <Button variant="outline" size="sm" onClick={() => void positions.refetch()}>{t("staff.reloadPositions")}</Button>}
         </p>
       )}
 
@@ -159,7 +161,7 @@ export function EmployeesPage() {
         <p role="alert" className="text-sm text-destructive">
           {errorMessage(rolesError)}{' '}
           <Button variant="outline" size="sm" onClick={() => void refetchRoles()}>
-            Thử tải vai trò
+            {t("staff.reloadRoles")}
           </Button>
         </p>
       )}
@@ -177,7 +179,7 @@ export function EmployeesPage() {
           }`}
         >
           <Users className="h-4 w-4" />
-          <span>Danh sách Nhân sự</span>
+          <span>{t("staff.employeeTab")}</span>
           <Badge variant="outline" className="ml-1 text-[11px] px-1.5 py-0">
             {stats.total}
           </Badge>
@@ -195,7 +197,7 @@ export function EmployeesPage() {
             }`}
           >
             <Briefcase className="h-4 w-4" />
-            <span>Vị trí Công việc</span>
+            <span>{t("staff.positionTab")}</span>
             <Badge variant="outline" className="ml-1 text-[11px] px-1.5 py-0">
               {stats.positionsCount}
             </Badge>
@@ -214,7 +216,7 @@ export function EmployeesPage() {
             }`}
           >
             <Shield className="h-4 w-4" />
-            <span>Vai trò & Quyền hạn</span>
+            <span>{t("staff.roleTab")}</span>
           </button>
         )}
       </div>

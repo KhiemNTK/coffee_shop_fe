@@ -1,4 +1,5 @@
 import { AlertCircle, ShieldCheck, RefreshCw } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import type { EmployeeListItem, Role } from '@/features/employees/employees.api'
 import { errorMessage } from '@/shared/api/client'
 import {
@@ -55,6 +56,7 @@ export function AssignRolesModal({
   isPending,
   onSubmit,
 }: AssignRolesModalProps) {
+  const { t } = useTranslation()
   const handleSave = () => {
     if (!assignmentReady || isPending || !assignment.data) return
 
@@ -68,14 +70,14 @@ export function AssignRolesModal({
           role.name === 'OWNER' &&
           previousIds.includes(role.id) !== roleIds.includes(role.id),
       ) &&
-      !window.confirm('Thay đổi quyền chủ sở hữu của tài khoản này?')
+      !window.confirm(t("roles.confirmOwner"))
     ) {
       return
     }
 
     if (
       !roleIds.length &&
-      !window.confirm('Thu hồi toàn bộ vai trò của nhân viên này?')
+      !window.confirm(t("roles.confirmRemoveRoles"))
     ) {
       return
     }
@@ -97,10 +99,10 @@ export function AssignRolesModal({
               <ShieldCheck className="h-5 w-5" />
             </div>
             <DialogTitle className="text-lg font-bold text-foreground">
-              Phân vai trò: {employee.fullName}
+              {t("roles.assignmentTitle")} {employee.fullName}
             </DialogTitle>
             <DialogDescription className="text-sm text-muted-foreground">
-              Chọn các vai trò phân quyền áp dụng cho tài khoản này
+              {t("roles.assignmentHelp")}
             </DialogDescription>
           </DialogHeader>
 
@@ -112,7 +114,7 @@ export function AssignRolesModal({
           )}
 
           {assignment.isPending && (
-            <p role="status">Đang tải vai trò hiện tại...</p>
+            <p role="status">{t("roles.assignmentLoading")}</p>
           )}
           {assignment.isError && (
             <div role="alert">
@@ -121,16 +123,16 @@ export function AssignRolesModal({
                 variant="outline"
                 onClick={() => void assignment.refetch()}
               >
-                Thử tải lại
+                {t("roles.retry")}
               </Button>
             </div>
           )}
           {!rolesLoaded && (
-            <p role="alert">Danh sách vai trò chưa tải thành công.</p>
+            <p role="alert">{t("roles.catalogFailed")}</p>
           )}
           {assignment.isSuccess && !assignment.data?.canManageRoles && (
             <p role="status" className="mt-3 text-sm text-muted-foreground">
-              Không được thay đổi vai trò của tài khoản này.
+              {t("roles.assignmentProtected")}
             </p>
           )}
           {roleReviewRequired && (
@@ -139,7 +141,7 @@ export function AssignRolesModal({
               disabled={assignment.isFetching}
               onClick={() => void onReconcile()}
             >
-              <RefreshCw size={16} /> Đối chiếu vai trò
+              <RefreshCw size={16} /> {t("roles.reconcileAssignment")}
             </Button>
           )}
           <fieldset
@@ -181,7 +183,7 @@ export function AssignRolesModal({
                     {assignment.isSuccess &&
                       !assignment.data?.assignableRoleIds.includes(role.id) && (
                         <span className="text-muted-foreground">
-                          Ngoài phạm vi được cấp
+                          {t("roles.outsideGrant")}
                         </span>
                       )}
                   </div>
@@ -198,7 +200,7 @@ export function AssignRolesModal({
               onClick={onClose}
               disabled={isPending}
             >
-              Hủy
+              {t("roles.cancel")}
             </Button>
             <Button
               type="button"
@@ -207,7 +209,7 @@ export function AssignRolesModal({
               disabled={!assignmentReady || isPending}
               className="bg-blue-600 hover:bg-blue-700 text-white"
             >
-              {isPending ? 'Đang lưu...' : 'Lưu vai trò'}
+              {isPending ? t("roles.saving") : t("roles.save")}
             </Button>
           </DialogFooter>
         </>

@@ -365,6 +365,10 @@ export async function getRolePermissions(
   )
 }
 
+export function getRoleById(id: string, signal?: AbortSignal) {
+  return apiGet(`/roles/${id}`, roleSchema.extend({ updatedAt: z.iso.datetime({ offset: true }) }), signal, true)
+}
+
 export async function replaceRolePermissions(
   id: string,
   permissionIds: string[],
@@ -425,10 +429,11 @@ export async function getAllPermissions(signal?: AbortSignal) {
 export function saveRole(
   id: string | undefined,
   data: {
-    name: string
+    name?: string
     description?: string | null
     templateRoleId?: string
     expectedPermissionIds?: string[]
+    expectedUpdatedAt?: string
   },
 ) {
   return apiMutate(
