@@ -471,7 +471,8 @@ test('custom roles are created while system roles remain immutable', async ({ pa
   await page.getByLabel('Tên vai trò').fill('Trưởng ca tối')
   await page.getByRole('button', { name: 'Lưu vai trò', exact: true }).click()
   await expect(page.getByRole('button', { name: 'Sửa vai trò Trưởng ca tối' })).toBeVisible()
-  expect(created).toMatchObject({ name: 'Trưởng ca tối', description: '' })
+  expect(created).toMatchObject({ name: 'Trưởng ca tối', description: null })
+  expect(created).not.toHaveProperty('expectedUpdatedAt')
 })
 
 test('employee assignment and malformed role-permission reads fail closed', async ({ page }) => {

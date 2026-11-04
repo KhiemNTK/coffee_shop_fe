@@ -184,12 +184,12 @@ test('copies a role only after reviewing its grants and reconciles a changed tem
   await dialog.getByRole('button', { name: 'Lưu vai trò', exact: true }).click()
   await expect(dialog.getByRole('alert')).toContainText('Phân quyền đã thay đổi')
   await expect(dialog.getByRole('button', { name: 'Lưu vai trò', exact: true })).toBeDisabled()
-  expect(writes).toEqual([{ name: 'Thu ngân ca tối', description: '', templateRoleId: roleId, expectedPermissionIds: ['menu'] }])
+  expect(writes).toEqual([{ name: 'Thu ngân ca tối', description: null, templateRoleId: roleId, expectedPermissionIds: ['menu'] }])
   await dialog.getByRole('button', { name: 'Đối chiếu quyền mẫu' }).click()
   await expect(dialog.getByRole('list', { name: 'Quyền của mẫu' })).toContainText('Xem tồn kho')
   await dialog.getByRole('button', { name: 'Lưu vai trò', exact: true }).click()
   await expect(dialog).not.toBeVisible()
-  expect(writes[1]).toEqual({ name: 'Thu ngân ca tối', description: '', templateRoleId: roleId, expectedPermissionIds: ['menu', 'inventory'] })
+  expect(writes[1]).toEqual({ name: 'Thu ngân ca tối', description: null, templateRoleId: roleId, expectedPermissionIds: ['menu', 'inventory'] })
 })
 
 test('does not offer copying without delegation authority or copy outside the actor scope', async ({ page }) => {

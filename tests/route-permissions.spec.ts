@@ -105,15 +105,20 @@ test('editing an existing receipt never looks up stock or suppliers without thei
 
 test('employee tabs and open role dialogs stop showing revoked access and cached data', async ({ page }) => {
   const base = ['/employees_read', '/positions_read', '/positions_update', '/roles_read', '/roles_update']
-  const { unexpected, replace } = await staff(page, base)
+  const { unexpected, replace, has } = await staff(page, base)
   await page.route('**/api/v1/employees?*', (route) => route.fulfill({ json: envelope(paged()) }))
   await page.route('**/api/v1/positions/dropdown', (route) => route.fulfill({ json: envelope([{ id, name: 'Private position' }]) }))
   await page.route('**/api/v1/positions?*', (route) => route.fulfill({ json: envelope(paged([{ id, name: 'Private position', salary: '12000000' }])) }))
   await page.route('**/api/v1/roles?*', (route) => route.fulfill({ json: envelope(paged([{ id, name: 'Private role' }])) }))
+  await page.route('**/api/v1/roles/' + id, (route) => {
+    if (route.request().method() !== 'GET' || !has('/roles_read')) return route.fallback()
+    return route.fulfill({ json: envelope({ id, name: 'Private role', description: 'Fresh role details', updatedAt: '2026-10-01T00:00:00.000Z' }) })
+  })
   await page.goto('/staff/employees')
   await page.getByRole('button', { name: 'Vai trò & Quyền hạn', exact: true }).click()
   await page.getByRole('button', { name: 'Sửa vai trò Private role' }).click()
   await expect(page.getByRole('dialog')).toBeVisible()
+  await expect(page.getByRole('dialog').getByLabel('Mô tả', { exact: true })).toHaveValue('Fresh role details')
   await replace(base.filter((key) => key !== '/roles_update'))
   await expect(page.getByRole('dialog')).toHaveCount(0)
   await replace(['/employees_read', '/positions_read', '/positions_update'])
