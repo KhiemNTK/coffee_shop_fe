@@ -1,5 +1,6 @@
 import { formatPrice } from '@/shared/lib/format'
 import { useState, useDeferredValue } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Edit3,
@@ -17,6 +18,7 @@ import {
 } from '../cashier-shifts.api'
 import {
   Badge,
+  ApiErrorAlert,
   Button,
   Card,
   CardContent,
@@ -45,6 +47,7 @@ export function FundsTab({
   onError,
   onSuccess,
 }: FundsTabProps) {
+  const { t } = useTranslation()
   const queryClient = useQueryClient()
 
   const [fundKeyword, setFundKeyword] = useState('')
@@ -125,6 +128,7 @@ export function FundsTab({
         <div className="relative flex-1 max-w-sm">
           <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
           <Input
+            aria-label={t('cash.searchFunds')}
             value={fundKeyword}
             onChange={(e) => setFundKeyword(e.target.value)}
             placeholder="Tìm kiếm theo tên quỹ..."
@@ -134,6 +138,7 @@ export function FundsTab({
 
         <div className="flex items-center gap-2">
           <select
+            aria-label={t('cash.fundType')}
             value={fundTypeFilter}
             onChange={(e) => setFundTypeFilter(e.target.value as 'ALL' | 'CASH' | 'BANK')}
             className="px-3 py-1.5 text-xs rounded-lg border border-input bg-background"
@@ -152,6 +157,13 @@ export function FundsTab({
             <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-primary" />
             Đang tải danh mục quỹ tiền...
           </div>
+        ) : fundsQuery.isError ? (
+          <div className="col-span-full space-y-3">
+            <ApiErrorAlert error={fundsQuery.error} />
+            <Button variant="outline" size="sm" disabled={fundsQuery.isFetching} onClick={() => void fundsQuery.refetch()}>
+              <RefreshCw size={16} aria-hidden="true" />{t('common.retry')}
+            </Button>
+          </div>
         ) : fundsList.length === 0 ? (
           <div className="col-span-full py-12 text-center text-muted-foreground text-sm">
             Không tìm thấy quỹ tiền mặt nào.
@@ -164,19 +176,19 @@ export function FundsTab({
             return (
               <Card key={fund.id} className="relative overflow-hidden group hover:border-primary/50 transition-colors">
                 <CardHeader className="flex flex-row items-start justify-between pb-2">
-                  <div>
+                  <div className="min-w-0">
                     <div className="flex items-center gap-2">
                       <Badge variant={isCash ? 'success' : 'outline'}>
                         {isCash ? 'Tiền mặt (CASH)' : 'Ngân hàng (BANK)'}
                       </Badge>
                     </div>
-                    <CardTitle className="text-base font-bold text-foreground mt-2">
+                    <CardTitle className="break-words text-base font-bold text-foreground mt-2">
                       {fund.name}
                     </CardTitle>
                   </div>
 
                   {canManageFunds && (
-                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="flex shrink-0 items-center gap-1">
                       <Button
                         variant="ghost"
                         size="sm"
@@ -186,10 +198,11 @@ export function FundsTab({
                           setFundFormType(fund.type === 'BANK' ? 'BANK' : 'CASH')
                           setIsEditFundModalOpen(true)
                         }}
-                        className="h-8 w-8 p-0"
+                        className="size-10 p-0"
+                        aria-label={t('cash.editFund', { name: fund.name })}
                         title="Chỉnh sửa"
                       >
-                        <Edit3 className="w-3.5 h-3.5" />
+                        <Edit3 className="size-4" aria-hidden="true" />
                       </Button>
                       {canDelete && (
                         <Button
@@ -200,10 +213,11 @@ export function FundsTab({
                               deleteFundMutation.mutate(fund.id)
                             }
                           }}
-                          className="h-8 w-8 p-0 text-rose-500 hover:text-rose-600"
+                          className="size-10 p-0 text-destructive"
+                          aria-label={t('cash.deleteFund', { name: fund.name })}
                           title="Xóa quỹ"
                         >
-                          <Trash2 className="w-3.5 h-3.5" />
+                          <Trash2 className="size-4" aria-hidden="true" />
                         </Button>
                       )}
                     </div>
@@ -213,7 +227,7 @@ export function FundsTab({
                 <CardContent>
                   <div className="mt-2">
                     <span className="text-xs text-muted-foreground font-medium">Số dư khả dụng</span>
-                    <p className="text-2xl font-bold tracking-tight text-foreground mt-0.5">
+                    <p className="break-words text-2xl font-bold text-foreground mt-0.5">
                       {formatPrice(fund.balance)}
                     </p>
                   </div>
@@ -259,8 +273,9 @@ export function FundsTab({
           className="flex flex-col gap-4 mt-2"
         >
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium">Tên định danh quỹ *</label>
+            <label htmlFor="fund-name" className="text-sm font-medium">Tên định danh quỹ *</label>
             <Input
+              id="fund-name"
               value={fundFormName}
               onChange={(e) => setFundFormName(e.target.value)}
               placeholder="Ví dụ: Két sắt an toàn trung tâm..."
@@ -269,8 +284,9 @@ export function FundsTab({
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium">Loại quỹ *</label>
+            <label htmlFor="fund-type" className="text-sm font-medium">Loại quỹ *</label>
             <select
+              id="fund-type"
               value={fundFormType}
               onChange={(e) => setFundFormType(e.target.value as 'CASH' | 'BANK')}
               className="w-full px-3 py-2 text-sm rounded-lg border border-input bg-background"
@@ -282,11 +298,13 @@ export function FundsTab({
 
           {!isEditFundModalOpen && (
             <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium">Số dư khởi tạo ban đầu (VND)</label>
+              <label htmlFor="fund-opening-balance" className="text-sm font-medium">Số dư khởi tạo ban đầu (VND)</label>
               <Input
+                id="fund-opening-balance"
                 type="number"
                 min="0"
-                step="1000"
+                step="0.01"
+                inputMode="decimal"
                 value={fundFormOpeningBalance}
                 onChange={(e) => setFundFormOpeningBalance(e.target.value)}
                 placeholder="0"

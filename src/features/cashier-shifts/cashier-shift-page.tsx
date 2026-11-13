@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 import { useOutletContext, useSearchParams } from 'react-router-dom'
@@ -16,7 +16,7 @@ import {
 } from 'lucide-react'
 import { type Session } from '../auth/session'
 import { getCurrentShift } from './cashier-shifts.api'
-import { Button, cn } from '../../shared/ui'
+import { Button, Tabs, TabsContent, TabsList, TabsTrigger, cn } from '../../shared/ui'
 import { CurrentShiftTab } from './components/current-shift-tab'
 import { CashHandoversTab } from './components/cash-handovers-tab'
 import { ExpenseRequestsTab } from './components/expense-requests-tab'
@@ -78,12 +78,13 @@ export default function CashierShiftPage() {
     })
   }
 
-  // Stable timestamp for pure renders
-  const [nowTimestamp] = useState(() => Date.now())
-
   // Feedback notifications
   const [actionError, setActionError] = useState<string | null>(null)
   const [actionSuccess, setActionSuccess] = useState<string | null>(null)
+  const errorRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (actionError) errorRef.current?.focus()
+  }, [actionError])
 
   const clearFeedback = () => {
     setActionError(null)
@@ -104,7 +105,7 @@ export default function CashierShiftPage() {
   })
 
   return (
-    <div className="flex flex-col gap-6 p-4 md:p-8 max-w-7xl mx-auto w-full">
+    <Tabs value={activeTab ?? ''} onValueChange={value => setActiveTab(value as MainTab)} className="flex min-w-0 flex-col gap-6 p-4 md:p-8 max-w-7xl mx-auto w-full">
       {/* HEADER */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-border pb-6">
         <div>
@@ -113,7 +114,7 @@ export default function CashierShiftPage() {
               <Coins className="w-6 h-6" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold tracking-tight text-foreground">
+              <h1 className="text-2xl font-bold text-foreground">
                 {t('cash.page.title')}
               </h1>
               <p className="text-sm text-muted-foreground mt-0.5">
@@ -124,7 +125,7 @@ export default function CashierShiftPage() {
         </div>
 
         {/* Global Action Quick Buttons */}
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {canCreateHandover && (
             <Button
               variant="outline"
@@ -159,110 +160,46 @@ export default function CashierShiftPage() {
 
       {/* FEEDBACK BANNERS */}
       {actionError && (
-        <div className="flex items-center gap-3 p-4 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400 text-sm">
+        <div ref={errorRef} role="alert" tabIndex={-1} className="flex items-center gap-3 p-4 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm">
           <AlertCircle className="w-5 h-5 shrink-0" />
           <div className="flex-1 font-medium">{actionError}</div>
-          <button onClick={clearFeedback} className="p-1 hover:opacity-75">
-            <X className="w-4 h-4" />
-          </button>
+          <Button variant="ghost" size="icon" onClick={clearFeedback} aria-label={t('common.close')} title={t('common.close')}>
+            <X className="w-4 h-4" aria-hidden="true" />
+          </Button>
         </div>
       )}
 
       {actionSuccess && (
-        <div className="flex items-center gap-3 p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-sm">
+        <div role="status" className="flex items-center gap-3 p-4 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-700 dark:text-emerald-400 text-sm">
           <CheckCircle2 className="w-5 h-5 shrink-0" />
           <div className="flex-1 font-medium">{actionSuccess}</div>
-          <button onClick={clearFeedback} className="p-1 hover:opacity-75">
-            <X className="w-4 h-4" />
-          </button>
+          <Button variant="ghost" size="icon" onClick={clearFeedback} aria-label={t('common.close')} title={t('common.close')}>
+            <X className="w-4 h-4" aria-hidden="true" />
+          </Button>
         </div>
       )}
 
       {/* TABS NAVIGATION */}
-      <div className="flex items-center gap-2 border-b border-border overflow-x-auto pb-px">
-        {canReadCurrent && (
-          <button
-            onClick={() => setActiveTab('current')}
-            className={cn(
-              'flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap',
-              activeTab === 'current'
-                ? 'border-primary text-primary'
-                : 'border-transparent text-muted-foreground hover:text-foreground',
-            )}
-          >
-            <Lock className="w-4 h-4" />
-            {t('cash.page.current')}
-            {currentShiftQuery.data?.status === 'OPEN' && (
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            )}
-          </button>
-        )}
-
-        {(canReadHandovers || canCreateHandover) && (
-          <button
-            onClick={() => setActiveTab('handovers')}
-            className={cn(
-              'flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap',
-              activeTab === 'handovers'
-                ? 'border-primary text-primary'
-                : 'border-transparent text-muted-foreground hover:text-foreground',
-            )}
-          >
-            <Send className="w-4 h-4" />
-            {t('cash.page.handovers')}
-          </button>
-        )}
-
-        {canReviewExpenses && (
-          <button
-            onClick={() => setActiveTab('expenses')}
-            className={cn(
-              'flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap',
-              activeTab === 'expenses'
-                ? 'border-primary text-primary'
-                : 'border-transparent text-muted-foreground hover:text-foreground',
-            )}
-          >
-            <Wallet className="w-4 h-4" />
-            {t('cash.page.expenses')}
-          </button>
-        )}
-
-        {canReadFunds && (
-          <button
-            onClick={() => setActiveTab('funds')}
-            className={cn(
-              'flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap',
-              activeTab === 'funds'
-                ? 'border-primary text-primary'
-                : 'border-transparent text-muted-foreground hover:text-foreground',
-            )}
-          >
-            <Building2 className="w-4 h-4" />
-            {t('cash.page.funds')}
-          </button>
-        )}
-
-        {canReadShifts && (
-          <button
-            onClick={() => setActiveTab('history')}
-            className={cn(
-              'flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap',
-              activeTab === 'history'
-                ? 'border-primary text-primary'
-                : 'border-transparent text-muted-foreground hover:text-foreground',
-            )}
-          >
-            <History className="w-4 h-4" />
-            {t('cash.page.history')}
-          </button>
-        )}
-      </div>
+      {availableTabs.length > 0 && <TabsList aria-label={t('cash.page.title')} className="flex w-full flex-nowrap justify-start gap-2 overflow-x-auto rounded-none border-b border-border bg-transparent p-1">
+        {([
+          { value: 'current', label: t('cash.page.current'), icon: Lock },
+          { value: 'handovers', label: t('cash.page.handovers'), icon: Send },
+          { value: 'expenses', label: t('cash.page.expenses'), icon: Wallet },
+          { value: 'funds', label: t('cash.page.funds'), icon: Building2 },
+          { value: 'history', label: t('cash.page.history'), icon: History },
+        ] as const).filter(tab => availableTabs.includes(tab.value)).map(({ value, label, icon: Icon }) => (
+          <TabsTrigger key={value} value={value} className={cn('shrink-0 gap-2 border-b-2 py-2.5 dark:hover:bg-muted', activeTab === value ? 'border-primary dark:bg-primary/15 dark:text-foreground' : 'border-transparent dark:text-muted-foreground')}>
+            <Icon className="w-4 h-4" aria-hidden="true" />
+            {label}
+            {value === 'current' && currentShiftQuery.data?.status === 'OPEN' && <><span aria-hidden="true" className="size-2 rounded-full bg-emerald-500" /><span className="sr-only">{t('cash.shiftOpen')}</span></>}
+          </TabsTrigger>
+        ))}
+      </TabsList>}
 
       {!availableTabs.length && <p role="alert">{t('cash.page.accessRequired')}</p>}
 
       {/* ACTIVE TAB CONTENT */}
-      {activeTab === 'current' && canReadCurrent && (
+      {canReadCurrent && <TabsContent value="current" className="mt-0">
         <CurrentShiftTab
           employeeId={employee.id}
           canOpen={canOpen && canReadFunds}
@@ -283,9 +220,9 @@ export default function CashierShiftPage() {
             setActionSuccess(msg)
           }}
         />
-      )}
+      </TabsContent>}
 
-      {activeTab === 'handovers' && (canReadHandovers || canCreateHandover) && (
+      {(canReadHandovers || canCreateHandover) && <TabsContent value="handovers" className="mt-0">
         <CashHandoversTab
           employeeId={employee.id}
           canCreateHandover={canCreateHandover}
@@ -305,11 +242,10 @@ export default function CashierShiftPage() {
             clearFeedback()
             setActionSuccess(msg)
           }}
-          nowTimestamp={nowTimestamp}
         />
-      )}
+      </TabsContent>}
 
-      {activeTab === 'expenses' && canReviewExpenses && (
+      {canReviewExpenses && <TabsContent value="expenses" className="mt-0">
         <ExpenseRequestsTab
           onError={(msg) => {
             clearFeedback()
@@ -320,9 +256,9 @@ export default function CashierShiftPage() {
             setActionSuccess(msg)
           }}
         />
-      )}
+      </TabsContent>}
 
-      {activeTab === 'funds' && canReadFunds && (
+      {canReadFunds && <TabsContent value="funds" className="mt-0">
         <FundsTab
           canManageFunds={canManageFunds}
           isCreateModalOpen={isCreateFundModalOpen}
@@ -336,9 +272,9 @@ export default function CashierShiftPage() {
             setActionSuccess(msg)
           }}
         />
-      )}
+      </TabsContent>}
 
-      {activeTab === 'history' && canReadShifts && <ShiftHistoryTab />}
-    </div>
+      {canReadShifts && <TabsContent value="history" className="mt-0"><ShiftHistoryTab /></TabsContent>}
+    </Tabs>
   )
 }

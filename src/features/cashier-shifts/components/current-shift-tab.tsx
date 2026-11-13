@@ -5,6 +5,8 @@ import { useTranslation } from 'react-i18next'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Coins, Lock, RefreshCw, Send, Unlock, Wallet } from 'lucide-react'
 import { ApiError, errorMessage } from '../../../shared/api/client'
+import { moneySchema } from '../../../shared/api/money'
+import { decimalAmount, minorAmount } from '../../../shared/lib/money'
 import { pendingIntentKey, readPendingIntent, writePendingIntent, isPendingIntentExpired, type PendingIntent } from '../../../shared/api/pending-intent'
 import {
   addCashMovement,
@@ -18,11 +20,17 @@ import {
 } from '../cashier-shifts.api'
 import {
   Badge,
+  ApiErrorAlert,
   Button,
   Card,
   CardContent,
   CardHeader,
   CardTitle,
+  Dialog,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
   Input,
   Textarea,
   cn,
@@ -70,6 +78,10 @@ export function CurrentShiftTab({
   // Closing shift state
   const [reportedEndingCash, setReportedEndingCash] = useState('')
   const [closingNote, setClosingNote] = useState('')
+  const [closeReview, setCloseReview] = useState<{
+    payload: Extract<CashCommand, { kind: 'CLOSE' }>
+    expectedCash: string | null
+  } | null>(null)
 
   // Cash movement state
   const [movementType, setMovementType] = useState<'INCOME' | 'EXPENSE'>(
@@ -87,7 +99,7 @@ export function CurrentShiftTab({
   })
 
   const cashFundsQuery = useQuery({
-    queryKey: ['private', 'funds', 'cash'],
+    queryKey: ['private', 'funds', 'cash', employeeId],
     queryFn: ({ signal }) => getCashFunds(signal),
     enabled:
       canOpen &&
@@ -96,7 +108,7 @@ export function CurrentShiftTab({
   })
 
   const currentExpensesQuery = useQuery({
-    queryKey: ['private', 'cashier-shift', 'current', 'expenses'],
+    queryKey: ['private', 'cashier-shift', 'current', 'expenses', employeeId, currentShiftQuery.data?.id],
     queryFn: ({ signal }) =>
       getCurrentShiftExpenseRequests({ page: 1, itemPerPage: 20 }, signal),
     enabled: canTransact && currentShiftQuery.data?.status === 'OPEN',
@@ -204,13 +216,25 @@ export function CurrentShiftTab({
   }
 
   const shift = lastClosedShift?.id === currentShiftQuery.data?.id ? lastClosedShift : currentShiftQuery.data ?? lastClosedShift
+  const expectedCash = shift?.reconciliation?.actualEndingCash ?? shift?.actualEndingCash ?? null
+  const parsedEndingCash = moneySchema.safeParse(reportedEndingCash)
+  const comparedCash = closeReview ? closeReview.expectedCash : expectedCash
+  const countedCash = closeReview?.payload.reportedEndingCash ?? (parsedEndingCash.success ? parsedEndingCash.data : null)
+  const difference = comparedCash !== null && countedCash !== null
+    ? minorAmount(countedCash) - minorAmount(comparedCash)
+    : null
+  const differenceLabel = difference === null ? t('cash.amountUnavailable')
+    : difference === 0n ? t('cash.balanced')
+      : t(difference < 0n ? 'cash.shortage' : 'cash.surplus', {
+        amount: formatPrice(decimalAmount(difference < 0n ? -difference : difference)),
+      })
 
   if (!shift || shift.status === 'CLOSED') {
     return (
       <div className="flex flex-col gap-6">
         {shift?.status === 'CLOSED' && (
           <div className="p-4 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-700 dark:text-blue-300">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <h3 className="font-semibold text-base">
                   Ca làm việc vừa kết thúc
@@ -270,10 +294,11 @@ export function CurrentShiftTab({
                   </p>
                 )}
                 <div className="flex flex-col gap-1.5">
-                  <label className="text-sm font-medium">
+                  <label htmlFor="shift-opening-fund" className="text-sm font-medium">
                     Chọn quỹ tiền mặt ban đầu *
                   </label>
                   <select
+                    id="shift-opening-fund"
                     disabled={
                       cashFundsQuery.isPending || cashFundsQuery.isError
                     }
@@ -292,13 +317,15 @@ export function CurrentShiftTab({
                 </div>
 
                 <div className="flex flex-col gap-1.5">
-                  <label className="text-sm font-medium">
+                  <label htmlFor="shift-opening-cash" className="text-sm font-medium">
                     Số tiền đầu ca (VND) *
                   </label>
                   <Input
+                    id="shift-opening-cash"
                     type="number"
                     min="0"
-                    step="1000"
+                    step="0.01"
+                    inputMode="decimal"
                     value={openingCash}
                     onChange={(e) => setOpeningCash(e.target.value)}
                     placeholder="Ví dụ: 1000000"
@@ -405,7 +432,7 @@ export function CurrentShiftTab({
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Movement creation */}
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
+          <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3 pb-2">
             <CardTitle className="text-base flex items-center gap-2">
               <Coins className="w-4 h-4 text-primary" />
               Ghi nhận Thu / Chi tiền mặt tại két
@@ -432,6 +459,7 @@ export function CurrentShiftTab({
                 <div className="flex gap-2">
                   <button
                     type="button"
+                    aria-pressed={movementType === 'INCOME'}
                     onClick={() => setMovementType('INCOME')}
                     className={cn(
                       'flex-1 py-1.5 text-xs font-semibold rounded-lg border transition-colors',
@@ -444,6 +472,7 @@ export function CurrentShiftTab({
                   </button>
                   <button
                     type="button"
+                    aria-pressed={movementType === 'EXPENSE'}
                     onClick={() => setMovementType('EXPENSE')}
                     className={cn(
                       'flex-1 py-1.5 text-xs font-semibold rounded-lg border transition-colors',
@@ -457,11 +486,13 @@ export function CurrentShiftTab({
                 </div>
 
                 <div className="flex flex-col gap-1">
-                  <label className="text-xs font-medium">Số tiền (VND) *</label>
+                  <label htmlFor="shift-movement-amount" className="text-xs font-medium">Số tiền (VND) *</label>
                   <Input
+                    id="shift-movement-amount"
                     type="number"
-                    min="1000"
-                    step="1000"
+                    min="0.01"
+                    step="0.01"
+                    inputMode="decimal"
                     value={movementAmount}
                     onChange={(e) => setMovementAmount(e.target.value)}
                     placeholder="Ví dụ: 100000"
@@ -470,10 +501,12 @@ export function CurrentShiftTab({
                 </div>
 
                 <div className="flex flex-col gap-1">
-                  <label className="text-xs font-medium">
+                  <label htmlFor="shift-movement-description" className="text-xs font-medium">
                     Lý do / Diễn giải *
                   </label>
                   <Input
+                    id="shift-movement-description"
+                    maxLength={500}
                     value={movementDesc}
                     onChange={(e) => setMovementDesc(e.target.value)}
                     placeholder="Ví dụ: Mua đá lạnh khẩn cấp..."
@@ -505,18 +538,24 @@ export function CurrentShiftTab({
         {/* Current Shift Expense Requests Tracker */}
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-base flex items-center justify-between">
+            <CardTitle className="text-base flex flex-wrap items-center justify-between gap-2">
               <span className="flex items-center gap-2">
                 <Wallet className="w-4 h-4 text-amber-500" />
                 Phiếu chi tiền chờ duyệt của ca
               </span>
               <Badge variant="outline" className="text-xs">
-                {currentExpensesQuery.data?.totalItems || 0} phiếu
+                {canTransact && currentExpensesQuery.isSuccess ? currentExpensesQuery.data.totalItems : '—'} phiếu
               </Badge>
             </CardTitle>
           </CardHeader>
           <CardContent>
-            {currentExpensesQuery.isLoading ? (
+            {!canTransact ? <p className="py-4 text-sm text-muted-foreground">{t('cash.expensesAccessRequired')}</p>
+            : currentExpensesQuery.isError ? <div className="space-y-3 py-3">
+              <ApiErrorAlert error={currentExpensesQuery.error} />
+              <Button variant="outline" size="sm" disabled={currentExpensesQuery.isFetching} onClick={() => void currentExpensesQuery.refetch()}>
+                <RefreshCw size={16} aria-hidden="true" />{t('common.retry')}
+              </Button>
+            </div> : currentExpensesQuery.isPending ? (
               <div className="text-xs text-muted-foreground py-4 text-center">
                 Đang tải...
               </div>
@@ -537,7 +576,7 @@ export function CurrentShiftTab({
                       </p>
                       <span className="text-muted-foreground">
                         {formatPrice(req.amount)} •{' '}
-                        {new Date(req.createdAt).toLocaleTimeString('vi-VN')}
+                        {formatDateTime(req.createdAt)}
                       </span>
                     </div>
                     <div className="flex items-center gap-2">
@@ -561,6 +600,7 @@ export function CurrentShiftTab({
                           variant="ghost"
                           size="sm"
                           onClick={() => cancelMyExpenseMutation.mutate(req.id)}
+                          disabled={cancelMyExpenseMutation.isPending}
                           className="h-7 px-2 text-rose-500 hover:text-rose-600"
                         >
                           Hủy
@@ -588,22 +628,25 @@ export function CurrentShiftTab({
             <form
               onSubmit={(e) => {
                 e.preventDefault()
-                if (!reportedEndingCash) {
-                  onError('Vui lòng nhập số tiền thực kiểm trong két')
+                if (!parsedEndingCash.success) {
+                  onError(t('cash.invalidAmount'))
                   return
                 }
-                submitCommand({ kind: 'CLOSE', expectedShiftId: shift.id, reportedEndingCash, closingNote })
+                setCloseReview({ payload: { kind: 'CLOSE', expectedShiftId: shift.id, reportedEndingCash: parsedEndingCash.data, closingNote: closingNote.trim() }, expectedCash })
               }}
               className="flex flex-col gap-4 max-w-lg"
             >
               <div className="flex flex-col gap-1.5">
-                <label className="text-sm font-medium">
+                <label htmlFor="shift-closing-cash" className="text-sm font-medium">
                   Số tiền kiểm đếm thực tế cuối ca (VND) *
                 </label>
                 <Input
+                  id="shift-closing-cash"
                   type="number"
                   min="0"
-                  step="1000"
+                  step="0.01"
+                  inputMode="decimal"
+                  aria-describedby="shift-closing-difference"
                   value={reportedEndingCash}
                   onChange={(e) => setReportedEndingCash(e.target.value)}
                   placeholder="Ví dụ: 2500000"
@@ -612,31 +655,67 @@ export function CurrentShiftTab({
                 <span className="text-xs text-muted-foreground">
                   Quy đổi: {formatPrice(reportedEndingCash || '0')}
                 </span>
+                <p id="shift-closing-difference" role="status" className="text-sm font-medium">{differenceLabel}</p>
+              </div>
+
+              <div className="space-y-2 border-l-2 border-border pl-3 text-sm">
+                <p>{t('cash.expectedCash')}: <strong>{expectedCash !== null ? formatPrice(expectedCash) : t('cash.amountUnavailable')}</strong></p>
+                <p className="text-xs text-muted-foreground">{t('cash.closePrerequisites')}</p>
+                <Button type="button" variant="outline" size="sm" disabled={currentShiftQuery.isFetching} onClick={() => {
+                  void currentShiftQuery.refetch()
+                  if (canTransact) void currentExpensesQuery.refetch()
+                }}><RefreshCw size={16} aria-hidden="true" />{t('cash.refreshReconciliation')}</Button>
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <label className="text-sm font-medium">
-                  Ghi chú đóng ca (tùy chọn)
+                <label htmlFor="shift-closing-note" className="text-sm font-medium">
+                  {t('cash.closingNote')}
                 </label>
                 <Textarea
+                  id="shift-closing-note"
+                  maxLength={500}
+                  aria-describedby="shift-closing-note-hint"
                   value={closingNote}
                   onChange={(e) => setClosingNote(e.target.value)}
                   placeholder="Ghi chú chênh lệch tiền mặt, bàn giao tiền lẻ..."
                   rows={2}
                 />
+                <p id="shift-closing-note-hint" className="text-xs text-muted-foreground">{t('cash.closingNoteHint')}</p>
               </div>
 
               <Button
                 type="submit"
                 variant="destructive"
-                disabled={command.isPending}
+                disabled={command.isPending || currentShiftQuery.isFetching}
                 className="w-full"
               >
                 {command.isPending
                   ? 'Đang chốt ca...'
-                  : 'Xác nhận đóng ca & Chốt sổ'}
+                  : t('cash.reviewClose')}
               </Button>
             </form>
+            <Dialog open={closeReview !== null} onClose={() => setCloseReview(null)}>
+              <DialogHeader>
+                <DialogTitle>{t('cash.confirmClose')}</DialogTitle>
+                <DialogDescription>{t('cash.closeReviewHint')}</DialogDescription>
+              </DialogHeader>
+              {closeReview && <>
+                <dl className="space-y-3 text-sm">
+                  <div className="flex flex-wrap justify-between gap-2"><dt>{t('cash.expectedCash')}</dt><dd className="font-semibold">{closeReview.expectedCash !== null ? formatPrice(closeReview.expectedCash) : t('cash.amountUnavailable')}</dd></div>
+                  <div className="flex flex-wrap justify-between gap-2"><dt>{t('cash.countedCash')}</dt><dd className="font-semibold">{formatPrice(closeReview.payload.reportedEndingCash)}</dd></div>
+                  <div><dt className="text-muted-foreground">{t('cash.closingNote')}</dt><dd className="mt-1 whitespace-pre-wrap break-words">{closeReview.payload.closingNote || t('cash.noClosingNote')}</dd></div>
+                </dl>
+                <p className="mt-4 font-semibold">{differenceLabel}</p>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setCloseReview(null)}>{t('cash.backToCount')}</Button>
+                  <Button variant="destructive" disabled={command.isPending || currentShiftQuery.isFetching} onClick={() => {
+                    const payload = closeReview.payload
+                    setCloseReview(null)
+                    submitCommand(payload)
+                  }}>{t('cash.confirmClose')}</Button>
+                </DialogFooter>
+              </>}
+            </Dialog>
           </CardContent>
         </Card>
       )}

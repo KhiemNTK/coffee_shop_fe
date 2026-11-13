@@ -318,11 +318,11 @@ test.describe('Cash & Shifts Management Feature (Slice 1)', () => {
     await expect(page.getByRole('heading', { name: 'Quản lý Ca & Quỹ tiền mặt' })).toBeVisible()
 
     // 5 Tabs
-    await expect(page.getByRole('button', { name: /Ca làm việc của tôi/i })).toBeVisible()
-    await expect(page.getByRole('button', { name: /Bàn giao két & Nộp tiền/i })).toBeVisible()
-    await expect(page.getByRole('button', { name: /Duyệt phiếu chi tiền/i })).toBeVisible()
-    await expect(page.getByRole('button', { name: /Danh mục Quỹ két/i })).toBeVisible()
-    await expect(page.getByRole('button', { name: /Lịch sử ca thu ngân/i })).toBeVisible()
+    await expect(page.getByRole('tab', { name: /Ca làm việc của tôi/i })).toBeVisible()
+    await expect(page.getByRole('tab', { name: /Bàn giao két & Nộp tiền/i })).toBeVisible()
+    await expect(page.getByRole('tab', { name: /Duyệt phiếu chi tiền/i })).toBeVisible()
+    await expect(page.getByRole('tab', { name: /Danh mục Quỹ két/i })).toBeVisible()
+    await expect(page.getByRole('tab', { name: /Lịch sử ca thu ngân/i })).toBeVisible()
   })
 
   test('TC-CS-02: Displays active shift overview KPIs and handles cash movement', async ({ page }) => {
@@ -348,14 +348,15 @@ test.describe('Cash & Shifts Management Feature (Slice 1)', () => {
 
     await page.getByPlaceholder('Ví dụ: 2500000').fill('1450000')
     await page.getByPlaceholder('Ghi chú chênh lệch tiền mặt, bàn giao tiền lẻ...').fill('Đóng ca chuẩn số dư')
-    await page.getByRole('button', { name: 'Xác nhận đóng ca & Chốt sổ' }).click({ force: true })
+    await page.getByRole('button', { name: 'Kiểm tra trước khi đóng ca' }).click()
+    await page.getByRole('dialog').getByRole('button', { name: 'Xác nhận đóng ca & Chốt sổ' }).click()
 
     await expect(page.getByText('Đã đóng ca và chốt sổ tiền mặt an toàn!')).toBeVisible()
   })
 
   test('TC-CS-04: Navigates to Cash Handovers tab and views KPI metrics', async ({ page }) => {
     await page.goto('/staff/shifts')
-    await page.getByRole('button', { name: /Bàn giao két & Nộp tiền/i }).click({ force: true })
+    await page.getByRole('tab', { name: /Bàn giao két & Nộp tiền/i }).click()
 
     await expect(page.getByText('Biên bản chờ duyệt')).toBeVisible()
     await expect(page.getByText('Nộp ngân hàng quá hạn')).toBeVisible()
@@ -369,7 +370,7 @@ test.describe('Cash & Shifts Management Feature (Slice 1)', () => {
 
   test('TC-CS-05: Opens handover details dialog', async ({ page }) => {
     await page.goto('/staff/shifts')
-    await page.getByRole('button', { name: /Bàn giao két & Nộp tiền/i }).click({ force: true })
+    await page.getByRole('tab', { name: /Bàn giao két & Nộp tiền/i }).click()
     await expect(page.getByText('Nguyễn Thu Ngân')).toBeVisible()
 
     // Click Eye button
@@ -386,7 +387,7 @@ test.describe('Cash & Shifts Management Feature (Slice 1)', () => {
 
   test('TC-CS-06: Manager approves pending cash handover', async ({ page }) => {
     await page.goto('/staff/shifts')
-    await page.getByRole('button', { name: /Bàn giao két & Nộp tiền/i }).click({ force: true })
+    await page.getByRole('tab', { name: /Bàn giao két & Nộp tiền/i }).click()
     await expect(page.getByText('Nguyễn Thu Ngân')).toBeVisible()
 
     // Click Approve button (Check icon)
@@ -403,7 +404,7 @@ test.describe('Cash & Shifts Management Feature (Slice 1)', () => {
 
   test('TC-CS-07: Records bank deposit for approved handover', async ({ page }) => {
     await page.goto('/staff/shifts')
-    await page.getByRole('button', { name: /Bàn giao két & Nộp tiền/i }).click()
+    await page.getByRole('tab', { name: /Bàn giao két & Nộp tiền/i }).click()
     await expect(page.getByText('Nguyễn Thu Ngân')).toBeVisible()
 
     // Click Nộp tiền
@@ -438,7 +439,7 @@ test.describe('Cash & Shifts Management Feature (Slice 1)', () => {
 
   test('TC-CS-09: Manager reviews and approves expense request', async ({ page }) => {
     await page.goto('/staff/shifts')
-    await page.getByRole('button', { name: /Duyệt phiếu chi tiền/i }).click({ force: true })
+    await page.getByRole('tab', { name: /Duyệt phiếu chi tiền/i }).click()
 
     await expect(page.getByText('Hàng đợi Phê duyệt Phiếu chi Tiền mặt khẩn cấp')).toBeVisible()
     await expect(page.getByText('Mua thêm đá viên và túi nilon khẩn cấp')).toBeVisible()
@@ -456,7 +457,7 @@ test.describe('Cash & Shifts Management Feature (Slice 1)', () => {
 
   test('TC-CS-10: Funds management lists funds and creates new fund', async ({ page }) => {
     await page.goto('/staff/shifts')
-    await page.getByRole('button', { name: /Danh mục Quỹ két/i }).click({ force: true })
+    await page.getByRole('tab', { name: /Danh mục Quỹ két/i }).click()
 
     await expect(page.getByText('Quỹ Tiền mặt Quầy Thu ngân 1')).toBeVisible()
     await expect(page.getByText('Két Sắt An Toàn Trung Tâm')).toBeVisible()
@@ -476,7 +477,7 @@ test.describe('Cash & Shifts Management Feature (Slice 1)', () => {
 
   test('TC-CS-11: Shift history displays past shift records with reconciliation', async ({ page }) => {
     await page.goto('/staff/shifts')
-    await page.getByRole('button', { name: /Lịch sử ca thu ngân/i }).click({ force: true })
+    await page.getByRole('tab', { name: /Lịch sử ca thu ngân/i }).click()
 
     await expect(page.getByText('Nhật ký Lịch sử Toàn bộ Ca làm việc')).toBeVisible()
     await expect(page.getByRole('table').getByRole('cell', { name: 'Quản lý Trưởng Ca', exact: true }).first()).toBeVisible()
@@ -499,7 +500,8 @@ test.describe('Cash & Shifts Management Feature (Slice 1)', () => {
         await page.getByRole('button', { name: 'Lưu giao dịch' }).click()
       } else if (kind === 'close') {
         await page.getByPlaceholder('Ví dụ: 2500000').fill('1450000')
-        await page.getByRole('button', { name: 'Xác nhận đóng ca & Chốt sổ' }).click()
+        await page.getByRole('button', { name: 'Kiểm tra trước khi đóng ca' }).click()
+        await page.getByRole('dialog').getByRole('button', { name: 'Xác nhận đóng ca & Chốt sổ' }).click()
       } else {
         await page.locator('main select').selectOption('f-001')
         await page.getByRole('button', { name: 'Xác nhận mở ca thu ngân' }).click()
@@ -633,7 +635,8 @@ test.describe('Cash & Shifts Management Feature (Slice 1)', () => {
     await page.route('**/api/v1/cashier-shifts/mine/closed?*', route => route.fulfill({ json: envelope({ list: [closedShift], currentPage: 1, totalPages: 1, totalItems: 1 }) }))
     await page.goto('/staff/shifts')
     await page.getByPlaceholder('Ví dụ: 2500000').fill('2650000')
-    await page.getByRole('button', { name: 'Xác nhận đóng ca & Chốt sổ', exact: true }).click()
+    await page.getByRole('button', { name: 'Kiểm tra trước khi đóng ca' }).click()
+    await page.getByRole('dialog').getByRole('button', { name: 'Xác nhận đóng ca & Chốt sổ', exact: true }).click()
     await expect(page.getByText('Ca làm việc vừa kết thúc', { exact: true })).toBeVisible()
     await page.getByRole('button', { name: 'Bàn giao két cho ca mới', exact: true }).click()
     await expect(page.getByLabel('Ca đã đóng của bạn')).toHaveValue(mockOpenShift.id)
@@ -662,6 +665,135 @@ test.describe('Cash & Shifts Management Feature (Slice 1)', () => {
     })
   }
 
+  test('shift UX accepts exact cash counts and requires review before closing', async ({ page }, testInfo) => {
+    const writes: Record<string, unknown>[] = []
+    await page.route('**/api/v1/cashier-shifts/current/close', route => {
+      writes.push(route.request().postDataJSON())
+      return route.fulfill({ json: envelope(mockClosedShift) })
+    })
+    await page.goto('/staff/shifts')
+    const cash = page.getByLabel('Số tiền kiểm đếm thực tế cuối ca (VND) *', { exact: true })
+    await cash.fill('1449999.50')
+    await expect(page.locator('#shift-closing-difference')).toContainText('Thiếu 0,50')
+    await cash.fill('1450500.25')
+    expect(await cash.evaluate((input: HTMLInputElement) => input.checkValidity())).toBe(true)
+    await expect(page.locator('#shift-closing-difference')).toContainText('Thừa 500,25')
+    await page.getByLabel('Ghi chú đóng ca', { exact: true }).fill('Đếm lại tiền lẻ')
+    await page.getByRole('button', { name: 'Kiểm tra trước khi đóng ca' }).click()
+    const review = page.getByRole('dialog', { name: 'Xác nhận đóng ca & Chốt sổ' })
+    await expect(review).toContainText('1.450.500,25')
+    expect(writes).toHaveLength(0)
+    await review.getByRole('button', { name: 'Quay lại kiểm đếm' }).click()
+    await expect(cash).toHaveValue('1450500.25')
+    await page.getByRole('button', { name: 'Kiểm tra trước khi đóng ca' }).click()
+    await page.screenshot({ path: testInfo.outputPath('shift-close-review.png'), fullPage: true, animations: 'disabled' })
+    await review.getByRole('button', { name: 'Xác nhận đóng ca & Chốt sổ' }).click()
+    await expect.poll(() => writes.length).toBe(1)
+    expect(writes[0]).toMatchObject({ expectedShiftId: mockOpenShift.id, reportedEndingCash: '1450500.25', closingNote: 'Đếm lại tiền lẻ' })
+  })
+
+  for (const kind of ['funds', 'current-expenses'] as const) {
+    test(`shift UX distinguishes ${kind} read failures from an empty list`, async ({ page }) => {
+      let available = false
+      await page.route(kind === 'funds' ? /\/api\/v1\/funds/ : /\/api\/v1\/cashier-shifts\/current\/expense-requests/, route =>
+        route.fulfill(available ? { json: envelope({ list: kind === 'funds' ? mockFunds : mockExpenseRequests, currentPage: 1, totalPages: 1, totalItems: kind === 'funds' ? 3 : 1 }) }
+          : { status: 503, json: { message: 'Unavailable' } }))
+      await page.goto(`/staff/shifts?tab=${kind === 'funds' ? 'funds' : 'current'}`)
+      await expect(page.getByRole('alert')).toBeVisible()
+      await expect(page.getByText(kind === 'funds' ? 'Không tìm thấy quỹ tiền mặt nào.' : 'Không có phiếu chi nào đang chờ duyệt trong ca này.')).toHaveCount(0)
+      if (kind === 'current-expenses') await expect(page.getByText('0 phiếu', { exact: true })).toHaveCount(0)
+      available = true
+      await page.getByRole('button', { name: 'Thử lại', exact: true }).click()
+      await expect(page.getByRole('alert')).toHaveCount(0)
+      await expect(page.getByText(kind === 'funds' ? mockFunds[1]!.name : mockExpenseRequests[0]!.description, { exact: true })).toBeVisible()
+    })
+  }
+
+  test('shift UX does not show zero expenses when the reader lacks permission', async ({ page }) => {
+    let reads = 0
+    await page.route('**/api/v1/auth/me/permissions', route => route.fulfill({ json: envelope({ employeeId: employee.id, employeeEmail: employee.email, roleNames: ['CASHIER'], permissionKeys: allPermissions.filter(key => key !== '/cashier-shifts_transactions-create') }) }))
+    await page.route(/\/api\/v1\/cashier-shifts\/current\/expense-requests/, route => { reads++; return route.abort() })
+    await page.goto('/staff/shifts')
+    await expect(page.getByText(/Bạn không có quyền xem phiếu chi của ca/)).toBeVisible()
+    await expect(page.getByText('0 phiếu', { exact: true })).toHaveCount(0)
+    expect(reads).toBe(0)
+  })
+
+  test('shift UX keeps fund actions visible on touch and supports keyboard tabs', async ({ page }, testInfo) => {
+    await page.goto('/staff/shifts?tab=funds')
+    const create = page.getByRole('button', { name: 'Thêm quỹ mới', exact: true })
+    await expect(create).toBeInViewport()
+    const bounds = await create.boundingBox()
+    expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(page.viewportSize()!.width)
+    const edit = page.getByRole('button', { name: `Sửa quỹ ${mockFunds[0]!.name}`, exact: true })
+    await edit.focus()
+    await expect(edit).toBeFocused()
+    await expect(edit.locator('..')).toHaveCSS('opacity', '1')
+    await edit.click()
+    await expect(page.getByLabel('Tên định danh quỹ *', { exact: true })).toHaveValue(mockFunds[0]!.name)
+    await page.getByRole('dialog').getByRole('button', { name: 'Đóng', exact: true }).click()
+    const funds = page.getByRole('tab', { name: 'Danh mục Quỹ két', exact: true })
+    await funds.focus()
+    await page.keyboard.press('ArrowRight')
+    await expect(page.getByRole('tab', { name: 'Lịch sử ca thu ngân', exact: true })).toHaveAttribute('aria-selected', 'true')
+    await page.keyboard.press('Home')
+    await expect(page.getByRole('tab', { name: /Ca làm việc của tôi/ })).toHaveAttribute('aria-selected', 'true')
+    await funds.click()
+    await page.screenshot({ path: testInfo.outputPath('shift-funds.png'), fullPage: true, animations: 'disabled' })
+    await page.getByRole('button', { name: 'Chuyển đổi giao diện', exact: true }).click()
+    await page.getByRole('menuitem', { name: 'Giao diện tối', exact: true }).click()
+    await expect(page.locator('html')).toHaveClass(/dark/)
+    await expect(funds).toHaveAttribute('aria-selected', 'true')
+    expect(await funds.evaluate(tab => getComputedStyle(tab).borderBottomColor)).not.toBe('rgba(0, 0, 0, 0)')
+    await page.screenshot({ path: testInfo.outputPath('shift-funds-dark.png'), fullPage: true, animations: 'disabled' })
+  })
+
+  test('shift UX updates overdue handovers without reloading the page', async ({ page }) => {
+    const start = new Date('2026-10-02T03:00:00Z')
+    await page.clock.install({ time: start })
+    let reads = 0
+    await page.route(/\/api\/v1\/cash-handovers/, route => {
+      reads++
+      return route.fulfill({ json: envelope({ list: [{ ...mockHandovers[1], settlementDueAt: new Date(start.getTime() + 30_000).toISOString() }], totalItems: 1, totalPages: 1, currentPage: 1 }) })
+    })
+    await page.goto('/staff/shifts?tab=handovers')
+    await expect(page.getByRole('table').getByText('Chờ nộp NH', { exact: true })).toBeVisible()
+    await page.clock.fastForward(61_000)
+    await expect(page.getByRole('table').getByText('Quá hạn nộp', { exact: true })).toBeVisible()
+    await page.getByRole('button', { name: 'Quá hạn SLA', exact: true }).click()
+    await expect.poll(() => reads).toBeGreaterThan(1)
+    const previousReads = reads
+    await page.clock.fastForward(61_000)
+    await expect.poll(() => reads).toBeGreaterThan(previousReads)
+  })
+
+  test.describe('shift UX store-time history', () => {
+    test.use({ timezoneId: 'America/New_York' })
+    test('uses Vietnam dates and sends explicit history filters to the backend', async ({ page }) => {
+      const requests: URL[] = []
+      await page.route(/\/api\/v1\/cashier-shifts\?/, route => {
+        requests.push(new URL(route.request().url()))
+        return route.fulfill({ json: envelope({ list: [mockOpenShift], currentPage: 1, totalPages: 1, totalItems: 1 }) })
+      })
+      await page.goto('/staff/shifts?tab=history')
+      await expect(page.getByRole('cell').filter({ hasText: '02/10/2026' })).toContainText('15:00')
+      await page.getByLabel('Ngày mở ca từ', { exact: true }).fill('2026-10-01')
+      await page.getByLabel('Đến hết ngày', { exact: true }).fill('2026-10-02')
+      await page.getByLabel('Quỹ tiền', { exact: true }).selectOption('f-001')
+      await page.getByLabel('Chỉ các ca của tôi', { exact: true }).check()
+      await page.getByRole('button', { name: 'Áp dụng bộ lọc' }).click()
+      await expect.poll(() => requests.at(-1)?.searchParams.get('openedFrom')).toBe('2026-09-30T17:00:00.000Z')
+      expect(requests.at(-1)?.searchParams.get('openedTo')).toBe('2026-10-02T17:00:00.000Z')
+      expect(requests.at(-1)?.searchParams.get('fundId')).toBe('f-001')
+      expect(requests.at(-1)?.searchParams.get('employeeId')).toBe(employee.id)
+      const reads = requests.length
+      await page.getByLabel('Đến hết ngày', { exact: true }).fill('2026-09-30')
+      await page.getByRole('button', { name: 'Áp dụng bộ lọc' }).click()
+      await expect(page.getByRole('alert')).toContainText('Ngày bắt đầu không được sau ngày kết thúc')
+      expect(requests).toHaveLength(reads)
+    })
+  })
+
   test('pending expense approval does not claim that the cash fund was debited', async ({ page }) => {
     let requested = false
     await page.route('**/api/v1/cashier-shifts/expense-requests?*', route => route.fulfill({ json: envelope({ list: requested ? mockExpenseRequests : [], totalItems: requested ? 1 : 0, totalPages: 1, currentPage: 1 }) }))
@@ -670,16 +802,16 @@ test.describe('Cash & Shifts Management Feature (Slice 1)', () => {
       return route.fulfill({ json: envelope({ movement: null, fundBalance: '1500000', expenseRequest: mockExpenseRequests[0] }) })
     })
     await page.goto('/staff/shifts')
-    await page.getByRole('button', { name: /Duyệt phiếu chi tiền/i }).click()
+    await page.getByRole('tab', { name: /Duyệt phiếu chi tiền/i }).click()
     await expect(page.getByText('Không có yêu cầu chi tiền nào.')).toBeVisible()
-    await page.getByRole('button', { name: /Ca làm việc của tôi/i }).click()
+    await page.getByRole('tab', { name: /Ca làm việc của tôi/i }).click()
     await page.getByRole('button', { name: 'Thêm giao dịch' }).click()
     await page.getByPlaceholder('Ví dụ: 100000').fill('150000')
     await page.getByRole('button', { name: /EXPENSE/ }).click()
     await page.getByPlaceholder('Ví dụ: Mua đá lạnh khẩn cấp...').fill(mockExpenseRequests[0]!.description)
     await page.getByRole('button', { name: 'Lưu giao dịch' }).click()
     await expect(page.getByText('Đã gửi phiếu chi chờ phê duyệt; chưa trừ quỹ.')).toBeVisible()
-    await page.getByRole('button', { name: /Duyệt phiếu chi tiền/i }).click()
+    await page.getByRole('tab', { name: /Duyệt phiếu chi tiền/i }).click()
     await expect(page.getByRole('cell', { name: mockExpenseRequests[0]!.description, exact: true })).toBeVisible()
   })
 })

@@ -18,6 +18,9 @@ import { Pagination } from '@/shared/ui/pagination'
 import { formatDate, formatVnd } from '@/shared/lib/format'
 import { useDebouncedSearch } from '@/shared/lib/use-debounced-search'
 import { reconcilePaymentAttempt } from '../../invoices/invoices.api'
+import { invalidateReconciliation } from '../reconciliation-query'
+import { RefundReviewForm } from './refund-review-form'
+import { IncidentEvidence } from './incident-evidence'
 import {
   closeIncident,
   getIncidents,
@@ -25,6 +28,13 @@ import {
 } from '../reconciliation.api'
 
 const EMPTY_INCIDENTS: Incident[] = []
+const incidentTypeKeys = {
+  STALE_ATTEMPT: 'reconciliation.type.STALE_ATTEMPT',
+  PAYMENT_STATE_CONFLICT: 'reconciliation.type.PAYMENT_STATE_CONFLICT',
+  PROVIDER_PAYMENT_MISMATCH: 'reconciliation.type.PROVIDER_PAYMENT_MISMATCH',
+  REFUND_STATE_MISMATCH: 'reconciliation.type.REFUND_STATE_MISMATCH',
+  PROVIDER_UNAVAILABLE: 'reconciliation.type.PROVIDER_UNAVAILABLE',
+} as const
 
 export function PaymentIncidentsTab() {
   const { t } = useTranslation()
@@ -35,6 +45,7 @@ export function PaymentIncidentsTab() {
   const [status, setStatus] = useState('OPEN')
   const [search, setSearch] = useState('')
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [refundBusy, setRefundBusy] = useState(false)
   const submitting = useRef(false)
   const keyword = useDebouncedSearch(search)
   const searchPending = keyword !== search.trim()
@@ -69,12 +80,14 @@ export function PaymentIncidentsTab() {
     onError: () => setRequiresRefresh(true),
     onSettled: () => {
       submitting.current = false
-      void client.invalidateQueries({ queryKey: ['management-exceptions-list'] })
-      void client.invalidateQueries({ queryKey: ['management-exceptions-summary'] })
+      void invalidateReconciliation(client, employee.id)
     },
   })
 
-  const writeBlocked = action.isPending || requiresRefresh || query.isFetching || !query.isSuccess || searchPending
+  const busy = action.isPending || refundBusy
+  const canResolve = selected?.paymentAttempt.status !== 'REQUIRES_REVIEW' &&
+    (!selected?.paymentRefundId || (selected.paymentRefund && selected.paymentRefund.status !== 'REQUIRES_REVIEW'))
+  const writeBlocked = busy || requiresRefresh || query.isFetching || !query.isSuccess || searchPending
   async function refresh() {
     const result = await query.refetch()
     if (result.isSuccess) {
@@ -85,6 +98,7 @@ export function PaymentIncidentsTab() {
   }
   function submit(command: 'RESOLVE' | 'IGNORE' | 'RECONCILE') {
     if (submitting.current || writeBlocked || !selected || !canManage) return
+    if (command === 'RESOLVE' && !canResolve) return
     if (command !== 'RECONCILE' && note.trim().length < 3) return
     submitting.current = true
     action.mutate(command)
@@ -106,7 +120,7 @@ export function PaymentIncidentsTab() {
           <div className="inline-flex rounded-lg bg-muted/70 p-1 border border-border/60">
             <button
               type="button"
-              disabled={action.isPending}
+              disabled={busy}
               aria-pressed={status === 'OPEN'}
               className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-all ${
                 status === 'OPEN'
@@ -122,7 +136,7 @@ export function PaymentIncidentsTab() {
             </button>
             <button
               type="button"
-              disabled={action.isPending}
+              disabled={busy}
               aria-pressed={status === 'RESOLVED'}
               className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-all ${
                 status === 'RESOLVED'
@@ -138,7 +152,7 @@ export function PaymentIncidentsTab() {
             </button>
             <button
               type="button"
-              disabled={action.isPending}
+              disabled={busy}
               aria-pressed={status === 'IGNORED'}
               className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-all ${
                 status === 'IGNORED'
@@ -163,7 +177,7 @@ export function PaymentIncidentsTab() {
               value={search}
               maxLength={120}
               aria-label="Tìm sự cố thanh toán"
-              disabled={action.isPending}
+              disabled={busy}
               placeholder="Tìm mã GD, hóa đơn, loại sự cố..."
               className="pl-8 text-xs h-9 bg-background/80"
               onChange={e => { setSearch(e.target.value); setPage(1); setSelectedId(null) }}
@@ -241,7 +255,7 @@ export function PaymentIncidentsTab() {
                       className="hover:bg-muted/40 transition-colors group"
                     >
                       <td className="py-3 px-4">
-                        <div className="flex items-center gap-3">
+                        <div className="flex w-72 items-center gap-3">
                           <div
                             className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${
                               item.status === 'OPEN'
@@ -255,14 +269,13 @@ export function PaymentIncidentsTab() {
                               <CheckCircle2 className="h-4 w-4" />
                             )}
                           </div>
-                          <div>
-                            <span className="font-semibold text-foreground block">
+                          <div className="min-w-0 flex-1 [overflow-wrap:anywhere]">
+                            <span className="block font-semibold text-foreground">
                               {item.title}
                             </span>
-                            <div className="flex items-center gap-2 mt-0.5 text-muted-foreground font-mono text-[11px]">
+                            <div className="mt-0.5 grid gap-1 text-muted-foreground font-mono text-[11px]">
                               <span>Ref: {item.paymentAttempt.merchantReference || '—'}</span>
-                              <span>·</span>
-                              <span>Invoice: {item.paymentAttempt.invoiceId.slice(-8)}</span>
+                              <span>{item.paymentAttempt.invoice?.invoiceNumber ?? item.paymentAttempt.invoiceId.slice(-8)}</span>
                             </div>
                           </div>
                         </div>
@@ -272,11 +285,13 @@ export function PaymentIncidentsTab() {
                           variant="outline"
                           className="font-normal text-[11px] bg-muted/40"
                         >
-                          {item.type}
+                          {item.type in incidentTypeKeys ? t(incidentTypeKeys[item.type as keyof typeof incidentTypeKeys]) : item.type}
                         </Badge>
                       </td>
                       <td className="py-3 px-4 text-right font-bold text-foreground font-mono">
-                        {formatVnd(item.paymentAttempt.amount)}
+                        {item.paymentRefundId
+                          ? item.paymentRefund ? formatVnd(item.paymentRefund.amount) : '—'
+                          : formatVnd(item.paymentAttempt.amount)}
                       </td>
                       <td className="py-3 px-4 text-muted-foreground">
                         {formatDate(item.detectedAt)}
@@ -307,7 +322,7 @@ export function PaymentIncidentsTab() {
                         <Button
                           variant="outline"
                           size="sm"
-                          disabled={action.isPending || query.isFetching}
+                          disabled={busy || query.isFetching}
                           onClick={() => {
                             setSelectedId(item.id)
                             setNote(item.resolutionNote || '')
@@ -332,12 +347,12 @@ export function PaymentIncidentsTab() {
       {/* Pagination */}
       {query.isSuccess && !searchPending && query.data.totalPages > 1 && (
         <div className="flex justify-end pt-2">
-          <Pagination page={page} totalPages={query.data.totalPages} onPage={value => { if (!action.isPending) { setPage(value); setSelectedId(null) } }} />
+          <Pagination page={page} totalPages={query.data.totalPages} disabled={busy} onPage={value => { if (!busy) { setPage(value); setSelectedId(null) } }} />
         </div>
       )}
 
       {selectedId && !selected && (
-        <Dialog open onClose={() => { if (!action.isPending) setSelectedId(null) }}>
+        <Dialog open showCloseButton={!busy} onClose={() => { if (!busy) setSelectedId(null) }}>
           <div className="space-y-3 p-6">
             <h2 className="text-base font-semibold">Chi tiết sự cố</h2>
             <p role="status">Sự cố không còn trong kết quả hiện tại. Đóng cửa sổ và đọc lại danh sách.</p>
@@ -349,14 +364,15 @@ export function PaymentIncidentsTab() {
       {selected && (
         <Dialog
           open
+          showCloseButton={!busy}
           maxWidth="md"
           onClose={() => {
-            if (!action.isPending) setSelectedId(null)
+            if (!busy) setSelectedId(null)
           }}
         >
           <div className="space-y-5 p-6">
             <div className="flex items-start justify-between gap-3 border-b border-border/70 pb-4">
-              <div>
+              <div className="min-w-0 flex-1 [overflow-wrap:anywhere]">
                 <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
                   Chi tiết sự cố thanh toán
                 </span>
@@ -381,7 +397,7 @@ export function PaymentIncidentsTab() {
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Loại sự cố:</span>
-                <span className="font-medium text-foreground">{selected.type}</span>
+                <span className="font-medium text-foreground">{selected.type in incidentTypeKeys ? t(incidentTypeKeys[selected.type as keyof typeof incidentTypeKeys]) : selected.type}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Mã giao dịch (Merchant Ref):</span>
@@ -392,13 +408,13 @@ export function PaymentIncidentsTab() {
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Hóa đơn:</span>
                 <span className="font-mono font-medium text-foreground break-all">
-                  {selected.paymentAttempt.invoiceId}
+                  {selected.paymentAttempt.invoice?.invoiceNumber ?? selected.paymentAttempt.invoiceId}
                 </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Số tiền:</span>
                 <span className="font-bold text-foreground">
-                  {formatVnd(selected.paymentAttempt.amount)}
+                  {selected.paymentRefundId ? selected.paymentRefund ? formatVnd(selected.paymentRefund.amount) : '—' : formatVnd(selected.paymentAttempt.amount)}
                 </span>
               </div>
               <div className="flex justify-between">
@@ -414,13 +430,14 @@ export function PaymentIncidentsTab() {
               {selected.resolutionNote && (
                 <div className="pt-2 border-t border-border/60">
                   <span className="block text-muted-foreground mb-1">Ghi chú giải quyết:</span>
-                  <p className="rounded-lg bg-background p-2.5 font-medium text-foreground">
+                  <p className="rounded-lg bg-background p-2.5 font-medium text-foreground [overflow-wrap:anywhere]">
                     {selected.resolutionNote}
                   </p>
                 </div>
               )}
             </div>
 
+            <IncidentEvidence incident={selected} canReadInvoice={access.has('/invoices_read')} />
             {selected.paymentRefundId && (
               <div className="space-y-2 border-l-2 border-warning p-3 text-sm">
                 <p>{t('operations.refundId')}: <code className="select-all break-all">{selected.paymentRefundId}</code></p>
@@ -435,7 +452,7 @@ export function PaymentIncidentsTab() {
             )}
             {requiresRefresh && !action.isError && <p role="status" className="text-sm">Đọc lại trạng thái trước khi thao tác tiếp với giao dịch chưa rõ kết quả.</p>}
             {(query.isError || query.isFetching) && <p role="status">Chi tiết chưa được xác minh mới nhất.</p>}
-            <Button variant="outline" size="sm" disabled={action.isPending || query.isFetching} onClick={() => void refresh()}>
+            <Button variant="outline" size="sm" disabled={busy || query.isFetching} onClick={() => void refresh()}>
               <RefreshCw className="size-4" /> Đọc lại trạng thái
             </Button>
             {action.isSuccess && (
@@ -444,8 +461,17 @@ export function PaymentIncidentsTab() {
               </p>
             )}
 
+            {canManage && access.has('/payment-refunds_read') && selected.status === 'OPEN' && <RefundReviewForm
+              key={`${selected.id}:${selected.paymentRefund?.updatedAt ?? ''}`}
+              incident={selected} employeeId={employee.id} disabled={writeBlocked}
+              onBusyChange={setRefundBusy}
+              onUncertain={() => setRequiresRefresh(true)}
+              onUpdated={async () => { await invalidateReconciliation(client, employee.id); await query.refetch(); setSelectedId(null) }}
+            />}
+
             {canManage && selected.status === 'OPEN' && (
               <div className="space-y-4 pt-2 border-t border-border/70">
+                {!canResolve && <p role="status" className="text-sm text-muted-foreground">{t('reconciliation.verifyFirst')}</p>}
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-semibold text-foreground">Hành động khắc phục</span>
                   {!selected.paymentRefundId && <Button
@@ -505,7 +531,7 @@ export function PaymentIncidentsTab() {
                   <div className="flex flex-wrap items-center gap-2">
                     <Button
                       size="sm"
-                      disabled={writeBlocked || note.trim().length < 3}
+                      disabled={writeBlocked || !canResolve || note.trim().length < 3}
                       onClick={() => setConfirm('RESOLVE')}
                       className="bg-[#08634e] hover:bg-[#074b3d] text-white text-xs font-semibold"
                     >

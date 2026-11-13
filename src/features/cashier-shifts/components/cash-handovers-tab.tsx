@@ -1,5 +1,5 @@
 import { formatDate, formatDateTime, formatPrice } from '@/shared/lib/format'
-import { useState, useMemo } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
@@ -58,7 +58,6 @@ interface CashHandoversTabProps {
   setCreateHandoverShiftId: (id: string) => void
   onError: (msg: string) => void
   onSuccess: (msg: string) => void
-  nowTimestamp: number
 }
 
 export function CashHandoversTab({
@@ -74,10 +73,21 @@ export function CashHandoversTab({
   setCreateHandoverShiftId,
   onError,
   onSuccess,
-  nowTimestamp,
 }: CashHandoversTabProps) {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
+  const [nowTimestamp, setNowTimestamp] = useState(() => Date.now())
+  useEffect(() => {
+    const updateTime = () => {
+      if (!document.hidden) setNowTimestamp(Date.now())
+    }
+    const timer = window.setInterval(updateTime, 60_000)
+    document.addEventListener('visibilitychange', updateTime)
+    return () => {
+      window.clearInterval(timer)
+      document.removeEventListener('visibilitychange', updateTime)
+    }
+  }, [])
 
   const [requestedView, setHandoverViewMode] = useState<'ALL' | 'MINE' | 'OVERDUE'>(canReadHandovers ? 'ALL' : 'MINE')
   const handoverViewMode = !canReadHandovers ? 'MINE' : requestedView === 'MINE' && !canCreateHandover ? 'ALL' : requestedView
@@ -107,6 +117,7 @@ export function CashHandoversTab({
   // Queries
   const handoversQuery = useQuery({
     queryKey: ['private', employeeId, 'cash-handovers', handoverViewMode, handoverStatusFilter, page],
+    refetchInterval: handoverViewMode === 'OVERDUE' ? 60_000 : false,
     queryFn: ({ signal }) => {
       if (handoverViewMode === 'MINE') {
         return getMyCashHandovers({ page, itemPerPage: 50, status: handoverStatusFilter === 'ALL' ? undefined : handoverStatusFilter }, signal)
@@ -658,11 +669,13 @@ export function CashHandoversTab({
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium">Số tiền giữ lại trong ngăn kéo (VND) *</label>
+            <label htmlFor="handover-retained-cash" className="text-sm font-medium">Số tiền giữ lại trong ngăn kéo (VND) *</label>
             <Input
+              id="handover-retained-cash"
               type="number"
               min="0"
-              step="1000"
+              step="0.01"
+              inputMode="decimal"
               value={createHandoverRetained}
               onChange={(e) => setCreateHandoverRetained(e.target.value)}
               placeholder="Ví dụ: 500000"
@@ -674,8 +687,9 @@ export function CashHandoversTab({
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium">Ghi chú bàn giao</label>
+            <label htmlFor="handover-note" className="text-sm font-medium">Ghi chú bàn giao</label>
             <Textarea
+              id="handover-note"
               value={createHandoverNote}
               onChange={(e) => setCreateHandoverNote(e.target.value)}
               placeholder="Ghi chú người nhận, niêm phong túi tiền..."
@@ -721,8 +735,9 @@ export function CashHandoversTab({
           </p>
 
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium">Ghi chú phê duyệt (tùy chọn)</label>
+            <label htmlFor="handover-approval-note" className="text-sm font-medium">Ghi chú phê duyệt (tùy chọn)</label>
             <Textarea
+              id="handover-approval-note"
               value={approveNote}
               onChange={(e) => setApproveNote(e.target.value)}
               placeholder="Đã nhận đủ túi tiền niêm phong..."
@@ -759,8 +774,9 @@ export function CashHandoversTab({
           </p>
 
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium">Lý do từ chối *</label>
+            <label htmlFor="handover-rejection-note" className="text-sm font-medium">Lý do từ chối *</label>
             <Textarea
+              id="handover-rejection-note"
               value={rejectReason}
               onChange={(e) => setRejectReason(e.target.value)}
               placeholder="Tiền thực tế thiếu 50,000 đ so với phiếu bàn giao..."
@@ -810,8 +826,9 @@ export function CashHandoversTab({
           </p>
 
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium">Mã giao dịch / Mã tham chiếu Ngân hàng *</label>
+            <label htmlFor="handover-bank-reference" className="text-sm font-medium">Mã giao dịch / Mã tham chiếu Ngân hàng *</label>
             <Input
+              id="handover-bank-reference"
               value={settleBankRef}
               onChange={(e) => setSettleBankRef(e.target.value)}
               placeholder="Ví dụ: VCB-20261002-889922"
@@ -820,8 +837,9 @@ export function CashHandoversTab({
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium">Chứng từ / Giấy nộp tiền tham chiếu *</label>
+            <label htmlFor="handover-evidence-reference" className="text-sm font-medium">Chứng từ / Giấy nộp tiền tham chiếu *</label>
             <Input
+              id="handover-evidence-reference"
               value={settleEvidenceRef}
               onChange={(e) => setSettleEvidenceRef(e.target.value)}
               placeholder="Ví dụ: Biên lai nộp tiền quầy giao dịch số 0928..."

@@ -206,6 +206,18 @@ async function staff(page: Page, permissions: string[]) {
   )
 }
 
+for (const canOpen of [false, true]) {
+  test(`workdesk describes the personal shift and gates its open command: ${canOpen}`, async ({ page }) => {
+    await staff(page, ['/cashier-shifts_current', ...(canOpen ? ['/cashier-shifts_open', '/funds_read'] : [])])
+    await page.route('**/api/v1/cashier-shifts/current', route => route.fulfill({ status: 404, json: {} }))
+    await page.goto('/staff')
+    await expect(page.getByRole('heading', { name: 'Ca thu ngân của tôi', exact: true })).toBeVisible()
+    await expect(page.getByText('Bạn chưa mở ca thu ngân.', { exact: true }).first()).toBeVisible()
+    await expect(page.getByText('Chưa có ca thu ngân nào đang mở', { exact: true })).toHaveCount(0)
+    await expect(page.getByRole('link', { name: 'Mở ca của tôi', exact: true })).toHaveCount(canOpen ? 1 : 0)
+  })
+}
+
 async function operations(page: Page) {
   await page.route('**/api/v1/management/exceptions/summary', (route) =>
     route.fulfill({ json: envelope(summary) }),
@@ -250,7 +262,7 @@ test('expense-only reviewers have the same navigation and route access without f
     page.getByRole('heading', { name: /Hàng đợi Phê duyệt/ }),
   ).toBeVisible()
   await expect(
-    page.getByRole('button', { name: 'Ca làm việc của tôi' }),
+    page.getByRole('tab', { name: /Ca làm việc của tôi/ }),
   ).toHaveCount(0)
   expect(reads.every((url) => url.includes('/expense-requests?'))).toBe(true)
 })

@@ -97,6 +97,7 @@ export default function StaffHome() {
   const { t: translate } = useTranslation()
   const { employee, authorization, access } = useOutletContext<Session>()
   const can = access.has
+  const canOpenShift = access.hasAll('/cashier-shifts_current', '/cashier-shifts_open', '/funds_read')
   const destinations = visibleStaffDestinations(authorization.permissionKeys)
 
   const shift = useQuery({
@@ -156,7 +157,7 @@ export default function StaffHome() {
 
   // Attention strip signals
   const hasUrgentIssues =
-    overdueKitchenTickets > 0 || totalExceptions > 0 || (can('/cashier-shifts_current') && isShiftClosed)
+    overdueKitchenTickets > 0 || totalExceptions > 0 || (canOpenShift && isShiftClosed)
 
   return (
     <div className="space-y-6 pb-12 font-sans">
@@ -235,10 +236,10 @@ export default function StaffHome() {
                 {totalExceptions > 0 && (
                   <span>{totalExceptions} việc cần xử lý ở trung tâm vận hành</span>
                 )}
-                {isShiftClosed && can('/cashier-shifts_current') && (
+                {isShiftClosed && canOpenShift && (
                   <span>
                     {(overdueKitchenTickets > 0 || totalExceptions > 0) && ' · '}
-                    Ca thu ngân chưa mở
+                    {translate('auth.noOpenShift')}
                   </span>
                 )}
               </p>
@@ -484,7 +485,7 @@ export default function StaffHome() {
               )}
 
               {/* Unopened cashier shift item */}
-              {isShiftClosed && can('/cashier-shifts_current') && (
+              {isShiftClosed && canOpenShift && (
                 <div className="flex items-center justify-between rounded-xl border border-amber-300 bg-amber-50/50 p-3.5 transition-colors">
                   <div className="flex items-center gap-3 min-w-0">
                     <span className="rounded-full bg-amber-200 px-2 py-0.5 text-[11px] font-bold text-amber-900 shrink-0">
@@ -492,16 +493,16 @@ export default function StaffHome() {
                     </span>
                     <div className="min-w-0">
                       <p className="text-xs sm:text-sm font-bold text-foreground truncate">
-                        Chưa có ca thu ngân nào đang mở
+                        {translate('auth.noOpenShift')}
                       </p>
-                      <p className="text-[11px] text-muted-foreground">Khai báo tiền mặt ban đầu để bắt đầu bán hàng POS</p>
+                      <p className="text-[11px] text-muted-foreground">{translate('auth.shiftRequiredSelf')}</p>
                     </div>
                   </div>
                   <Link
                     to="/staff/shifts"
                     className="shrink-0 rounded-lg bg-primary px-3 py-1.5 text-xs font-bold text-white hover:bg-primary/90 transition-colors ml-2"
                   >
-                    Mở ca
+                    {translate('auth.openMyShift')}
                   </Link>
                 </div>
               )}
@@ -535,7 +536,7 @@ export default function StaffHome() {
                   {translate(operationalError ? 'workdesk.unavailable' : operationalQueries.length ? 'workdesk.checking' : 'workdesk.noAccess')}
                 </p>
               )}
-              {operationalReady && !overdueKitchenTickets && !totalExceptions && !isShiftClosed && (pending.data?.totalItems ?? 0) === 0 && (
+              {operationalReady && !overdueKitchenTickets && !totalExceptions && !(canOpenShift && isShiftClosed) && (pending.data?.totalItems ?? 0) === 0 && (
                 <div className="text-center py-8 px-4 rounded-xl border border-dashed border-border/80">
                   <CheckCircle2 className="mx-auto h-8 w-8 text-emerald-600 mb-2" />
                   <p className="text-sm font-bold text-foreground">Mọi vận hành đang trơn tru</p>

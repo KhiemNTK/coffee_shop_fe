@@ -21,11 +21,14 @@ async function bank(page: Page, manage = false) {
   await staff(page, ['/bank-reconciliation_read', '/bank-reconciliation_import', ...(manage ? ['/bank-reconciliation_manage'] : [])])
   await page.route('**/api/v1/bank-reconciliation/imports?*', route => route.fulfill({ json: envelope(paged([imported])) }))
   await page.route('**/api/v1/bank-reconciliation/entries?*', route => route.fulfill({ json: envelope(paged([])) }))
+  await page.route('**/api/v1/bank-reconciliation/imports/*/summary', route => route.fulfill({ json: envelope({
+    MATCHED: { count: 0, amount: '0' }, UNMATCHED: { count: 0, amount: '0' }, MISMATCH: { count: 0, amount: '0' }, IGNORED: { count: 0, amount: '0' },
+  }) }))
   await page.goto('/staff/reconciliation?tab=bank')
 }
 async function preview(page: Page) {
   await page.getByLabel('Quỹ ngân hàng').fill(id)
-  await page.getByLabel('Sao kê JSON').setInputFiles({ name: 'statement.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(statement)) })
+  await page.getByLabel('Sao kê (.xlsx / JSON)').setInputFiles({ name: 'statement.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(statement)) })
   await expect(page.getByRole('dialog')).toBeVisible()
 }
 
@@ -106,7 +109,7 @@ test('lost bank import reply survives reload and recovers the original without a
   expect(await page.getByRole('dialog').evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true)
   await page.screenshot({ path: info.outputPath('bank-import-recovery.png') })
   await page.reload()
-  await expect(page.getByLabel('Sao kê JSON')).toBeDisabled()
+  await expect(page.getByLabel('Sao kê (.xlsx / JSON)')).toBeDisabled()
   await page.getByRole('button', { name: 'Mở phiếu cần kiểm tra' }).click()
   await page.getByRole('button', { name: 'Kiểm tra phiếu đã nhập' }).click()
   await expect(page.getByRole('dialog')).toHaveCount(0)
@@ -144,7 +147,7 @@ test('storage failure sends nothing and does not trap the operator after cancell
   await expect(page.getByRole('dialog').getByRole('alert')).toContainText('Chưa gửi')
   expect(posts).toBe(0)
   await page.getByRole('dialog').getByRole('button', { name: 'Hủy', exact: true }).click()
-  await expect(page.getByLabel('Sao kê JSON')).toBeEnabled()
+  await expect(page.getByLabel('Sao kê (.xlsx / JSON)')).toBeEnabled()
   await expect(page.getByLabel('Quỹ ngân hàng')).toBeEnabled()
 })
 

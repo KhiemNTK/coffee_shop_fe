@@ -322,6 +322,8 @@ export interface GetCashierShiftsParams {
   status?: 'OPEN' | 'CLOSED'
   employeeId?: string
   fundId?: string
+  openedFrom?: string
+  openedTo?: string
 }
 
 export async function getCashierShifts(
@@ -334,6 +336,8 @@ export async function getCashierShifts(
   if (params.status) q.set('status', params.status)
   if (params.employeeId) q.set('employeeId', params.employeeId)
   if (params.fundId) q.set('fundId', params.fundId)
+  if (params.openedFrom) q.set('openedFrom', params.openedFrom)
+  if (params.openedTo) q.set('openedTo', params.openedTo)
 
   const query = q.toString()
   return apiGet(

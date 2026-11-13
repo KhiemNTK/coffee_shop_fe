@@ -237,8 +237,9 @@ export function ExpenseRequestsTab({ onError, onSuccess }: ExpenseRequestsTabPro
           </p>
 
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium">Ghi chú duyệt chi (tùy chọn)</label>
+            <label htmlFor="expense-approval-note" className="text-sm font-medium">Ghi chú duyệt chi (tùy chọn)</label>
             <Textarea
+              id="expense-approval-note"
               value={expenseReviewNote}
               onChange={(e) => setExpenseReviewNote(e.target.value)}
               placeholder="Đã xác nhận hóa đơn chứng từ..."
@@ -271,8 +272,9 @@ export function ExpenseRequestsTab({ onError, onSuccess }: ExpenseRequestsTabPro
         </DialogHeader>
         <div className="flex flex-col gap-4 mt-2">
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium">Lý do từ chối chi *</label>
+            <label htmlFor="expense-rejection-note" className="text-sm font-medium">Lý do từ chối chi *</label>
             <Textarea
+              id="expense-rejection-note"
               value={expenseRejectReason}
               onChange={(e) => setExpenseRejectReason(e.target.value)}
               placeholder="Không có chứng từ hợp lệ, chi sai quy định..."

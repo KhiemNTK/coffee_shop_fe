@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useOutletContext } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import {
   CheckCircle2,
   Download,
@@ -19,6 +20,7 @@ import {
   bankInputSchema,
   getBankEntries,
   getBankImports,
+  getBankSummary,
   ignoreBankEntry,
   importBankStatement,
   recoverBankStatement,
@@ -26,8 +28,11 @@ import {
   type BankEntry,
   type BankInput,
 } from '../reconciliation.api'
+import { invalidateReconciliation } from '../reconciliation-query'
+import { BankExcelImportDialog } from './bank-excel-import-dialog'
 
 export function BankStatementsTab() {
+  const { t } = useTranslation()
   const { employee, access } = useOutletContext<Session>()
   const can = access.has
   const [page, setPage] = useState(1)
@@ -38,6 +43,8 @@ export function BankStatementsTab() {
   const [fileError, setFileError] = useState('')
   const [ignore, setIgnore] = useState<BankEntry | null>(null)
   const [reason, setReason] = useState('')
+  const [matchStatus, setMatchStatus] = useState('')
+  const [excel, setExcel] = useState<File | null>(null)
   const client = useQueryClient()
   const recoveryKey = pendingIntentKey(employee.id, 'bank.statement.import')
   const [recovery] = useState(() => {
@@ -61,15 +68,23 @@ export function BankStatementsTab() {
   })
 
   const entries = useQuery({
-    queryKey: ['private', employee.id, 'bank-entries', selectedId, entryPage],
-    queryFn: ({ signal }) => getBankEntries(selectedId, entryPage, signal),
+    queryKey: ['private', employee.id, 'bank-entries', selectedId, entryPage, matchStatus],
+    queryFn: ({ signal }) => getBankEntries(selectedId, entryPage, signal, matchStatus),
     enabled: Boolean(selectedId),
   })
 
+  const summary = useQuery({
+    queryKey: ['private', employee.id, 'bank-summary', selectedId],
+    queryFn: ({ signal }) => getBankSummary(selectedId, signal),
+    enabled: Boolean(selectedId),
+  })
+  const statusLabels = { UNMATCHED: t('reconciliation.bank.UNMATCHED'), MATCHED: t('reconciliation.bank.MATCHED'),
+    MISMATCH: t('reconciliation.bank.MISMATCH'), IGNORED: t('reconciliation.bank.IGNORED') }
   const refresh = () => {
     void client.invalidateQueries({ queryKey: ['private', employee.id, 'bank-imports'] })
     void client.invalidateQueries({ queryKey: ['private', employee.id, 'bank-entries'] })
-    void client.invalidateQueries({ queryKey: ['management-exceptions-list'] })
+    void client.invalidateQueries({ queryKey: ['private', employee.id, 'bank-summary'] })
+    void invalidateReconciliation(client, employee.id)
   }
 
   const importing = useMutation({
@@ -133,7 +148,7 @@ export function BankStatementsTab() {
 
   const reconcile = useMutation({
     mutationFn: () => reconcileBank(selectedId),
-    onSuccess: refresh,
+    onSuccess: () => { importing.reset(); refresh() },
   })
 
   const ignoring = useMutation({
@@ -205,6 +220,7 @@ export function BankStatementsTab() {
 
   return (
     <div className="space-y-5">
+      <p className="border-l-2 border-primary pl-3 text-sm text-muted-foreground">{t('reconciliation.bank.scope')}</p>
       {/* Import statement card */}
       {can('/bank-reconciliation_import') && (
         <Card className="border border-border/80 bg-card shadow-xs">
@@ -247,16 +263,19 @@ export function BankStatementsTab() {
                 </label>
 
                 <label className="min-w-0 flex-1 space-y-1.5">
-                  <span className="text-xs font-semibold text-foreground">Sao kê JSON</span>
+                  <span className="text-xs font-semibold text-foreground">{t('reconciliation.bank.file')}</span>
                   <input
                     type="file"
-                    aria-label="Sao kê JSON"
-                    accept=".json,application/json"
+                    aria-label={t('reconciliation.bank.file')}
+                    accept=".json,.xlsx,application/json,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                     className="block w-full text-xs text-foreground file:mr-2.5 file:rounded-lg file:border-0 file:bg-primary/10 file:px-3 file:py-2 file:text-xs file:font-semibold file:text-primary hover:file:bg-primary/20"
                     disabled={!fundId || importLocked}
                     onChange={e => {
                       const file = e.target.files?.[0]
-                      if (file) void readFile(file)
+                      if (file) {
+                        if (/\.xlsx$/i.test(file.name)) { if (file.size <= 5 * 1024 * 1024) setExcel(file); else setFileError(t('reconciliation.excel.tooLarge')) }
+                        else void readFile(file)
+                      }
                       e.target.value = ''
                     }}
                   />
@@ -372,6 +391,20 @@ export function BankStatementsTab() {
       {/* Detail entries of selected statement */}
       {selectedId && (
         <section aria-label="Chi tiết sao kê" className="space-y-4">
+          <dl className="grid grid-cols-2 gap-x-4 gap-y-3 border-y border-border py-3 sm:grid-cols-4" aria-label={t('reconciliation.bank.summary')}>
+            {(Object.keys(statusLabels) as (keyof typeof statusLabels)[]).map(status => <div key={status}>
+              <dt className="text-xs text-muted-foreground">{statusLabels[status]}</dt>
+              <dd className="font-semibold tabular-nums">{summary.isSuccess && !summary.isFetching ? `${summary.data[status].count} · ${formatVnd(summary.data[status].amount)}` : '—'}</dd>
+            </div>)}
+          </dl>
+          {summary.isError && <ApiErrorAlert error={summary.error} />}
+          <label className="flex flex-wrap items-center gap-2 text-sm"><span>{t('reconciliation.bank.filter')}</span>
+            <select aria-label={t('reconciliation.bank.filter')} value={matchStatus} className="h-11 rounded-md border border-border bg-background px-2"
+              disabled={reconcile.isPending || ignoring.isPending} onChange={e => { setMatchStatus(e.target.value); setEntryPage(1) }}>
+              <option value="">{t('reconciliation.bank.all')}</option>
+              {(Object.keys(statusLabels) as (keyof typeof statusLabels)[]).map(status => <option key={status} value={status}>{statusLabels[status]}</option>)}
+            </select>
+          </label>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <h3 className="text-base font-bold text-foreground">Giao dịch trong sao kê đã chọn</h3>
             {can('/bank-reconciliation_manage') && (
@@ -395,7 +428,7 @@ export function BankStatementsTab() {
 
           {reconcile.isSuccess && (
             <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3.5 text-xs text-emerald-800 dark:text-emerald-300">
-              <p role="status">Đối soát hoàn tất. Dữ liệu đã được cập nhật.</p>
+              <p role="status">{t('reconciliation.bank.processed')}</p>
             </div>
           )}
 
@@ -409,7 +442,7 @@ export function BankStatementsTab() {
             </div>
           ) : entries.data.list.length === 0 ? (
             <div className="p-10 text-center text-xs text-muted-foreground">
-              <p>Sao kê này không có dòng giao dịch nào.</p>
+              <p>{matchStatus ? t('reconciliation.bank.noFilteredEntries') : 'Sao kê này không có dòng giao dịch nào.'}</p>
             </div>
           ) : (
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -432,12 +465,12 @@ export function BankStatementsTab() {
                             : 'border-muted text-muted-foreground'
                       }`}
                     >
-                      {entry.matchStatus}
+                      {statusLabels[entry.matchStatus]}
                     </Badge>
                   </div>
 
                   <div className="flex justify-between text-xs pt-1">
-                    <span className="text-muted-foreground">{entry.direction}</span>
+                    <span className="text-muted-foreground">{t(entry.direction === 'CREDIT' ? 'reconciliation.excel.credit' : 'reconciliation.excel.debit')}</span>
                     <span className="font-bold text-foreground font-mono">
                       {formatVnd(entry.amount)}
                     </span>
@@ -461,6 +494,9 @@ export function BankStatementsTab() {
                       Lý do: {entry.mismatchReason}
                     </p>
                   )}
+                  {entry.matchedHandover && <p className="break-all text-xs text-muted-foreground">
+                    {t('reconciliation.bank.handover')}: <code>{entry.matchedHandover.id}</code>
+                  </p>}
 
                   {can('/bank-reconciliation_manage') &&
                     (entry.matchStatus === 'UNMATCHED' || entry.matchStatus === 'MISMATCH') && (
@@ -491,6 +527,8 @@ export function BankStatementsTab() {
       )}
 
       {/* Preview Dialog */}
+      {excel && <BankExcelImportDialog file={excel} fundId={fundId} onClose={() => setExcel(null)}
+        onPreview={input => { setExcel(null); setPreview(input); setFileError(''); importing.reset() }} />}
       {preview && (
         <Dialog
           open

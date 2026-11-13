@@ -7,14 +7,24 @@ export const incidentSchema = z.object({
   id: z.string(), type: z.string(), status: z.enum(['OPEN', 'RESOLVED', 'IGNORED']),
   title: z.string(), detectedAt: z.string(), paymentAttemptId: z.string(),
   paymentRefundId: z.string().nullable(), resolutionNote: z.string().nullable(),
+  paymentRefund: z.object({ id: z.string(), amount: moneySchema, status: z.string(),
+    updatedAt: z.string(), requestedById: z.string(), providerRequestId: z.string(),
+    providerTransactionNo: z.string().nullable() }).nullable().optional(),
+  diagnostics: z.object({ reasonCode: z.string().nullable(), failureCode: z.string().nullable(),
+    responseCode: z.string().nullable(), transactionStatus: z.string().nullable(),
+    verification: z.string().nullable(), providerAmount: moneySchema.nullable() }).optional(),
   paymentAttempt: z.object({ id: z.string(), status: z.string(), amount: moneySchema,
-    invoiceId: z.string(), merchantReference: z.string() }),
+    invoiceId: z.string(), merchantReference: z.string(), provider: z.string().optional(),
+    lastReconciledAt: z.string().nullable().optional(), nextReconcileAt: z.string().nullable().optional(),
+    reconciliationAttempts: z.number().optional(),
+    invoice: z.object({ invoiceNumber: z.string(), paymentStatus: z.string() }).optional() }),
 })
 export const bankEntrySchema = z.object({
   id: z.string(), externalId: z.string(), direction: z.enum(['CREDIT', 'DEBIT']),
   amount: moneySchema, transactionDate: z.string(), bankReference: z.string().nullable(),
   description: z.string().nullable(), matchStatus: z.enum(['UNMATCHED', 'MATCHED', 'MISMATCH', 'IGNORED']),
   mismatchReason: z.string().nullable(),
+  matchedHandover: z.object({ id: z.string(), transferAmount: moneySchema, settlementStatus: z.string(), settledAt: z.string().nullable() }).nullable().optional(),
 })
 export const bankImportSchema = z.object({
   id: z.string(), sourceFileName: z.string(), statementFrom: z.string(), statementTo: z.string(),
@@ -60,9 +70,10 @@ export function getBankImports(page: number, signal?: AbortSignal) {
   return apiGet('/bank-reconciliation/imports?page=' + page + '&itemPerPage=20',
     paginatedResponseSchema(bankImportSchema), signal, true)
 }
-export function getBankEntries(importId: string, page: number, signal?: AbortSignal) {
+export function getBankEntries(importId: string, page: number, signal?: AbortSignal, matchStatus = '') {
   return apiGet('/bank-reconciliation/entries?' + new URLSearchParams({
     importId, page: String(page), itemPerPage: '20',
+    ...(matchStatus ? { matchStatus } : {}),
   }), paginatedResponseSchema(bankEntrySchema), signal, true)
 }
 export function importBankStatement(input: BankInput) {
@@ -77,10 +88,30 @@ export function recoverBankStatement(input: BankInput) {
 }
 export function reconcileBank(id: string) {
   return apiMutate('/bank-reconciliation/imports/' + id + '/reconcile', 'POST',
-    z.object({ UNMATCHED: z.object({ count: z.number(), amount: moneySchema }),
-      MATCHED: z.object({ count: z.number(), amount: moneySchema }),
-      MISMATCH: z.object({ count: z.number(), amount: moneySchema }),
-      IGNORED: z.object({ count: z.number(), amount: moneySchema }) }), {})
+    bankSummarySchema, {})
+}
+export const bankSummarySchema = z.object({ UNMATCHED: z.object({ count: z.number(), amount: moneySchema }),
+  MATCHED: z.object({ count: z.number(), amount: moneySchema }),
+  MISMATCH: z.object({ count: z.number(), amount: moneySchema }),
+  IGNORED: z.object({ count: z.number(), amount: moneySchema }) })
+export function getBankSummary(id: string, signal?: AbortSignal) {
+  return apiGet(`/bank-reconciliation/imports/${id}/summary`, bankSummarySchema, signal, true)
+}
+export type RefundReview = { expectedUpdatedAt: string; expectedAmount: string; outcome: 'SUCCEEDED' | 'FAILED';
+  providerReference: string; evidenceReference: string; resolutionNote: string }
+export function reconcileRefund(id: string, input: RefundReview) {
+  return apiMutate(`/payment-refunds/${id}/reconcile`, 'POST', z.object({ id: z.string(), status: z.string() }), input)
+}
+
+const excelPreviewSchema = z.object({ sheets: z.array(z.string()), rowCount: z.number(),
+  columns: z.array(z.object({ index: z.number(), label: z.string(), sample: z.string() })),
+  statement: bankInputSchema.optional(),
+})
+export type BankExcelPreview = z.infer<typeof excelPreviewSchema>
+export function previewBankExcel(file: File, options: Record<string, string>) {
+  const body = new FormData()
+  body.append('file', file)
+  return apiMutate('/bank-reconciliation/imports/preview-excel?' + new URLSearchParams(options), 'POST', excelPreviewSchema, body)
 }
 export function ignoreBankEntry(id: string, reason: string) {
   return apiMutate('/bank-reconciliation/entries/' + id + '/ignore', 'POST', bankEntrySchema, { reason })
