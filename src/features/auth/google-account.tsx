@@ -58,7 +58,10 @@ export function GoogleAccount({ linked }: { linked: boolean }) {
         {linked ? translate('auth.googleLinked') : translate('auth.googleUnlinked')}
       </p>
       {!linked && (
-        <GoogleButton clientId={authConfig.googleClientId} onCredential={setCredential} />
+        <>
+          <p className="text-sm text-muted-foreground">{translate('auth.googleLinkHint')}</p>
+          <GoogleButton clientId={authConfig.googleClientId} onCredential={setCredential} />
+        </>
       )}
       <form
         className="max-w-md space-y-3"

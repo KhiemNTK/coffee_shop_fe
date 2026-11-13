@@ -255,16 +255,25 @@ export default function SignInPage() {
               {translate('auth.forgotPasswordLink')}
             </Link>
           </div>
-          {authConfig.googleClientId &&
-            !retryWait &&
-            !pending &&
-            !configMissing &&
-            (!siteKey || token) && (
-              <GoogleButton
-                clientId={authConfig.googleClientId}
-                onCredential={(credential) => void signInWithGoogle(credential)}
-              />
-            )}
+          {authConfig.googleClientId && (
+            <div className="space-y-3 border-t border-border pt-4">
+              <p className="text-sm leading-relaxed text-muted-foreground">
+                {translate('auth.staffGoogleHint')}
+              </p>
+              {!retryWait && !pending && !configMissing && (
+                !siteKey || token ? (
+                  <GoogleButton
+                    clientId={authConfig.googleClientId}
+                    onCredential={(credential) => void signInWithGoogle(credential)}
+                  />
+                ) : (
+                  <p role="status" className="text-sm text-muted-foreground">
+                    {translate('auth.waitGoogleVerification')}
+                  </p>
+                )
+              )}
+            </div>
+          )}
           {authConfig.signupEnabled && (
             <div className="pt-2 text-center text-xs text-muted-foreground">
               {translate('auth.noAccount')}{' '}

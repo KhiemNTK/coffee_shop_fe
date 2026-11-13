@@ -34,7 +34,7 @@ export default function WishlistPage() {
               <span className="break-all text-sm text-muted-foreground">{customer.data.email}</span>
               <Button variant="outline" disabled={logout.isPending} onClick={() => logout.mutate()}>
                 <LogOut size={16} aria-hidden="true" />
-                {t('auth.signOut')}
+                {t('customer.signOut')}
               </Button>
             </div>
           )}

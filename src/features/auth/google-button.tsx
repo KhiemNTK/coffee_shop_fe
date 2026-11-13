@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next'
 import { useEffect, useRef, useState } from 'react'
-import { RefreshCw } from 'lucide-react'
+import { LoaderCircle, RefreshCw } from 'lucide-react'
 import { Button } from '../../shared/ui/button'
 
 type GoogleIdentity = {
@@ -65,7 +65,7 @@ export function GoogleButton({
   const { t: translate, i18n } = useTranslation()
   const container = useRef<HTMLDivElement>(null)
   const callback = useRef(onCredential)
-  const [failed, setFailed] = useState(false)
+  const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading')
   const [attempt, setAttempt] = useState(0)
   useEffect(() => {
     callback.current = onCredential
@@ -90,9 +90,10 @@ export function GoogleButton({
           locale: i18n.resolvedLanguage ?? 'vi',
           width: Math.min(240, element.clientWidth),
         })
+        setStatus('ready')
       })
       .catch(() => {
-        if (!cancelled) setFailed(true)
+        if (!cancelled) setStatus('error')
       })
     return () => {
       cancelled = true
@@ -100,9 +101,17 @@ export function GoogleButton({
     }
   }, [clientId, attempt, i18n.resolvedLanguage])
   return (
-    <div className="min-h-11 space-y-2">
-      <div ref={container} className="flex min-h-11 justify-center" />
-      {failed && (
+    <div role="group" aria-label={translate('auth.googleSignIn')} className="min-h-11 space-y-2">
+      <div className="relative min-h-11">
+        <div ref={container} className="flex min-h-11 justify-center" aria-busy={status === 'loading'} />
+        {status === 'loading' && (
+          <p role="status" className="absolute inset-0 flex items-center justify-center gap-2 text-sm text-muted-foreground">
+            <LoaderCircle className="size-4 shrink-0 motion-safe:animate-spin" aria-hidden="true" />
+            {translate('auth.loadingGoogle')}
+          </p>
+        )}
+      </div>
+      {status === 'error' && (
         <div className="space-y-2">
           <p role="alert" className="text-sm text-destructive">
             {translate('auth.googleUnavailable')}
@@ -112,7 +121,7 @@ export function GoogleButton({
             variant="outline"
             size="sm"
             onClick={() => {
-              setFailed(false)
+              setStatus('loading')
               setAttempt((value) => value + 1)
             }}
           >

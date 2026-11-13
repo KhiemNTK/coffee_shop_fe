@@ -11,7 +11,13 @@ export const queryClient = new QueryClient({
 
 export function clearIdentity() {
   resetSessionRequests()
-  queryClient.clear()
+  // Staff session changes must not end the independent customer session.
+  const staffData = {
+    predicate: (query: { queryKey: readonly unknown[] }) => query.queryKey[0] !== 'customer',
+  }
+  void queryClient.cancelQueries(staffData)
+  queryClient.removeQueries(staffData)
+  queryClient.getMutationCache().clear()
 }
 
 // Only control messages cross tabs, never tokens or employee data.

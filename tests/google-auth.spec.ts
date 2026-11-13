@@ -88,6 +88,8 @@ test('Google login waits for CAPTCHA, submits once and never persists credential
     })
   })
   await page.goto('/sign-in')
+  await expect(page.getByText('Google chỉ dùng sau khi liên kết.', { exact: false })).toBeVisible()
+  await expect(page.getByRole('link', { name: 'Đăng ký tài khoản mới', exact: true })).toHaveCount(0)
   await expect(
     page.getByRole('button', { name: 'Google fixture' }),
   ).toHaveCount(0)
@@ -111,6 +113,59 @@ test('Google login waits for CAPTCHA, submits once and never persists credential
     })),
   ).toEqual({ local: { coffee_shop_language: 'vi' }, session: {} })
 })
+
+test('Google loading is announced without shifting the button area', async ({ page, context }, info) => {
+  let releaseScript!: () => void
+  const scriptGate = new Promise<void>((resolve) => { releaseScript = resolve })
+  await context.route(googleScript, async (route) => {
+    await scriptGate
+    await route.fallback()
+  })
+  await page.goto('/sign-in')
+  try {
+    await page.getByRole('button', { name: 'Verify fixture' }).click()
+    const loading = page.getByRole('status').filter({ hasText: 'Đang tải đăng nhập Google' })
+    await expect(loading).toBeVisible()
+    const area = page.getByRole('group', { name: 'Đăng nhập Google', exact: true }).locator('[aria-busy]')
+    await expect(area).toHaveAttribute('aria-busy', 'true')
+    const before = await area.boundingBox()
+    releaseScript()
+    await expect(page.getByRole('button', { name: 'Google fixture' })).toBeVisible()
+    await expect(area).toHaveAttribute('aria-busy', 'false')
+    await expect(loading).toHaveCount(0)
+    const after = await area.boundingBox()
+    expect(before?.height).toBe(after?.height)
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+    await page.screenshot({ path: info.outputPath('staff-google-ready.png'), fullPage: true, animations: 'disabled' })
+  } finally {
+    releaseScript()
+  }
+})
+
+for (const { path, endpoint, language, message } of [
+  { path: '/sign-in', endpoint: '/auth/google', language: 'en', message: 'Google sign-in is temporarily unavailable. Please try again later.' },
+  { path: '/customer/sign-in', endpoint: '/customers/auth/google', language: 'vi', message: 'Đăng nhập Google tạm thời không khả dụng. Vui lòng thử lại sau.' },
+]) {
+  test(`Google outage on ${path} is actionable and never retries consumed credentials`, async ({ page, context }) => {
+    await page.addInitScript((value) => localStorage.setItem('coffee_shop_language', value), language)
+    await context.route('**/api/v1/customers/me', route => route.fulfill({ status: 401, json: {} }))
+    await context.route('**/api/v1/menu/public/store', route => route.fulfill({ json: envelope({ name: 'Coffee Homes', address: null, phone: null }) }))
+    let calls = 0
+    await page.route(`**/api/v1${endpoint}`, route => {
+      calls++
+      return route.fulfill({ status: 503, headers: { 'x-request-id': 'google-outage-fixture' }, json: { code: 'GOOGLE_UNAVAILABLE', message: 'untranslated server reason' } })
+    })
+    await page.goto(path)
+    await page.getByRole('button', { name: 'Verify fixture' }).click()
+    await page.getByRole('button', { name: 'Google fixture' }).click()
+    await expect(page.getByRole('alert')).toContainText(message)
+    await expect(page.getByRole('alert')).toContainText('google-outage-fixture')
+    await expect(page.getByRole('button', { name: 'Google fixture' })).toHaveCount(0)
+    await page.clock.install()
+    await page.clock.runFor(15_000)
+    expect(calls).toBe(1)
+  })
+}
 
 test('Google staff login restores the remembered location and still enforces route permissions', async ({ page, context }) => {
   await staff(context)
@@ -219,7 +274,11 @@ test('link Google rechecks password and discards credentials after a rejected li
       password: 'Fixture-password-123!',
       idToken: credential,
     })
-    if (calls === 1) return route.fulfill({ status: 400, json: {} })
+    const failures = ['GOOGLE_EMAIL_MISMATCH', 'GOOGLE_ALREADY_LINKED', 'GOOGLE_LINK_CHANGED']
+    if (calls <= failures.length) return route.fulfill({
+      status: 400,
+      json: { code: failures[calls - 1], message: 'untranslated server reason' },
+    })
     linked = true
     return route.fulfill({ json: envelope({ linked: true }) })
   })
@@ -229,19 +288,25 @@ test('link Google rechecks password and discards credentials after a rejected li
     exact: true,
   })
   await expect(submit).toBeDisabled()
-  await page.getByRole('button', { name: 'Google fixture' }).click()
-  await page.getByLabel('Mật khẩu hiện tại').fill('Fixture-password-123!')
-  await submit.click()
-  await expect(page.getByRole('alert')).toBeVisible()
-  await expect(submit).toBeDisabled()
-  await expect(page.getByLabel('Mật khẩu hiện tại')).toHaveValue('')
+  for (const message of [
+    'Vui lòng chọn tài khoản Google trùng với email nhân viên.',
+    'Tài khoản Google đã được liên kết. Tải lại thông tin tài khoản hoặc liên hệ quản lý.',
+    'Liên kết Google đã thay đổi. Tải lại thông tin tài khoản trước khi thử lại.',
+  ]) {
+    await page.getByRole('button', { name: 'Google fixture' }).click()
+    await page.getByLabel('Mật khẩu hiện tại').fill('Fixture-password-123!')
+    await submit.click()
+    await expect(page.getByRole('alert')).toHaveText(message)
+    await expect(submit).toBeDisabled()
+    await expect(page.getByLabel('Mật khẩu hiện tại')).toHaveValue('')
+  }
   await page.getByRole('button', { name: 'Google fixture' }).click()
   await page.getByLabel('Mật khẩu hiện tại').fill('Fixture-password-123!')
   await submit.click()
   await expect(
     page.getByText('Đã liên kết tài khoản Google.', { exact: true }),
   ).toBeVisible()
-  expect(calls).toBe(2)
+  expect(calls).toBe(4)
 })
 
 for (const status of [503, 200]) {

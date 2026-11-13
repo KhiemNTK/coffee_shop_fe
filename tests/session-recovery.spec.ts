@@ -51,7 +51,7 @@ test('customer logout and account changes invalidate other tabs without touching
   const other = await context.newPage()
   await other.goto('/wishlist')
   await expect(other.getByText(first.email, { exact: true })).toBeVisible()
-  await page.getByRole('button', { name: 'Đăng xuất', exact: true }).click()
+  await page.getByRole('button', { name: 'Đăng xuất tài khoản khách', exact: true }).click()
   await expect(other.getByText(first.email, { exact: true })).toHaveCount(0)
   customer = second
   await page.evaluate(() => {
@@ -62,6 +62,42 @@ test('customer logout and account changes invalidate other tabs without touching
   await expect(other.getByText(second.email, { exact: true })).toBeVisible()
   expect(staffRequests).toBe(0)
   await other.close()
+})
+
+test('clearing staff identity preserves customer cache and actor-scoped recovery commands', async ({ page }) => {
+  await page.route('**/api/v1/**', route => route.fulfill({ status: 401, json: {} }))
+  await page.goto('/wishlist')
+  const result = await page.evaluate(async () => {
+    const path = '/src/shared/api/query-client.ts'
+    const { queryClient, clearIdentity } = await import(path)
+    const recoveryPath = '/src/shared/api/idempotency.ts'
+    const { clearPrivatePendingOperations } = await import(recoveryPath)
+    const customerKey = ['customer', 'fixture-customer', 'wishlist']
+    const staffKey = ['private', 'fixture-employee', 'invoices']
+    const legacyStaffKey = ['invoices-list']
+    const pendingKey = 'coffee-shop:pending:private:intent:fixture-employee:checkout'
+    queryClient.setQueryData(customerKey, { items: ['customer-item'] })
+    queryClient.setQueryData(staffKey, { amount: '100000' })
+    queryClient.setQueryData(legacyStaffKey, { amount: '100000' })
+    queryClient.getMutationCache().build(queryClient, {}, { status: 'success', data: 'private-result' })
+    sessionStorage.setItem(pendingKey, 'pending-payment')
+    clearPrivatePendingOperations()
+    clearIdentity()
+    return {
+      customer: queryClient.getQueryData(customerKey),
+      staff: queryClient.getQueryData(staffKey),
+      legacyStaff: queryClient.getQueryData(legacyStaffKey),
+      mutations: queryClient.getMutationCache().getAll().length,
+      recovery: sessionStorage.getItem(pendingKey),
+    }
+  })
+  expect(result).toEqual({
+    customer: { items: ['customer-item'] },
+    staff: undefined,
+    legacyStaff: undefined,
+    mutations: 0,
+    recovery: 'pending-payment',
+  })
 })
 
 test('payment return uses English and keeps unconfirmed payments unconfirmed', async ({ page }, info) => {
@@ -84,7 +120,7 @@ test('cashier page header and navigation use the selected language', async ({ pa
   await page.route('**/api/v1/cashier-shifts/current', route => route.fulfill({ status: 404, json: {} }))
   await page.goto('/staff/shifts')
   await expect(page.getByRole('heading', { name: 'Cashier shifts & funds' })).toBeVisible()
-  await expect(page.getByRole('button', { name: 'My current shift', exact: true })).toBeVisible()
+  await expect(page.getByRole('tab', { name: 'My current shift', exact: true })).toBeVisible()
 })
 
 test('an unverified payment return never shows a successful payment', async ({ page }) => {

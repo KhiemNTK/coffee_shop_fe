@@ -102,7 +102,7 @@ test('an unknown bulk movement survives logout and reload with exactly the same 
   await page.getByRole('button', { name: 'Xác nhận ghi sổ', exact: true }).click()
   await expect(page.getByRole('button', { name: 'Gửi lại cùng lô', exact: true })).toBeEnabled()
   await expect.poll(() => page.evaluate(key => sessionStorage.getItem(key), bulkKey)).not.toBeNull()
-  await page.getByRole('button', { name: 'Đăng xuất', exact: true }).click()
+  await page.getByRole('button', { name: 'Đăng xuất khu vực nhân viên', exact: true }).click()
   await expect(page).toHaveURL(/\/sign-in/)
   expect(await page.evaluate(key => sessionStorage.getItem(key), bulkKey)).not.toBeNull()
   session.active = true

@@ -2,13 +2,14 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useLocation } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { CalendarDays, Coffee, Heart, Menu, Search, ShoppingBag, UserRound, X } from 'lucide-react'
+import { CalendarDays, Coffee, Heart, LayoutDashboard, Menu, Search, ShoppingBag, UserRound, X } from 'lucide-react'
 import { getPublicStore } from '@/features/menu/menu.api'
 import { useCustomer } from '@/features/customers/customers.api'
 import { buttonVariants } from '@/shared/ui/button-variants'
 import { useCart } from '@/features/online-orders/cart'
 import { ThemeToggle } from '@/shared/theme'
 import { cn } from '@/shared/ui/utils'
+import { hasAuthSession } from '@/shared/api/client'
 
 export function SiteHeader({
   onOpenCart,
@@ -23,7 +24,10 @@ export function SiteHeader({
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
   const customer = useCustomer()
-  const signInState = customer.data
+  const account = customer.isSuccess ? customer.data : null
+  // The cookie is a navigation hint only; /staff still verifies the session and permissions.
+  const showStaffShortcut = hasAuthSession()
+  const signInState = account
     ? undefined
     : { returnTo: location.pathname + location.search + location.hash }
 
@@ -41,7 +45,7 @@ export function SiteHeader({
 
   return (
     <header className="sticky top-0 z-40 border-b border-border/80 bg-card/95 backdrop-blur-md shadow-xs">
-      <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-y-2 px-4 py-3 sm:flex-nowrap sm:gap-x-4 sm:px-6">
+      <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-y-2 px-4 py-3 sm:gap-x-4 sm:px-6 lg:flex-nowrap">
         {/* Left: Mobile Hamburger & Brand Logo */}
         <div className="flex min-w-0 items-center gap-2">
           <button
@@ -92,7 +96,7 @@ export function SiteHeader({
         </nav>
 
         {/* Right Actions */}
-        <div className="flex w-full items-center gap-1.5 sm:w-auto sm:shrink-0 sm:gap-2.5">
+        <div className="flex w-full items-center gap-1.5 sm:gap-2.5 lg:w-auto lg:shrink-0">
           <ThemeToggle />
 
           <Link
@@ -131,7 +135,7 @@ export function SiteHeader({
             to="/reservations"
             className={cn(
               buttonVariants({ size: 'sm' }),
-              'hidden sm:inline-flex gap-1.5 font-bold rounded-full bg-primary text-white hover:bg-primary-hover shadow-xs text-xs px-4 h-8 sm:h-9',
+              'hidden md:inline-flex gap-1.5 font-bold rounded-full bg-primary text-white hover:bg-primary-hover shadow-xs text-xs px-4 h-8 sm:h-9',
             )}
           >
             <CalendarDays className="h-3.5 w-3.5" />
@@ -161,22 +165,35 @@ export function SiteHeader({
           </Link>
 
           <Link
-            to={customer.data ? '/account' : '/customer/sign-in'}
+            to={account ? '/account' : '/customer/sign-in'}
             state={signInState}
-            aria-label={translate(customer.data ? 'customer.account' : 'wishlist.customerSignIn')}
-            title={translate(customer.data ? 'customer.account' : 'wishlist.customerSignIn')}
-            className="ml-auto inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center gap-2 rounded-md px-2 text-primary dark:text-emerald-300 hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary sm:ml-0"
+            aria-label={translate(account ? 'customer.account' : 'wishlist.customerSignIn')}
+            title={account?.email ?? translate('wishlist.customerSignIn')}
+            className="ml-auto inline-flex min-h-11 min-w-0 flex-1 items-center justify-center gap-2 rounded-md px-2 text-primary dark:text-emerald-300 hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary sm:ml-0 sm:flex-none"
           >
-            <UserRound className="h-5 w-5" aria-hidden="true" />
-            <span className="text-sm font-semibold xl:hidden">
-              {translate(customer.data ? 'customer.account' : 'auth.signIn')}
-            </span>
-            <span className="hidden text-sm font-semibold xl:inline">
-              {translate(customer.data ? 'customer.account' : 'wishlist.customerSignIn')}
+            <UserRound className="h-5 w-5 shrink-0" aria-hidden="true" />
+            <span className="min-w-0 break-words text-left text-sm font-semibold">
+              {translate(account ? 'customer.account' : 'wishlist.customerSignIn')}
+              {account && (
+                <span className="block max-w-48 break-all text-xs font-normal text-muted-foreground">
+                  {translate('customer.headerIdentity', { email: account.email })}
+                </span>
+              )}
             </span>
           </Link>
         </div>
       </div>
+
+      {showStaffShortcut && (
+        <div className="border-t border-border bg-muted/40">
+          <div className="mx-auto flex max-w-7xl justify-end px-4 sm:px-6">
+            <Link to="/staff" className="inline-flex min-h-10 items-center gap-2 rounded-md px-2 text-sm font-medium text-primary hover:bg-muted focus-visible:outline-2 focus-visible:outline-primary dark:text-emerald-300">
+              <LayoutDashboard className="size-4 shrink-0" aria-hidden="true" />
+              {translate('customer.backToStaff')}
+            </Link>
+          </div>
+        </div>
+      )}
 
       {/* Mobile Navigation Drawer / Panel */}
       {mobileMenuOpen && (
@@ -204,12 +221,12 @@ export function SiteHeader({
 
             <div className="pt-3 border-t border-border/80 mt-2 flex flex-col gap-2">
               <Link
-                to={customer.data ? '/account' : '/customer/sign-in'}
+                to={account ? '/account' : '/customer/sign-in'}
                 state={signInState}
                 onClick={() => setMobileMenuOpen(false)}
                 className="px-3 py-3 text-sm font-semibold text-primary dark:text-emerald-300"
               >
-                {translate(customer.data ? 'customer.account' : 'wishlist.customerSignIn')}
+                {translate(account ? 'customer.account' : 'wishlist.customerSignIn')}
               </Link>
               <Link
                 to="/staff"

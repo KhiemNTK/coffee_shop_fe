@@ -91,6 +91,7 @@ for (const entry of ['/wishlist', '/menu', '/order']) {
       await page.getByRole('link', { name: 'Đăng nhập khách hàng', exact: true }).click()
       await expect(page).toHaveURL(/\/customer\/sign-in$/)
     }
+    await expect(page.getByText('Tiếp tục với Google để đăng nhập hoặc tạo tài khoản khách hàng trong lần đầu. Bạn vẫn có thể đặt món không cần tài khoản.', { exact: true })).toBeVisible()
     await page.getByRole('button', { name: 'Google customer fixture' }).click()
     if (entry === '/wishlist') {
       await expect(page.getByText('Chưa có món yêu thích.')).toBeVisible()

@@ -147,6 +147,7 @@ export function StaffLayout() {
   }
 
   const permissions = session.data.authorization.permissionKeys
+  const roleNames = session.data.authorization.roleNames.join(', ') || translate('common.unassigned')
   const groupedNav = visibleGroupedStaffDestinations(permissions)
   const flatVisible = visibleStaffDestinations(permissions)
 
@@ -198,10 +199,10 @@ export function StaffLayout() {
           </Link>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex min-w-0 items-center gap-2 lg:gap-3">
           <ThemeToggle />
 
-          <div className="hidden sm:inline-flex items-center gap-2">
+          <div className="hidden md:inline-flex items-center gap-2">
             <div className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-900 text-xs font-bold text-white shadow-xs">
               {session.data.employee.fullName
                 ? session.data.employee.fullName
@@ -214,22 +215,27 @@ export function StaffLayout() {
             </div>
           </div>
 
-          <div className="hidden sm:flex flex-col text-right">
-            <span className="text-xs font-bold text-foreground leading-tight">
+          <div className="hidden min-w-0 max-w-24 flex-col text-right sm:flex md:max-w-40 lg:max-w-56">
+            <span title={session.data.employee.fullName} className="truncate text-xs font-bold text-foreground leading-tight">
               {session.data.employee.fullName}
             </span>
-            <span className="text-[11px] text-muted-foreground leading-tight">
-              {session.data.employee.position?.name || translate('common.staff')}
+            <span title={session.data.employee.username} className="truncate text-[11px] text-muted-foreground leading-tight">
+              {session.data.employee.username}
+            </span>
+            <span title={roleNames} className="truncate text-[11px] text-muted-foreground leading-tight">
+              {roleNames}
             </span>
           </div>
           <Button
             variant="ghost"
             size="sm"
+            aria-label={translate('auth.signOut')}
+            title={translate('auth.signOut')}
             onClick={() => void logout()}
             className="flex items-center gap-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive cursor-pointer"
           >
             <LogOut className="h-4 w-4" />
-            <span>{translate('auth.signOut')}</span>
+            <span className="sr-only xl:not-sr-only">{translate('auth.signOut')}</span>
           </Button>
         </div>
       </header>
@@ -318,10 +324,11 @@ export function StaffLayout() {
 
             {/* Employee Card in Drawer */}
             <div className="p-3.5 border-b border-border bg-card">
-              <p className="text-xs font-bold text-foreground">{session.data.employee.fullName}</p>
-              <p className="text-[11px] text-muted-foreground">
-                {session.data.employee.position?.name || translate('common.staff')}
+              <p className="break-words text-xs font-bold text-foreground">{session.data.employee.fullName}</p>
+              <p className="break-all text-[11px] text-muted-foreground">
+                {session.data.employee.username}
               </p>
+              <p className="break-words text-[11px] text-muted-foreground">{roleNames}</p>
             </div>
 
             {/* Nav items in Drawer */}
@@ -395,7 +402,18 @@ export function StaffLayout() {
             </nav>
 
             {/* Drawer Footer */}
-            <div className="p-3 border-t border-border bg-muted/20">
+            <div className="space-y-2 p-3 border-t border-border bg-muted/20">
+              <Link
+                to="/"
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={() => setMobileMenuOpen(false)}
+                title={translate('auth.openCustomerMenu')}
+                className="flex min-h-10 items-center justify-center gap-2 rounded-md px-3 text-sm font-medium text-foreground hover:bg-muted focus-visible:outline-2 focus-visible:outline-primary"
+              >
+                <ExternalLink className="size-4" aria-hidden="true" />
+                {translate('auth.customerMenu')}
+              </Link>
               <Button
                 variant="outline"
                 size="sm"

@@ -302,7 +302,7 @@ test('customer logout clears private history without changing employee authentic
   const state = await setup(page, context)
   await page.goto('/account')
   await expect(page.getByRole('link').filter({ hasText: '#83000000' })).toBeVisible()
-  await page.getByRole('button', { name: 'Đăng xuất', exact: true }).click()
+  await page.getByRole('button', { name: 'Đăng xuất tài khoản khách', exact: true }).click()
   await expect(
     page.getByRole('heading', { name: 'Đăng nhập khách hàng', exact: true }),
   ).toBeVisible()
@@ -323,7 +323,7 @@ test('a signed-in customer can reveal a private pickup code without persisting i
   expect(page.url()).not.toContain('b'.repeat(64))
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
   await page.screenshot({ path: info.outputPath('customer-pickup-code.png'), fullPage: true })
-  await page.getByRole('button', { name: 'Đăng xuất', exact: true }).click()
+  await page.getByRole('button', { name: 'Đăng xuất tài khoản khách', exact: true }).click()
   await expect(code).toHaveCount(0)
 })
 

@@ -146,6 +146,11 @@ export function CustomerSignIn({ returnTo = '/account' }: { returnTo?: string })
       <p className="text-sm leading-relaxed text-muted-foreground">
         {t('customer.signInDescription')}
       </p>
+      {!customer.data && (
+        <p className="text-sm leading-relaxed text-muted-foreground">
+          {t('customer.googleRegistration')}
+        </p>
+      )}
       {failure && (
         <div
           ref={errorRef}

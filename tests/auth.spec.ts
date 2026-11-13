@@ -186,7 +186,7 @@ test('late private response cannot repopulate the cache after logout', async ({
   const pendingRead = page.waitForRequest(request => request.method() === 'GET' && new URL(request.url()).pathname === '/api/v1/menu/items')
   await page.goto('/staff/menu')
   await pendingRead
-  await page.getByRole('button', { name: 'Đăng xuất', exact: true }).click()
+  await page.getByRole('button', { name: 'Đăng xuất khu vực nhân viên', exact: true }).click()
   await expect(page).toHaveURL(/\/sign-in$/)
   released = true
   release()
@@ -302,7 +302,7 @@ test('sign in, view protected menu, logout with CSRF, no tokens in storage', asy
       session: { ...sessionStorage },
     })),
   ).toEqual({ local: { coffee_shop_language: 'vi' }, session: {} })
-  await page.getByRole('button', { name: 'Đăng xuất', exact: true }).click()
+  await page.getByRole('button', { name: 'Đăng xuất khu vực nhân viên', exact: true }).click()
   await expect(page).toHaveURL(/\/sign-in$/)
   await expect(page.getByText(employee.fullName)).toHaveCount(0)
 })
@@ -529,7 +529,7 @@ test('failed logout masks private content, is not retried, and allows explicit r
     return route.fulfill(calls === 1 ? { status: 503 } : { json: envelope({}) })
   })
   await page.goto('/staff')
-  await page.getByRole('button', { name: 'Đăng xuất', exact: true }).click()
+  await page.getByRole('button', { name: 'Đăng xuất khu vực nhân viên', exact: true }).click()
   await expect(page.getByRole('alert')).toContainText(
     'Chưa xác nhận được đăng xuất',
   )
@@ -546,6 +546,19 @@ test('logout clears other tabs and the next employee cannot see previous cached 
 }) => {
   await identity(context)
   await cookie(context)
+  const customer = { id: '80000000-0000-4000-8000-000000000001', email: 'customer@example.test' }
+  await context.addCookies([
+    { name: 'customerSession', value: 'customer-session-fixture', domain: 'localhost', path: '/', httpOnly: true },
+    { name: 'customerCsrfToken', value: 'customer-csrf-fixture', domain: 'localhost', path: '/' },
+  ])
+  let customerLogouts = 0
+  await context.route('**/api/v1/customers/**', route => {
+    const path = new URL(route.request().url()).pathname
+    if (path.endsWith('/customers/me')) return route.fulfill({ json: envelope(customer) })
+    if (path.endsWith('/customers/wishlist')) return route.fulfill({ json: envelope({ customerId: customer.id, items: [] }) })
+    if (path.endsWith('/customers/auth/logout')) customerLogouts++
+    return route.fulfill({ status: 404, json: {} })
+  })
   await context.route('**/api/v1/auth/logout', (route) =>
     route.fulfill({ json: envelope({}) }),
   )
@@ -555,8 +568,17 @@ test('logout clears other tabs and the next employee cannot see previous cached 
   await expect(
     other.getByRole('heading', { name: employee.fullName }),
   ).toBeVisible()
-  await page.getByRole('button', { name: 'Đăng xuất', exact: true }).click()
+  const storefront = await context.newPage()
+  await storefront.goto('/wishlist')
+  await expect(storefront.getByText(customer.email, { exact: true })).toBeVisible()
+  await page.getByRole('button', { name: 'Đăng xuất khu vực nhân viên', exact: true }).click()
   await expect(other).toHaveURL(/\/sign-in$/)
+  await expect(storefront).toHaveURL(/\/wishlist$/)
+  await expect(storefront.getByText(customer.email, { exact: true })).toBeVisible()
+  expect(customerLogouts).toBe(0)
+  const cookies = await context.cookies()
+  expect(cookies.find(value => value.name === 'customerSession')?.value).toBe('customer-session-fixture')
+  expect(cookies.find(value => value.name === 'customerCsrfToken')?.value).toBe('customer-csrf-fixture')
   await context.route('**/api/v1/auth/sign-in', (route) =>
     route.fulfill({ json: envelope({}) }),
   )
@@ -567,6 +589,8 @@ test('logout clears other tabs and the next employee cannot see previous cached 
   await page.getByRole('button', { name: 'Đăng nhập', exact: true }).click()
   await expect(page.getByRole('heading', { name: 'Trần Thu Hà' })).toBeVisible()
   await expect(page.getByText(employee.fullName)).toHaveCount(0)
+  await expect(storefront.getByText(customer.email, { exact: true })).toBeVisible()
+  await storefront.close()
 })
 
 test('invalid password is not retried and server internals are not shown', async ({
