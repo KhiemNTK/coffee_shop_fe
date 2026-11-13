@@ -66,8 +66,16 @@ See [localization](src/shared/i18n/README.md) and
   do not create orders or confirm payments; do not switch accounts/keys to retry.
 - Online pickup uses payment on collection. Use the dedicated online collection
   flow, not generic POS checkout. Refunds/voids require their permission and reason.
+- Kitchen completion marks dine-in items `READY`; staff confirm table delivery
+  from POS using the handoff permission. Update the matching backend before this
+  frontend in the same release. Unreadable POS recovery data locks writes without
+  deleting the pending command; use invoice/order records for staff review.
 - Invoice documents preserve issued snapshots. Browser payment return parameters
   are not proof of payment; use verified server status.
+- Reconciliation separates the original payment from a partial refund. Manual
+  refund verification requires another authorized employee and provider evidence.
+  Bank import supports mapped `.xlsx` previews, not an assumed MBBank layout;
+  it matches cash-handover deposits, not all revenue or provider settlements.
 - Role edits load fresh metadata and send `expectedUpdatedAt`; conflicts require
   review. Unsaved role/permission drafts ask before discard. System roles are
   protected; an in-use custom role must be reassigned before deletion.

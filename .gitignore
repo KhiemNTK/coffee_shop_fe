@@ -8,6 +8,7 @@ pnpm-debug.log*
 lerna-debug.log*
 
 node_modules
+/.pnpm-store/
 dist
 dist-ssr
 *.local
@@ -29,5 +30,26 @@ coverage/
 playwright-report/
 test-results/
 .runtime/
+/.tmp/
+/.temp/
+/.cache/
+/.codex/
+*.tsbuildinfo
+
+# Local captures, credentials and database backups
+*.har
+*.heapsnapshot
+*.cpuprofile
+*.pem
+*.key
+*.p12
+*.pfx
+*.dump
+*.sql.gz
+/backups/
+/backup/
 .agents/
-docs/*
+
+# Local plans and working notes; keep the shared customer contract.
+/docs/*
+!/docs/customer-account.md
