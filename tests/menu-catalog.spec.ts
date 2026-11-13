@@ -88,6 +88,25 @@ test('category management is paged, searchable and refresh never reads a disable
   expect(stockReads).toBe(0)
 })
 
+test('long category names stay inside their column and remain readable', async ({ page }, info) => {
+  await open(page)
+  const name = `PaymentCategory-${'264546f7b99f48919df2f56b2e592523'.repeat(4)}`
+  await page.route('**/api/v1/menu/categories?**', route => route.fulfill({
+    json: envelope(paged([{ ...category, name, description: name.repeat(2) }])),
+  }))
+  await page.getByRole('tab', { name: 'Danh mục', exact: true }).click()
+  const row = page.getByRole('row').filter({ hasText: name })
+  await expect(row).toBeVisible()
+  const cells = row.getByRole('cell')
+  expect(await cells.first().evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true)
+  const table = page.getByRole('tabpanel').getByRole('table')
+  expect(await table.evaluate(el => el.getBoundingClientRect().width <= Math.max(480, el.parentElement!.clientWidth) + 1)).toBe(true)
+  await row.getByTitle('Sửa danh mục', { exact: true }).click()
+  await expect(page.getByRole('dialog').getByLabel('Tên danh mục *', { exact: true })).toHaveValue(name)
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+  await page.screenshot({ path: info.outputPath('long-category.png') })
+})
+
 for (const failure of ['http', 'malformed'] as const) {
   test(`item detail ${failure} fails closed and reloads before editing`, async ({ page }) => {
     await open(page)

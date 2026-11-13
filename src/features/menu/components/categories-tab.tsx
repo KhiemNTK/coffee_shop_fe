@@ -38,8 +38,8 @@ export function CategoriesTab({
       {categoriesQuery.isError ? <div><p role="alert">{errorMessage(categoriesQuery.error)}</p>
         <Button variant="outline" onClick={() => void categoriesQuery.refetch()}>Tải lại danh mục</Button></div>
       : categoriesQuery.isPending ? <p role="status">Đang tải danh mục…</p> : <>
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between pb-3">
+      <Card className="min-w-0">
+        <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3 pb-3">
           <CardTitle className="text-base font-bold text-foreground">
             Danh mục theo bộ lọc ({categoriesQuery.data.totalItems})
           </CardTitle>
@@ -56,24 +56,24 @@ export function CategoriesTab({
         </CardHeader>
         <CardContent className="p-0">
           <div className="w-full max-w-full overflow-x-auto">
-            <table className="w-full text-left text-sm">
+            <table className="w-full min-w-[480px] table-fixed text-left text-sm">
               <thead className="border-y border-border bg-muted/40 text-xs font-bold uppercase tracking-wider text-muted-foreground">
                 <tr>
-                  <th className="px-4 py-3">Tên danh mục</th>
+                  <th className="w-2/5 px-4 py-3">Tên danh mục</th>
                   <th className="px-4 py-3">Mô tả</th>
-                  <th className="px-4 py-3 text-right">Thao tác</th>
+                  <th className="w-28 px-4 py-3 text-right">Thao tác</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
                 {categoriesQuery.data?.list.map((cat) => (
                   <tr key={cat.id} className="hover:bg-muted/30 transition-colors">
                     <td className="px-4 py-3.5 font-bold text-foreground max-w-[200px]">
-                      <span className="break-words line-clamp-1 block" title={cat.name}>
+                      <span className="block [overflow-wrap:anywhere]" title={cat.name}>
                         {cat.name}
                       </span>
                     </td>
                     <td className="px-4 py-3.5 text-xs text-muted-foreground max-w-[320px]">
-                      <span className="break-words line-clamp-2 block" title={cat.description ?? undefined}>
+                      <span className="block line-clamp-2 [overflow-wrap:anywhere]" title={cat.description ?? undefined}>
                         {cat.description || '—'}
                       </span>
                     </td>

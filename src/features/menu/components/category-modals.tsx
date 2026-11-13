@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import { type AdminCategory, createCategory, updateCategory, deleteCategory } from '../menu.admin.api'
 import { errorMessage } from '../../../shared/api/client'
@@ -20,6 +20,7 @@ export function CreateCategoryModal({
   onClose: () => void
   onSuccess: () => void
 }) {
+  const fieldId = useId()
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -53,8 +54,9 @@ export function CreateCategoryModal({
           {error && <p className="text-xs text-destructive">{error}</p>}
 
           <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-foreground">Tên danh mục *</label>
+            <label htmlFor={`${fieldId}-name`} className="text-xs font-semibold text-foreground">Tên danh mục *</label>
             <Input
+              id={`${fieldId}-name`}
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="VD: Cà phê Truyền thống"
@@ -63,8 +65,9 @@ export function CreateCategoryModal({
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-foreground">Mô tả (tùy chọn)</label>
+            <label htmlFor={`${fieldId}-description`} className="text-xs font-semibold text-foreground">Mô tả (tùy chọn)</label>
             <Input
+              id={`${fieldId}-description`}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="VD: Các món cà phê pha phin nguyên chất..."
@@ -94,6 +97,7 @@ export function EditCategoryModal({
   onClose: () => void
   onSuccess: () => void
 }) {
+  const fieldId = useId()
   const [name, setName] = useState(category.name)
   const [description, setDescription] = useState(category.description ?? '')
   const [error, setError] = useState<string | null>(null)
@@ -127,8 +131,9 @@ export function EditCategoryModal({
           {error && <p className="text-xs text-destructive">{error}</p>}
 
           <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-foreground">Tên danh mục *</label>
+            <label htmlFor={`${fieldId}-name`} className="text-xs font-semibold text-foreground">Tên danh mục *</label>
             <Input
+              id={`${fieldId}-name`}
               value={name}
               onChange={(e) => setName(e.target.value)}
               required
@@ -136,8 +141,9 @@ export function EditCategoryModal({
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-foreground">Mô tả</label>
+            <label htmlFor={`${fieldId}-description`} className="text-xs font-semibold text-foreground">Mô tả</label>
             <Input
+              id={`${fieldId}-description`}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
             />

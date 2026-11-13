@@ -164,7 +164,7 @@ export function MenuItemsTab({
                   </td>
                   <td className="min-w-28 max-w-48">
                     {item.category?.name ? (
-                      <Badge variant="secondary" className="max-w-full break-words">
+                      <Badge variant="secondary" className="max-w-full [overflow-wrap:anywhere]">
                         {item.category.name}
                       </Badge>
                     ) : (
