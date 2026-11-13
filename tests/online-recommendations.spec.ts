@@ -147,6 +147,33 @@ test('online offer options, exact price and checkout share one request identity'
   ])
 })
 
+test('checkout accepts a formatted phone and uses readable dark colors and touch controls', async ({ page }, info) => {
+  await page.addInitScript(() => localStorage.setItem('coffee_theme', 'dark'))
+  const orders: Record<string, unknown>[] = []
+  await page.route('**/api/v1/recommendations/online', route => route.fulfill({ json: envelope({ variant: 'CONTROL', recommendations: [] }) }))
+  await page.route('**/api/v1/online-orders/requests', route => {
+    orders.push(route.request().postDataJSON())
+    return route.fulfill({ json: envelope({ ...created, quotedSubtotal: anchor.price }) })
+  })
+  await openCheckout(page)
+  await page.getByRole('textbox', { name: 'Số điện thoại' }).fill('+84 (973) 336-850')
+  await expect(page.getByRole('textbox', { name: 'Số điện thoại' })).toHaveCSS('color', 'rgb(250, 250, 250)')
+  await expect(page.getByRole('textbox', { name: 'Số điện thoại' })).toHaveCSS('background-color', 'rgb(24, 24, 27)')
+  const title = page.getByRole('heading', { name: anchor.name, exact: true, level: 4 })
+  await expect(title).toHaveCSS('color', 'rgb(250, 250, 250)')
+  expect(await title.evaluate(element => getComputedStyle(element.closest('.bg-muted')!).backgroundColor)).toBe('rgb(24, 24, 27)')
+  const quantityButton = page.getByRole('button', { name: `Tăng số lượng ${anchor.name}`, exact: true })
+  const box = await quantityButton.boundingBox()
+  expect(box!.width).toBeGreaterThanOrEqual(44)
+  expect(box!.height).toBeGreaterThanOrEqual(44)
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+  await page.screenshot({ path: info.outputPath('checkout-dark-touch.png'), fullPage: true })
+  await page.getByRole('button', { name: 'Xem lại đơn', exact: true }).click()
+  await page.getByRole('button', { name: 'Gửi đơn mang đi', exact: true }).click()
+  await expect.poll(() => orders.length).toBe(1)
+  expect(orders[0]!.phoneNumber).toBe('+84973336850')
+})
+
 test('online offers refresh availability without changing the basket assignment', async ({ page }) => {
   const offers: Record<string, unknown>[] = []
   await page.route('**/api/v1/recommendations/online', route => {

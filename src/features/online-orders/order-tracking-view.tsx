@@ -1,6 +1,7 @@
-import { formatPrice, formatLineAmount } from '@/shared/lib/format'
+import { formatLineAmount } from '@/shared/lib/format'
 import { useTranslation } from 'react-i18next'
 import { FeedbackResponse } from '@/features/online-orders/feedback-response'
+import { OrderTotals } from './order-totals'
 import { useRef, useState } from 'react'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import { ReorderLink } from '@/features/online-orders/components/reorder-link'
@@ -487,12 +488,7 @@ export function OrderTrackingView({
                 </div>
               ))}
 
-              <div className="flex items-baseline justify-between pt-2 font-bold">
-                <span className="text-sm">{translate('common.total')}</span>
-                <span className="text-base text-brand-800">
-                  {formatPrice(order.quotedSubtotal)}
-                </span>
-              </div>
+              <OrderTotals {...order} />
             </CardContent>
           </Card>
 

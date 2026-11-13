@@ -8,7 +8,7 @@ import { cn } from '../../../shared/ui'
 
 type QueueOrder = Pick<
   PendingOrder,
-  'id' | 'pickupName' | 'phoneNumber' | 'quotedSubtotal' | 'pickupAt'
+  'id' | 'pickupName' | 'phoneNumber' | 'quotedTotal' | 'pickupAt'
 >
 
 export function StaffOrderQueue<T extends QueueOrder>({
@@ -74,7 +74,7 @@ export function StaffOrderQueue<T extends QueueOrder>({
                   </div>
                   <div className="flex max-w-[45%] flex-col items-end gap-2 text-right">
                     <strong className="break-words text-sm tabular-nums">
-                      {formatPrice(order.quotedSubtotal)}
+                      {formatPrice(order.quotedTotal)}
                     </strong>
                     {status(order)}
                     <ChevronRight size={16} aria-hidden="true" className="text-muted-foreground" />

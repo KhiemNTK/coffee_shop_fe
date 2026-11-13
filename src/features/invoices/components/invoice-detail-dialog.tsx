@@ -270,7 +270,7 @@ export function InvoiceDetailDialog({ invoiceId, onClose, onUpdated }: InvoiceDe
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-border bg-card text-primary">
               <Receipt className="h-5 w-5" aria-hidden="true" />
             </div>
-            <div>
+            <div className="min-w-0 flex-1 [overflow-wrap:anywhere]">
               <div className="flex flex-wrap items-center gap-2">
                 <h3 className="text-base font-semibold text-foreground sm:text-lg">
                   Hóa đơn #{inv?.invoiceNumber ?? '…'}
@@ -449,10 +449,10 @@ export function InvoiceDetailDialog({ invoiceId, onClose, onUpdated }: InvoiceDe
               )}
               {/* Order items list */}
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[320px] text-left text-xs border-collapse">
-                  <thead className="bg-stone-50 border-b border-border text-muted-foreground font-semibold">
+                <table className="w-full min-w-[480px] table-fixed text-left text-xs border-collapse">
+                  <thead className="bg-muted/50 border-b border-border text-muted-foreground font-semibold">
                     <tr>
-                      <th className="py-2.5 px-3">Tên món</th>
+                      <th className="w-1/2 py-2.5 px-3">Tên món</th>
                       <th className="py-2.5 px-3 text-center">SL</th>
                       <th className="py-2.5 px-3 text-right">Đơn giá</th>
                       <th className="py-2.5 px-3 text-right">Thành tiền</th>
@@ -461,7 +461,7 @@ export function InvoiceDetailDialog({ invoiceId, onClose, onUpdated }: InvoiceDe
                   <tbody className="divide-y divide-border/60">
                     {documentItems.map((it) => (
                       <tr key={it.id}>
-                        <td className="py-2.5 px-3 font-semibold text-foreground">
+                        <td className="py-2.5 px-3 font-semibold text-foreground [overflow-wrap:anywhere]">
                           {it.menuItem?.name ?? 'Món'}
                           <OrderOptions options={it.selectedOptions} />
                           {it.originalRemake && (
@@ -490,13 +490,21 @@ export function InvoiceDetailDialog({ invoiceId, onClose, onUpdated }: InvoiceDe
 
               {/* Financial Breakdown */}
               <div className="space-y-2 border-t border-border pt-4 text-sm">
+                {inv.documentSnapshot?.voucher && (
+                  <p className="break-words text-sm font-medium">
+                    {translate('onlineVoucher.checkoutLabel', { defaultValue: 'Voucher' })}:{' '}
+                    {inv.documentSnapshot.voucher.name}
+                  </p>
+                )}
                 <div className="flex justify-between text-muted-foreground">
                   <span>Tiền hàng (Tạm tính):</span>
                   <span>{formatPrice(String(inv.subTotal))}</span>
                 </div>
                 {Number(inv.discountAmount) > 0 && (
                   <div className="flex justify-between text-emerald-700">
-                    <span>Giảm giá khuyến mãi:</span>
+                    <span>{inv.documentSnapshot?.voucher
+                      ? translate('onlineVoucher.discountLabel', { defaultValue: 'Voucher discount' })
+                      : 'Giảm giá khuyến mãi:'}</span>
                     <span>-{formatPrice(String(inv.discountAmount))}</span>
                   </div>
                 )}

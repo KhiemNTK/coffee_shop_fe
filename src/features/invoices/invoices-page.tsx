@@ -1,7 +1,8 @@
 import { decimalAmount, minorAmount } from '@/shared/lib/money'
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { useOutletContext } from 'react-router-dom'
+import { useOutletContext, useSearchParams } from 'react-router-dom'
+import { z } from 'zod'
 import type { Session } from '../auth/session'
 import { Receipt, RefreshCw } from 'lucide-react'
 import {
@@ -39,7 +40,17 @@ export default function InvoicesPage() {
   })
 
   // Detail Modal state
-  const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(null)
+  const [params, setParams] = useSearchParams()
+  const parsedInvoiceId = z.uuid().safeParse(params.get('invoiceId'))
+  const selectedInvoiceId = parsedInvoiceId.success ? parsedInvoiceId.data : null
+  function setSelectedInvoiceId(id: string | null) {
+    setParams(previous => {
+      const next = new URLSearchParams(previous)
+      if (id) next.set('invoiceId', id)
+      else next.delete('invoiceId')
+      return next
+    }, { replace: true })
+  }
 
   // Query Invoices
   const invoicesQuery = useQuery({

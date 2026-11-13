@@ -168,7 +168,7 @@ export default function KitchenPage() {
       flight.current = true
       statusMutation.mutate({
         orderItemId: item.orderItemId,
-        status: item.currentTable ? 'SERVED' : 'READY',
+        status: 'READY',
       })
     }
   }

@@ -86,10 +86,10 @@ test('bank import validates duplicates and reviews the statement before posting'
   await page.getByLabel('Quỹ ngân hàng').fill(id)
   const entry = { externalId: 'B001', direction: 'CREDIT', amount: '125000.50', transactionDate: date }
   const statement = { statementFrom: '2026-10-04T00:00:00Z', statementTo: '2026-10-05T00:00:00Z', entries: [entry, entry] }
-  await page.getByLabel('Sao kê JSON').setInputFiles({ name: 'duplicate.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(statement)) })
+  await page.getByLabel('Sao kê (.xlsx / JSON)').setInputFiles({ name: 'duplicate.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(statement)) })
   await expect(page.getByRole('alert')).toContainText('Mã giao dịch bị trùng')
   expect(posts).toBe(0)
-  await page.getByLabel('Sao kê JSON').setInputFiles({ name: 'statement.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify({ ...statement, entries: [entry] })) })
+  await page.getByLabel('Sao kê (.xlsx / JSON)').setInputFiles({ name: 'statement.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify({ ...statement, entries: [entry] })) })
   await expect(page.getByRole('dialog')).toBeVisible()
   expect(posts).toBe(0)
   const box = await page.getByRole('dialog').boundingBox()

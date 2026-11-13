@@ -44,6 +44,97 @@ test('POS keeps unsent items and blocks checkout buttons and F2', async ({ page 
   await expect(page.getByRole('button', { name: /Thanh toán hóa đơn/ })).toBeEnabled()
 })
 
+for (const operation of [`orders.items:${id}`, `invoice.checkout:${id}`]) {
+  test(`POS session stays read-only with corrupt recovery: ${operation}`, async ({ page }) => {
+    const key = `coffee-shop:pending:private:intent:${employee.id}:${operation}`
+    await page.addInitScript(({ key, draftKey, menuItemId, categoryId }) => {
+      sessionStorage.setItem(key, '{broken')
+      sessionStorage.setItem(draftKey, JSON.stringify([{
+        id: 'saved-draft', quantity: 1, note: '', selectedOptionIds: [], calculatedPrice: '30000',
+        menuItem: { id: menuItemId, name: 'Saved draft', price: '30000', category: { id: categoryId, name: 'Coffee' }, optionGroups: [] },
+      }]))
+    }, { key, draftKey: `coffee_pos_draft_${employee.id}_${id}`, menuItemId: otherId, categoryId: lineId })
+    await pos(page, ['/invoices_read', '/orders_items_update-status'])
+    let writes = 0
+    page.on('request', request => {
+      if (request.url().includes('/api/v1/') && request.method() !== 'GET') writes++
+    })
+    await page.goto(`/staff/pos/sessions/${id}`)
+    await expect(page.getByRole('alert').filter({ hasText: 'Không đọc được yêu cầu POS' })).toBeVisible()
+    await expect(page.getByTitle('1x Existing drink', { exact: true })).toBeVisible()
+    await expect(page.getByRole('button', { name: /Thanh toán hóa đơn/ })).toBeDisabled()
+    await expect(page.getByRole('button', { name: /Gửi order vào bếp/ })).toBeDisabled()
+    await page.keyboard.press('F2')
+    await expect(page.getByRole('dialog')).toHaveCount(0)
+    await expect(page.getByRole('alert').getByRole('link', { name: 'Hóa đơn & TT', exact: true })).toBeVisible()
+    expect(await page.evaluate(key => sessionStorage.getItem(key), key)).toBe('{broken')
+    expect(writes).toBe(0)
+  })
+}
+
+test('POS session keeps the server order readable when recovery storage is blocked', async ({ page }) => {
+  await pos(page)
+  await page.addInitScript(() => {
+    const get = Storage.prototype.getItem
+    Storage.prototype.getItem = function (key) {
+      if (key.includes('private:intent:')) throw new DOMException('Blocked', 'SecurityError')
+      return get.call(this, key)
+    }
+  })
+  await page.goto(`/staff/pos/sessions/${id}`)
+  await expect(page.getByRole('alert').filter({ hasText: 'Không đọc được yêu cầu POS' })).toBeVisible()
+  await expect(page.getByTitle('1x Existing drink', { exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: /Thanh toán hóa đơn/ })).toBeDisabled()
+})
+
+for (const canDeliver of [false, true]) {
+  test(`table delivery is explicit and permission gated: ${canDeliver}`, async ({ page }, info) => {
+    await pos(page, ['/orders_tables_clear', ...(canDeliver ? ['/orders_items_handoff'] : [])])
+    let delivered = false
+    const writes: string[] = []
+    const tableOrder = () => ({ ...session, table: { id: otherId, name: 'Table A', status: 'OCCUPIED' },
+      orderItems: session.orderItems.map(item => ({ ...item, isPaid: true, serveStatus: delivered ? 'SERVED' : 'READY' })) })
+    await page.route(`**/api/v1/orders/sessions/${id}`, route => route.fulfill({ json: envelope(tableOrder()) }))
+    await page.route(`**/api/v1/orders/items/${lineId}/handoff`, route => {
+      writes.push(route.request().method())
+      delivered = true
+      return route.fulfill({ json: envelope({ id: lineId, serveStatus: 'SERVED' }) })
+    })
+    await page.goto(`/staff/pos/sessions/${id}`)
+    await expect(page.getByRole('button', { name: 'Kết thúc phục vụ', exact: true })).toBeDisabled()
+    const handoff = page.getByRole('button', { name: 'Đã giao bàn', exact: true })
+    if (!canDeliver) {
+      await expect(handoff).toHaveCount(0)
+      expect(writes).toEqual([])
+      return
+    }
+    await handoff.click()
+    await expect(handoff).toHaveCount(0)
+    await expect(page.getByRole('button', { name: 'Kết thúc phục vụ', exact: true })).toBeEnabled()
+    expect(writes).toEqual(['POST'])
+    await page.screenshot({ path: info.outputPath('table-delivery.png'), fullPage: true })
+  })
+}
+
+test('uncertain table delivery requires a read before another command', async ({ page }) => {
+  await pos(page, ['/orders_items_handoff'])
+  await page.route(`**/api/v1/orders/sessions/${id}`, route => route.fulfill({ json: envelope({
+    ...session, table: { id: otherId, name: 'Table A', status: 'OCCUPIED' },
+    orderItems: session.orderItems.map(item => ({ ...item, serveStatus: 'READY' })),
+  }) }))
+  let writes = 0
+  await page.route(`**/api/v1/orders/items/${lineId}/handoff`, route => { writes++; return route.abort() })
+  await page.goto(`/staff/pos/sessions/${id}`)
+  await page.getByRole('button', { name: 'Đã giao bàn', exact: true }).click()
+  const warning = page.getByRole('alert').filter({ hasText: 'Chưa xác nhận được kết quả giao món' })
+  await expect(warning).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Đã giao bàn', exact: true })).toBeDisabled()
+  await expect(page.getByRole('button', { name: /Thanh toán hóa đơn/ })).toBeDisabled()
+  await warning.getByRole('button', { name: 'Thử lại', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Đã giao bàn', exact: true })).toBeEnabled()
+  expect(writes).toBe(1)
+})
+
 test('online queue never silently selects the next order after another terminal removes it', async ({ page }, info) => {
   await page.clock.install()
   await staff(page, ['/online-orders_read', '/online-orders_review'])

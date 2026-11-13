@@ -1,7 +1,7 @@
 import { moneySchema } from '@/shared/api/money'
 import { z } from 'zod'
 import { apiGet, ApiError } from '../../shared/api/client'
-import { TrackOrderResponseSchema, reorderTemplateSchema } from '../online-orders/online-orders.api'
+import { TrackOrderResponseSchema, orderAmountFields, reorderTemplateSchema, withOrderAmounts } from '../online-orders/online-orders.api'
 
 const customerOrdersSchema = z.object({
   customerId: z.uuid(),
@@ -15,7 +15,8 @@ const customerOrdersSchema = z.object({
       createdAt: z.string(),
       pickupAt: z.string().nullable(),
       quotedSubtotal: moneySchema,
-    }),
+      ...orderAmountFields,
+    }).transform(withOrderAmounts),
   ),
 })
 const customerOrderSchema = TrackOrderResponseSchema.extend({
@@ -30,7 +31,7 @@ const customerOrderSchema = TrackOrderResponseSchema.extend({
       createdAt: z.string(),
     }),
   ),
-})
+}).transform(withOrderAmounts)
 
 async function readCustomerOrder<T extends { customerId: string }>(
   path: string,

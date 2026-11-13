@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useOutletContext } from 'react-router-dom'
 import { Ticket, Plus, RefreshCw } from 'lucide-react'
@@ -11,13 +12,33 @@ import {
 } from './promotions.api'
 import { errorMessage } from '../../shared/api/client'
 import type { Session } from '../auth/session'
-import { Button } from '../../shared/ui'
+import { Button, Tabs, TabsContent, TabsList, TabsTrigger } from '../../shared/ui'
+import { StaffVouchersTab } from '../vouchers/staff-vouchers-tab'
 import { PromotionsListView } from './components/promotions-list-view'
 import { PromotionEditorModal, PromotionCommandModal } from './components/promotion-modals'
 import { PromotionPublicationModal } from './components/promotion-publication-modal'
 import { storefrontPromotionKey } from './storefront-promotion.api'
 
 export default function PromotionsPage() {
+  const { t } = useTranslation()
+  const session = useOutletContext<Session>()
+  const canPromotions = session.access.has('/promotions_read')
+  const canVouchers = session.access.has('/vouchers_read')
+  const [selected, setSelected] = useState(canPromotions ? 'promotions' : 'vouchers')
+  const tab = selected === 'promotions' && canPromotions ? 'promotions' : canVouchers ? 'vouchers' : 'promotions'
+  return <Tabs value={tab} onValueChange={setSelected}>
+    <div className="mx-auto max-w-7xl px-4 pt-4 sm:px-6 sm:pt-6">
+      <TabsList aria-label={t('voucher.salesTabs')}>
+        {canPromotions && <TabsTrigger value="promotions">{t('voucher.promotionsTab')}</TabsTrigger>}
+        {canVouchers && <TabsTrigger value="vouchers">{t('voucher.campaigns')}</TabsTrigger>}
+      </TabsList>
+    </div>
+    {canPromotions && <TabsContent value="promotions"><InvoicePromotions /></TabsContent>}
+    {canVouchers && <TabsContent value="vouchers"><StaffVouchersTab /></TabsContent>}
+  </Tabs>
+}
+
+function InvoicePromotions() {
   const client = useQueryClient()
   const session = useOutletContext<Session>()
   const employeeId = session.employee.id

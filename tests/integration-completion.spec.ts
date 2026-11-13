@@ -186,7 +186,7 @@ test('KDS uses current table, saved options and paginated tickets; online-ready 
   await expect(page.getByText('Bàn: Bàn cũ')).toHaveCount(0)
   await expect(page.getByText('Chờ quầy giao món')).toBeVisible()
   await page.getByRole('button', { name: 'Xong món' }).click()
-  await expect.poll(() => status).toBe('SERVED')
+  await expect.poll(() => status).toBe('READY')
   await page.getByRole('button', { name: 'Trang sau' }).click()
   await expect(page.getByText('KDS-2')).toBeVisible()
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(

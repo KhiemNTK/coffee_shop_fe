@@ -4,17 +4,24 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useRetryAfter } from '@/shared/api/use-retry-after'
 import { ApiError } from '@/shared/api/client'
 import { minorAmount } from '@/shared/lib/money'
+import { isValidPhone, normalizePhone } from '@/shared/lib/phone'
 import type { MenuItem } from '@/features/menu/menu.api'
 import { customerKey, useCustomer } from '@/features/customers/customers.api'
 import { getOnlineRecommendations } from '@/features/recommendations/recommendations.api'
+import { getCustomerVouchers } from '@/features/vouchers/vouchers.api'
 import {
   createOnlineOrder, recoverOnlineOrder, findPendingOnlineOrderKey, getPickupSlots,
-  getOnlineAvailability, quoteOnlineOrder, type OnlineOrderQuote, type CreateOnlineOrderPayload,
+  getOnlineAvailability, quoteOnlineOrder, quoteCustomerOrder,
+  type CustomerOrderQuote, type OnlineOrderQuote, type CreateOnlineOrderPayload,
 } from '../online-orders.api'
 import { cartSubtotal, type CartItem } from '../cart'
 import type { CartCheckoutProps } from '../online-orders.types'
 
 const turnstileSiteKey = (import.meta.env.VITE_TURNSTILE_SITE_KEY as string | undefined)?.trim() ?? ''
+
+function isCustomerQuote(quote: OnlineOrderQuote | CustomerOrderQuote): quote is CustomerOrderQuote {
+  return 'quoteFingerprint' in quote
+}
 
 export function useCartCheckout({ cart, onClose, onAppendItems, onOrderCreated }:
   Pick<CartCheckoutProps, 'cart' | 'onClose' | 'onAppendItems' | 'onOrderCreated'>) {
@@ -43,8 +50,25 @@ export function useCartCheckout({ cart, onClose, onAppendItems, onOrderCreated }
   const [customizingItem, setCustomizingItem] = useState<MenuItem | null>(null)
   const [submittedPayload, setSubmittedPayload] = useState<CreateOnlineOrderPayload | null>(null)
   const [recoveryMissing, setRecoveryMissing] = useState(false)
-  const [quote, setQuote] = useState<{ basketKey: string; data: OnlineOrderQuote } | null>(null)
+  const [selection, setSelection] = useState<{ customerId: string; voucherId: string } | null>(null)
+  const [voucherPage, setVoucherPage] = useState(1)
+  const customerId = customer.data?.id ?? ''
+  const [draftCustomerId, setDraftCustomerId] = useState(customerId)
+  const voucherId = selection?.customerId === customerId ? selection.voucherId : undefined
+  const [quote, setQuote] = useState<{
+    basketKey: string; data: OnlineOrderQuote | CustomerOrderQuote
+  } | null>(null)
   const [checkingQuote, setCheckingQuote] = useState(false)
+  // Reset account-bound drafts without changing an already frozen submission.
+  if (draftCustomerId !== customerId) {
+    setDraftCustomerId(customerId)
+    setSelection(null)
+    setVoucherPage(1)
+    if (!submittedPayload) {
+      setReview(null)
+      setQuote(null)
+    }
+  }
   const flight = useRef(false)
   const uncertain = useRef(false)
   const errorRef = useRef<HTMLDivElement>(null)
@@ -55,11 +79,51 @@ export function useCartCheckout({ cart, onClose, onAppendItems, onOrderCreated }
     note: item.note || undefined,
     optionIds: item.selectedOptionIds.length ? item.selectedOptionIds : undefined,
   }))
-  const basketKey = JSON.stringify(items)
-  const activeQuote = quote?.basketKey === basketKey ? quote.data : null
+  const basketKey = JSON.stringify([customerId, voucherId, items])
+  const activeQuote = quote && (quote.basketKey === basketKey || submittedPayload !== null) ? quote.data : null
   const subtotal = activeQuote?.subtotal ?? cartSubtotal(checkoutCart)
+  const total = submittedPayload?.expectedTotal ??
+    (activeQuote && isCustomerQuote(activeQuote) ? activeQuote.totalAmount : subtotal)
+  const discountAmount = activeQuote && isCustomerQuote(activeQuote) ? activeQuote.discountAmount : '0'
+  const voucher = activeQuote && isCustomerQuote(activeQuote) ? activeQuote.voucher : null
   const locked = submittedPayload !== null
   const recovering = locked && !recoveryMissing
+  const vouchers = useQuery({
+    queryKey: ['customer', customerId, 'vouchers', 'checkout', voucherPage],
+    queryFn: async ({ signal }) => {
+      const response = await getCustomerVouchers({ status: 'AVAILABLE', page: voucherPage, itemPerPage: 50 }, signal)
+      if (response.customerId !== customerId) throw new ApiError(409, 'CUSTOMER_SESSION_CHANGED')
+      return response
+    },
+    enabled: Boolean(customerId) && !review && !locked,
+    retry: false,
+    staleTime: 0,
+    gcTime: 0,
+  })
+  const currentCustomerId = () => client.getQueryData<{ id: string } | null>(customerKey)?.id ?? ''
+
+  async function fetchQuote(payload: CreateOnlineOrderPayload): Promise<OnlineOrderQuote | CustomerOrderQuote> {
+    const data = payload.voucherId
+      ? await quoteCustomerOrder({ expectedCustomerId: payload.expectedCustomerId!, items: payload.items, voucherId: payload.voucherId })
+      : await quoteOnlineOrder(payload.items)
+    if ((payload.expectedCustomerId ?? '') !== currentCustomerId())
+      throw new ApiError(409, 'CUSTOMER_SESSION_CHANGED')
+    if (data.items.length !== payload.items.length || data.items.some((line, index) =>
+      line.menuItemId !== payload.items[index]?.menuItemId || line.quantity !== payload.items[index]?.quantity))
+      throw new ApiError(502, 'CLIENT_RESPONSE_INVALID')
+    if (payload.voucherId && (!isCustomerQuote(data) || data.voucher?.voucherId !== payload.voucherId))
+      throw new ApiError(409, 'VOUCHER_QUOTE_CHANGED', undefined,
+        translate('onlineVoucher.checkoutUnavailable', { defaultValue: 'This voucher cannot be applied. Review your selection before submitting.' }))
+    if (!data.canFulfill) throw new ApiError(409, 'INSUFFICIENT_STOCK', undefined, translate('error.insufficientStock'))
+    return data
+  }
+
+  function selectVoucher(value: string) {
+    if (flight.current || review || locked) return
+    setSelection(value ? { customerId, voucherId: value } : null)
+    setQuote(null)
+    setFormError(null)
+  }
   const availability = useQuery({
     queryKey: ['online-availability'],
     queryFn: ({ signal }) => getOnlineAvailability(signal),
@@ -84,6 +148,12 @@ export function useCartCheckout({ cart, onClose, onAppendItems, onOrderCreated }
 
   const reviewMutation = useMutation({
     mutationFn: async (payload: CreateOnlineOrderPayload) => {
+      if (payload.voucherId) {
+        const data = await fetchQuote(payload)
+        if (!isCustomerQuote(data)) throw new ApiError(502, 'CLIENT_RESPONSE_INVALID')
+        setQuote({ basketKey, data })
+        payload = { ...payload, maxSubtotal: data.subtotal, expectedTotal: data.totalAmount, quoteFingerprint: data.quoteFingerprint }
+      }
       const pendingKey = await findPendingOnlineOrderKey(payload)
       const clientRequestId = pendingKey ?? crypto.randomUUID()
       return {
@@ -92,6 +162,10 @@ export function useCartCheckout({ cart, onClose, onAppendItems, onOrderCreated }
       }
     },
     onSuccess: (result) => {
+      if ((result.payload.expectedCustomerId ?? '') !== currentCustomerId()) {
+        setFormError(translate('wishlist.accountChanged'))
+        return
+      }
       setReview(result)
       if (!result.allowRecommendations) {
         uncertain.current = true
@@ -169,8 +243,10 @@ export function useCartCheckout({ cart, onClose, onAppendItems, onOrderCreated }
         err.status < 500 &&
         err.status !== 408 &&
         err.status !== 429
-      )
+      ) {
         setSubmittedPayload(null)
+        setReview(null)
+      }
       else uncertain.current = true
     },
     onSettled: () => {
@@ -192,7 +268,7 @@ export function useCartCheckout({ cart, onClose, onAppendItems, onOrderCreated }
     if (review) {
       if (!recovering && turnstileSiteKey && !turnstileToken) return
       if (!recovering && import.meta.env.PROD && !turnstileSiteKey) return
-      const payload = submittedPayload ?? {
+      let payload = submittedPayload ?? {
         ...review.payload,
         maxSubtotal: subtotal,
         items,
@@ -214,21 +290,7 @@ export function useCartCheckout({ cart, onClose, onAppendItems, onOrderCreated }
         // An uncertain write must replay its original body, even if stock or prices changed.
         if (!uncertain.current) {
           setCheckingQuote(true)
-          const currentQuote = await quoteOnlineOrder(payload.items)
-          if (
-            currentQuote.items.length !== payload.items.length ||
-            currentQuote.items.some(
-              (line, index) =>
-                line.menuItemId !== payload.items[index]?.menuItemId ||
-                line.quantity !== payload.items[index]?.quantity
-            )
-          )
-            throw new ApiError(502, 'CLIENT_RESPONSE_INVALID')
-          if (!currentQuote.canFulfill) {
-            setFormError(translate('error.insufficientStock'))
-            flight.current = false
-            return
-          }
+          const currentQuote = await fetchQuote(payload)
           setQuote({ basketKey, data: currentQuote })
           const pricesChanged = currentQuote.items.some(
             (line, index) =>
@@ -239,12 +301,20 @@ export function useCartCheckout({ cart, onClose, onAppendItems, onOrderCreated }
           )
           if (
             pricesChanged ||
-            minorAmount(currentQuote.subtotal) !== minorAmount(payload.maxSubtotal!)
+            minorAmount(currentQuote.subtotal) !== minorAmount(payload.maxSubtotal!) ||
+            (isCustomerQuote(currentQuote) && minorAmount(currentQuote.totalAmount) !== minorAmount(payload.expectedTotal!)) ||
+            (isCustomerQuote(currentQuote) && currentQuote.quoteFingerprint !== payload.quoteFingerprint)
           ) {
+            if (isCustomerQuote(currentQuote)) {
+              setReview({ ...review, payload: { ...review.payload, maxSubtotal: currentQuote.subtotal,
+                expectedTotal: currentQuote.totalAmount, quoteFingerprint: currentQuote.quoteFingerprint } })
+            }
             setFormError(translate('takeaway.priceChanged'))
             flight.current = false
             return
           }
+          if (isCustomerQuote(currentQuote))
+            payload = { ...payload, expectedTotal: currentQuote.totalAmount, quoteFingerprint: currentQuote.quoteFingerprint }
         }
       } catch (error) {
         setFormError(error)
@@ -267,13 +337,13 @@ export function useCartCheckout({ cart, onClose, onAppendItems, onOrderCreated }
     }
 
     const cleanName = pickupName.trim()
-    const cleanPhone = phoneNumber.trim()
+    const cleanPhone = normalizePhone(phoneNumber)
 
     if (cleanName.length < 2) {
       setFormError(translate('takeaway.invalidName'))
       return
     }
-    if (!/^\+?[0-9]{8,15}$/.test(cleanPhone)) {
+    if (!isValidPhone(phoneNumber)) {
       setFormError(translate('takeaway.invalidPhone'))
       return
     }
@@ -295,6 +365,7 @@ export function useCartCheckout({ cart, onClose, onAppendItems, onOrderCreated }
 
     const payload: CreateOnlineOrderPayload = {
       ...(customer.data ? { expectedCustomerId: customer.data.id } : {}),
+      ...(voucherId ? { voucherId } : {}),
       pickupName: cleanName,
       phoneNumber: cleanPhone,
       pickupAt: isScheduled ? selectedSlotTime : undefined,
@@ -343,6 +414,18 @@ export function useCartCheckout({ cart, onClose, onAppendItems, onOrderCreated }
     items,
     activeQuote,
     subtotal,
+    total,
+    discountAmount,
+    voucher,
+    vouchers,
+    voucherPage,
+    changeVoucherPage: (page: number) => {
+      if (flight.current || review || locked) return
+      selectVoucher('')
+      setVoucherPage(page)
+    },
+    voucherId,
+    selectVoucher,
     locked,
     recovering,
     availability,

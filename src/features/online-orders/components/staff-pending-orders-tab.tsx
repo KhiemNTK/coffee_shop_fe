@@ -1,4 +1,4 @@
-import { formatPrice, formatLineAmount } from '@/shared/lib/format'
+import { formatLineAmount } from '@/shared/lib/format'
 import { useTranslation } from 'react-i18next'
 import { Check, Clock, Package, Phone } from 'lucide-react'
 import type { PendingOrder } from '../online-orders.api'
@@ -7,6 +7,8 @@ import { formatStoreDateTime } from '../../../shared/lib/store-time'
 import { OrderOptions } from '../../../shared/ui/order-options'
 import { Badge, Button } from '../../../shared/ui'
 import { StaffOrderQueue } from './staff-order-queue'
+import { OrderTotals } from '../order-totals'
+import { OrderVoucherGift } from './order-voucher-gift'
 
 interface StaffPendingOrdersTabProps {
   orders: PendingOrder[]
@@ -126,12 +128,8 @@ export function StaffPendingOrdersTab({
               </div>
             ))}
           </section>
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <span className="text-sm text-muted-foreground">{translate('ops.queue.quoted')}</span>
-            <strong className="text-xl tabular-nums text-primary">
-              {formatPrice(order.quotedSubtotal)}
-            </strong>
-          </div>
+          <OrderTotals {...order} />
+          <OrderVoucherGift key={order.id} order={order} />
           <div className="space-y-2">
             <Button
               className="min-h-11 w-full"

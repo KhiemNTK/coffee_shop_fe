@@ -3,7 +3,7 @@ import { useEffect } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, ArrowRight, Heart, LogOut, RefreshCw, ShoppingBag } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Heart, LogOut, RefreshCw, ShoppingBag, Ticket } from 'lucide-react'
 import { SiteHeader } from '@/features/storefront/site-header'
 import { ApiError, errorMessage } from '../../shared/api/client'
 import { Badge, Button } from '../../shared/ui'
@@ -15,6 +15,7 @@ import { getCustomerOrder, getCustomerOrders } from './customer-orders.api'
 import { CustomerSignIn } from './customer-sign-in'
 import { CustomerPickupCode } from './customer-pickup-code'
 import { FeedbackResponse } from '@/features/online-orders/feedback-response'
+import { OrderTotals } from '@/features/online-orders/order-totals'
 
 const invoiceStatusKeys = {
   UNPAID: 'ops.queue.unpaid',
@@ -82,7 +83,7 @@ export default function CustomerAccountPage() {
           {id && (
             <Button variant="outline" disabled={logout.isPending} onClick={() => logout.mutate()}>
               <LogOut size={16} aria-hidden="true" />
-              {t('auth.signOut')}
+              {t('customer.signOut')}
             </Button>
           )}
         </div>
@@ -110,6 +111,10 @@ export default function CustomerAccountPage() {
               <Link to="/wishlist" className="inline-flex min-h-11 items-center gap-2 text-primary">
                 <Heart size={18} aria-hidden="true" />
                 {t('wishlist.title')}
+              </Link>
+              <Link to="/account/vouchers" className="inline-flex min-h-11 items-center gap-2 text-primary">
+                <Ticket size={18} aria-hidden="true" />
+                {t('voucher.wallet')}
               </Link>
             </nav>
             <div className="flex flex-wrap items-center justify-between gap-3">
@@ -186,9 +191,7 @@ export default function CustomerAccountPage() {
                     </li>
                   ))}
                 </ul>
-                <p className="text-right font-semibold">
-                  {t('takeaway.quotedTotal')}: {formatPrice(detail.data.quotedSubtotal)}
-                </p>
+                <OrderTotals {...detail.data} />
                 {detail.data.feedback.map(feedback => <FeedbackResponse key={feedback.id} feedback={feedback} />)}
                 {detail.data.invoices.length ? (
                   <ul className="space-y-2 border-t border-border pt-4">
@@ -250,7 +253,7 @@ export default function CustomerAccountPage() {
                         ) : (
                           <OrderStatusBadge status={order.status} />
                         )}
-                        <span className="font-semibold">{formatPrice(order.quotedSubtotal)}</span>
+                        <span className="font-semibold">{formatPrice(order.quotedTotal)}</span>
                         <ArrowRight size={18} aria-hidden="true" />
                       </Link>
                     </li>

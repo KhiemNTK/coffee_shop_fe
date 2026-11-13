@@ -1,6 +1,6 @@
 import { formatLineAmount } from '@/shared/lib/format'
 import { useTranslation } from 'react-i18next'
-import { Trash2 } from 'lucide-react'
+import { Check, Trash2 } from 'lucide-react'
 import { Badge } from '../../../shared/ui/badge'
 import { Button } from '../../../shared/ui/button'
 import { cn } from '../../../shared/ui/utils'
@@ -13,6 +13,9 @@ interface PosOrderItemsListProps {
   onCancelItem: (itemId: string, reason: string) => void
   isCancelling?: boolean
   canCancel: boolean
+  canConfirmDelivery: boolean
+  deliveryDisabled: boolean
+  onConfirmDelivery: (itemId: string) => void
 }
 
 const SERVE_STATUS_CONFIG: Record<
@@ -34,6 +37,9 @@ export function PosOrderItemsList({
   onCancelItem,
   isCancelling = false,
   canCancel,
+  canConfirmDelivery,
+  deliveryDisabled,
+  onConfirmDelivery,
 }: PosOrderItemsListProps) {
   const { t: translate } = useTranslation()
   return (
@@ -103,6 +109,18 @@ export function PosOrderItemsList({
                   </span>
                 </div>
 
+                {canConfirmDelivery && item.serveStatus === 'READY' && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={deliveryDisabled}
+                    onClick={() => onConfirmDelivery(item.id)}
+                    className="min-h-11 max-w-32 shrink-0 whitespace-normal"
+                  >
+                    <Check className="h-4 w-4 shrink-0" aria-hidden="true" />
+                    {translate('pos.confirmTableDelivery')}
+                  </Button>
+                )}
                 {isCancelable && (
                   <Button
                     type="button"

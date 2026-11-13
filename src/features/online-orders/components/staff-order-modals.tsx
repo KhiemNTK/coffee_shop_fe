@@ -8,6 +8,7 @@ import { collectOnlineOrder, trackOnlineOrder, type FulfillmentOrder } from '../
 import { ApiError, errorMessage } from '../../../shared/api/client'
 import { ShiftRequiredLink } from '@/features/cashier-shifts/shift-required-link'
 import { PickupCodeScanner } from './pickup-code-scanner'
+import { OrderTotals } from '../order-totals'
 import {
   Button,
   Dialog,
@@ -123,7 +124,7 @@ export function CollectOrderModal({
   const errorRef = useRef<HTMLParagraphElement>(null)
   const [accessToken, setAccessToken] = useState('')
   const [amountTendered, setAmountTendered] = useState(() =>
-    decimalAmount(minorAmount(order.quotedSubtotal)),
+    decimalAmount(minorAmount(order.quotedTotal)),
   )
   const [submitted, setSubmitted] = useState<{
     accessToken: string
@@ -132,7 +133,7 @@ export function CollectOrderModal({
   const [error, setError] = useState<string | null>(null)
   const validAmount = /^(0|[1-9]\d{0,15})(\.\d{1,2})?$/.test(amountTendered.trim())
   const change = validAmount
-    ? minorAmount(amountTendered.trim()) - minorAmount(order.quotedSubtotal)
+    ? minorAmount(amountTendered.trim()) - minorAmount(order.quotedTotal)
     : 0n
   function showError(value: string) {
     setError(value)
@@ -234,10 +235,7 @@ export function CollectOrderModal({
         </div>
       ) : (
         <form className="space-y-4" onSubmit={submit}>
-          <p className="text-sm">
-            {translate('takeaway.amountDuePrefix')}{' '}
-            <strong>{formatPrice(order.quotedSubtotal)}</strong>
-          </p>
+          <OrderTotals {...order} />
           <fieldset disabled={mutation.isPending || Boolean(submitted)} className="space-y-3">
             <label htmlFor={`${id}-token`} className="block space-y-1">
               {translate('takeaway.customerAccess')}

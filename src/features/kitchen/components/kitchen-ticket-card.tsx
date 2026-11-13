@@ -139,7 +139,7 @@ export function KitchenTicketCard({
             )}
             {item.serveStatus === 'READY' && (
               <Badge variant="success" className="rounded-md">
-                {translate('ops.kitchen.readyHandoff')}
+                {translate(item.currentTable ? 'ops.kitchen.readyTable' : 'ops.kitchen.readyHandoff')}
               </Badge>
             )}
             {item.serveStatus === 'SERVED' && (

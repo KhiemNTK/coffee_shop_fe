@@ -24,6 +24,7 @@ const WishlistPage = lazy(() => import('../features/customers/wishlist-page'))
 const StoreInformationPage = lazy(() => import('../features/menu/store-information-page'))
 const CustomerSignInPage = lazy(() => import('../features/customers/customer-sign-in'))
 const CustomerAccountPage = lazy(() => import('../features/customers/customer-account-page'))
+const VoucherWalletPage = lazy(() => import('../features/vouchers/voucher-wallet-page'))
 const ReconciliationPage = lazy(() => import('../features/reconciliation/reconciliation-page'))
 const StaffMenuPage = lazy(() => import('../features/menu/staff-menu-page'))
 const CashierShiftPage = lazy(() => import('../features/cashier-shifts/cashier-shift-page'))
@@ -118,6 +119,7 @@ export function AppRouter() {
           <Route path="/wishlist" element={<WishlistPage />} />
           <Route path="/customer/sign-in" element={<CustomerSignInPage />} />
           <Route path="/account" element={<CustomerAccountPage />} />
+          <Route path="/account/vouchers" element={<VoucherWalletPage />} />
           <Route path="/account/orders/:orderId" element={<CustomerAccountPage />} />
           <Route element={<OnlineOrderRecoveryGate />}>
             <Route path="/cart" element={<CartPage />} />

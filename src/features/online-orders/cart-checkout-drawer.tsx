@@ -10,6 +10,8 @@ import { Turnstile } from '@/features/auth/turnstile'
 import { ItemCustomizerModal } from './components/item-customizer-modal'
 import { BasketQuotePreview } from './components/basket-quote-preview'
 import { useCartCheckout } from './hooks/use-cart-checkout'
+import { OrderTotals } from './order-totals'
+import { Pagination } from '@/shared/ui/pagination'
 import type { CartCheckoutProps } from './online-orders.types'
 
 export function CartCheckoutDrawer({
@@ -46,7 +48,15 @@ export function CartCheckoutDrawer({
     checkoutCart,
     items,
     activeQuote,
+    voucher,
     subtotal,
+    total,
+    discountAmount,
+    vouchers,
+    voucherPage,
+    changeVoucherPage,
+    voucherId,
+    selectVoucher,
     locked,
     recovering,
     availability,
@@ -73,7 +83,7 @@ export function CartCheckoutDrawer({
         {/* Header */}
         <div className="shrink-0 p-4 sm:p-5 border-b border-border flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <div className="h-8 w-8 rounded-lg bg-brand-50 text-brand-800 flex items-center justify-center">
+            <div className="h-8 w-8 rounded-lg bg-muted text-foreground flex items-center justify-center">
               <ShoppingBag className="h-4 w-4" />
             </div>
             <div>
@@ -126,7 +136,7 @@ export function CartCheckoutDrawer({
                     <Link
                       to="/customer/sign-in"
                       state={{ returnTo: '/cart' }}
-                      className="inline-flex min-h-11 items-center font-medium text-primary underline"
+                      className="inline-flex min-h-11 items-center font-medium text-primary underline dark:text-emerald-300"
                     >
                       {translate('wishlist.customerSignIn')}
                     </Link>
@@ -134,12 +144,54 @@ export function CartCheckoutDrawer({
                 </>
               )}
             </section>
+            {customer.data && !locked && (
+              <section className="space-y-2 border-b border-border pb-4 text-sm">
+                <label htmlFor="checkout-voucher" className="block font-medium">
+                  {translate('onlineVoucher.checkoutLabel', { defaultValue: 'Voucher' })}
+                </label>
+                <select
+                  id="checkout-voucher"
+                  className="min-h-11 w-full min-w-0 rounded-md border border-border bg-input px-3 text-foreground"
+                  value={voucherId ?? ''}
+                  disabled={Boolean(review) || locked || reviewMutation.isPending || vouchers.isPending || vouchers.isError}
+                  onChange={(event) => selectVoucher(event.target.value)}
+                >
+                  <option value="">{translate('onlineVoucher.checkoutNone', { defaultValue: 'No voucher' })}</option>
+                  {voucherId && !vouchers.data?.list.some((voucher) => voucher.id === voucherId) && (
+                    <option value={voucherId}>{translate('onlineVoucher.checkoutUnavailable', {
+                      defaultValue: 'This voucher cannot be applied. Review your selection before submitting.',
+                    })}</option>
+                  )}
+                  {vouchers.data?.list.map((voucher) => (
+                    <option key={voucher.id} value={voucher.id}>
+                      {voucher.campaign.name}
+                    </option>
+                  ))}
+                </select>
+                {vouchers.data && vouchers.data.totalPages > 1 && <Pagination
+                  page={voucherPage} totalPages={vouchers.data.totalPages} onPage={changeVoucherPage}
+                  disabled={Boolean(review) || locked || reviewMutation.isPending || vouchers.isFetching}
+                />}
+                {vouchers.isPending && <p role="status">{translate('common.loading')}</p>}
+                {vouchers.isError && (
+                  <>
+                    <ApiErrorAlert error={vouchers.error} />
+                    {!review && <Button type="button" variant="outline" onClick={() => void vouchers.refetch()}>
+                      {translate('common.retry')}
+                    </Button>}
+                  </>
+                )}
+                {vouchers.isSuccess && !vouchers.data.list.length && (
+                  <p className="text-muted-foreground">{translate('onlineVoucher.checkoutEmpty', { defaultValue: 'No available vouchers' })}</p>
+                )}
+              </section>
+            )}
             {/* Cart Items List */}
             <div className="space-y-3">
               {checkoutCart.map((item, index) => (
                 <div
                   key={item.id}
-                  className="bg-stone-50 border border-stone-200 rounded-xl p-3.5 space-y-2.5"
+                  className="bg-muted border border-border rounded-lg p-3.5 space-y-2.5"
                 >
                   <div className="flex items-start justify-between gap-2 min-w-0">
                     <div className="min-w-0 flex-1">
@@ -149,7 +201,7 @@ export function CartCheckoutDrawer({
                       >
                         {item.menuItem.name}
                       </h4>
-                      <p className="text-xs font-semibold text-brand-700 mt-0.5 tabular-nums">
+                      <p className="text-xs font-semibold text-foreground mt-0.5 tabular-nums">
                         {formatPrice(
                           activeQuote?.items[index]?.unitPrice ?? item.calculatedUnitPrice
                         )}
@@ -171,8 +223,8 @@ export function CartCheckoutDrawer({
                         size="sm"
                         onClick={() => onRemoveItem(item.id)}
                         disabled={Boolean(review) || reviewMutation.isPending}
-                        aria-label={translate('common.delete') + item.menuItem.name}
-                        className="h-7 w-7 p-0 shrink-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                        aria-label={`${translate('common.delete')} ${item.menuItem.name}`}
+                        className="h-11 w-11 p-0 shrink-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
                         title={translate('takeaway.removeItem')}
                       >
                         <Trash2 className="h-3.5 w-3.5" />
@@ -181,7 +233,7 @@ export function CartCheckoutDrawer({
                   </div>
 
                   {item.note && (
-                    <p className="text-xs text-muted-foreground italic bg-white/60 px-2 py-1 rounded border border-stone-200/50 break-words line-clamp-2">
+                    <p className="text-xs text-muted-foreground italic bg-card px-2 py-1 rounded border border-border break-words line-clamp-2">
                       {translate('common.notePrefix')} {item.note}
                     </p>
                   )}
@@ -195,8 +247,8 @@ export function CartCheckoutDrawer({
                           size="sm"
                           onClick={() => onUpdateQuantity(item.id, -1)}
                           disabled={Boolean(review) || reviewMutation.isPending}
-                          aria-label={translate('common.decreaseQuantity') + item.menuItem.name}
-                          className="h-6 w-6 rounded p-0 bg-white"
+                          aria-label={`${translate('common.decreaseQuantity')} ${item.menuItem.name}`}
+                          className="h-11 w-11 shrink-0 rounded p-0 bg-card"
                         >
                           <Minus className="h-3 w-3" />
                         </Button>
@@ -211,8 +263,8 @@ export function CartCheckoutDrawer({
                           disabled={
                             Boolean(review) || reviewMutation.isPending || item.quantity >= 20
                           }
-                          aria-label={translate('common.increaseQuantity') + item.menuItem.name}
-                          className="h-6 w-6 rounded p-0 bg-white"
+                          aria-label={`${translate('common.increaseQuantity')} ${item.menuItem.name}`}
+                          className="h-11 w-11 shrink-0 rounded p-0 bg-card"
                         >
                           <Plus className="h-3 w-3" />
                         </Button>
@@ -223,7 +275,7 @@ export function CartCheckoutDrawer({
                       </span>
                     )}
 
-                    <span className="text-sm font-bold text-brand-800 tabular-nums shrink-0">
+                    <span className="text-sm font-bold text-foreground tabular-nums shrink-0">
                       {formatLineAmount(
                         activeQuote?.items[index]?.unitPrice ?? item.calculatedUnitPrice,
                         item.quantity
@@ -262,7 +314,7 @@ export function CartCheckoutDrawer({
                       placeholder={translate('takeaway.recipientExample')}
                       value={pickupName}
                       onChange={(e) => setPickupName(e.target.value)}
-                      className="pl-9"
+                      className="min-h-11 border-border bg-input pl-9 text-foreground"
                     />
                     <User className="h-4 w-4 text-muted-foreground absolute left-3 top-3 pointer-events-none" />
                   </div>
@@ -282,7 +334,7 @@ export function CartCheckoutDrawer({
                       placeholder="VD: 0901234567"
                       value={phoneNumber}
                       onChange={(e) => setPhoneNumber(e.target.value)}
-                      className="pl-9"
+                      className="min-h-11 border-border bg-input pl-9 text-foreground"
                     />
                     <Phone className="h-4 w-4 text-muted-foreground absolute left-3 top-3 pointer-events-none" />
                   </div>
@@ -332,7 +384,7 @@ export function CartCheckoutDrawer({
                         setIsScheduled(false)
                         setSelectedSlotTime('')
                       }}
-                      className="text-xs"
+                      className="min-h-11 text-xs"
                     >
                       {translate('takeaway.asap')}
                     </Button>
@@ -341,7 +393,7 @@ export function CartCheckoutDrawer({
                       variant={isScheduled ? 'default' : 'outline'}
                       size="sm"
                       onClick={() => setIsScheduled(true)}
-                      className="text-xs"
+                      className="min-h-11 text-xs"
                     >
                       {translate('takeaway.schedule')}
                     </Button>
@@ -350,7 +402,7 @@ export function CartCheckoutDrawer({
 
                 {/* Slot selector when scheduled */}
                 {isScheduled && (
-                  <div className="p-3.5 bg-stone-50 border border-stone-200 rounded-xl space-y-3">
+                  <div className="p-3.5 bg-muted border border-border rounded-lg space-y-3">
                     <div>
                       <label
                         htmlFor="pickup-date"
@@ -367,7 +419,7 @@ export function CartCheckoutDrawer({
                           setPickupDate(e.target.value)
                           setSelectedSlotTime('')
                         }}
-                        className="w-full text-xs p-2 rounded-lg border border-border bg-white"
+                        className="w-full min-h-11 text-sm p-2 rounded-lg border border-border bg-card text-foreground"
                       />
                     </div>
 
@@ -417,8 +469,8 @@ export function CartCheckoutDrawer({
                                     isSelected
                                       ? 'bg-brand-800 text-white border-brand-800 shadow-xs'
                                       : isFull
-                                        ? 'bg-stone-100 text-stone-400 border-stone-200 cursor-not-allowed'
-                                        : 'bg-white text-foreground border-stone-200 hover:border-brand-500'
+                                        ? 'bg-muted text-muted-foreground border-border cursor-not-allowed'
+                                        : 'bg-card text-foreground border-border hover:border-primary'
                                   )}
                                 >
                                   <span>{timeStr}</span>
@@ -586,15 +638,22 @@ export function CartCheckoutDrawer({
           </div>
 
           {/* Footer */}
-          <div className="shrink-0 p-4 sm:p-5 border-t border-border bg-stone-50 mt-auto space-y-3">
-            <div className="flex items-baseline justify-between">
+          <div className="shrink-0 p-4 sm:p-5 border-t border-border bg-muted mt-auto space-y-3">
+            {review?.payload.voucherId && !activeQuote ? (
+              <p role="status" className="text-sm">{translate('onlineVoucher.requote', {
+                defaultValue: 'Review the updated voucher total before submitting.',
+              })}</p>
+            ) : review && voucher ? (
+              <OrderTotals quotedSubtotal={subtotal} discountAmount={discountAmount}
+                quotedTotal={total} voucher={voucher} />
+            ) : <div className="flex items-baseline justify-between">
               <span className="text-sm text-muted-foreground">
                 {translate('takeaway.quotedTotal')}
               </span>
-              <span className="text-xl font-bold text-brand-800">
-                {formatPrice(String(subtotal))}
+              <span className="text-xl font-bold text-foreground">
+                {formatPrice(total)}
               </span>
-            </div>
+            </div>}
 
             <Button
               type="submit"

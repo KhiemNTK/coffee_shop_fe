@@ -36,7 +36,7 @@ export function TabsList({
   return (
     <div
       className={cn(
-        'inline-flex min-h-10 max-w-full flex-wrap items-center justify-start gap-y-1 rounded-lg bg-[#f0f4f1] p-1 text-[#5c7064]',
+        'inline-flex min-h-10 max-w-full flex-wrap items-center justify-start gap-y-1 rounded-lg bg-[#f0f4f1] p-1 text-[#5c7064] dark:bg-muted dark:text-muted-foreground',
         className,
       )}
       role="tablist"
@@ -79,8 +79,8 @@ export function TabsTrigger({
       className={cn(
         'inline-flex items-center justify-center whitespace-nowrap rounded-md px-3.5 py-1.5 text-sm font-medium ring-offset-white transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#174f3f] cursor-pointer disabled:pointer-events-none disabled:opacity-50 select-none',
         isSelected
-          ? 'bg-white text-[#174f3f] font-semibold shadow-xs'
-          : 'hover:text-[#202d29] hover:bg-white/50 text-[#5c7064]',
+          ? 'bg-white text-[#174f3f] font-semibold shadow-xs dark:bg-background dark:text-foreground'
+          : 'hover:text-[#202d29] hover:bg-white/50 text-[#5c7064] dark:text-muted-foreground dark:hover:bg-accent dark:hover:text-foreground',
         className,
       )}
       {...props}

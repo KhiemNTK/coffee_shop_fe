@@ -32,6 +32,8 @@ import {
   transferTable,
   draftItemsSchema,
   orderItemBatchSchema,
+  checkoutInputSchema,
+  handoffItem,
   type AddOrderItemPayload,
 } from './pos.api'
 import { getPosRecommendations } from '../recommendations/recommendations.api'
@@ -71,7 +73,11 @@ function PosSessionPage() {
   const draftKey = `coffee_pos_draft_${employee.id}_${sessionId}`
   const submissionKey = pendingIntentKey(employee.id, `orders.items:${sessionId}`)
   const checkoutRecoveryKey = pendingIntentKey(employee.id, `invoice.checkout:${sessionId}`)
-  const [checkoutRecovery, setCheckoutRecovery] = useState(() => sessionStorage.getItem(checkoutRecoveryKey) !== null)
+  const [checkoutState] = useState(() => {
+    try { return { intent: readPendingIntent(checkoutRecoveryKey, checkoutInputSchema), error: false } }
+    catch { return { intent: null, error: true } }
+  })
+  const [checkoutRecovery, setCheckoutRecovery] = useState(Boolean(checkoutState.intent) || checkoutState.error)
 
   const [keyword, setKeyword] = useState('')
   const menuSearch = useDebouncedSearch(keyword)
@@ -102,9 +108,12 @@ function PosSessionPage() {
     }
   }, [draftItems, sessionId, draftKey])
 
-  const [submittedItems, setSubmittedItems] = useState<PendingIntent<AddOrderItemPayload[]> | null>(
-    () => readPendingIntent(submissionKey, orderItemBatchSchema)
-  )
+  const [batchState] = useState(() => {
+    try { return { intent: readPendingIntent(submissionKey, orderItemBatchSchema), error: false } }
+    catch { return { intent: null, error: true } }
+  })
+  const [submittedItems, setSubmittedItems] = useState(batchState.intent)
+  const recoveryUnreadable = batchState.error || checkoutState.error
   const orderFlight = useRef(false)
 
   // Modal chọn tùy chọn món (options / size / topping)
@@ -118,6 +127,7 @@ function PosSessionPage() {
 
   const [actionError, setActionError] = useState<string | null>(null)
   const [actionSuccess, setActionSuccess] = useState<string | null>(null)
+  const [deliveryReviewRequired, setDeliveryReviewRequired] = useState(false)
 
   const sessionQuery = useQuery({
     queryKey: posKeys.session(employee.id, sessionId),
@@ -210,11 +220,27 @@ function PosSessionPage() {
       }
     },
   })
-  const orderWriteLocked = addItemsMutation.isPending || Boolean(submittedItems) || checkoutRecovery
+  const deliveryMutation = useMutation({
+    retry: false,
+    mutationFn: handoffItem,
+    onSuccess: () => setActionSuccess(translate('pos.tableDeliverySuccess')),
+    onError: (error) => {
+      setDeliveryReviewRequired(true)
+      setActionError(errorMessage(error))
+    },
+    onSettled: () => {
+      orderFlight.current = false
+      void queryClient.invalidateQueries({ queryKey: posKeys.session(employee.id, sessionId) })
+      void queryClient.invalidateQueries({ queryKey: kitchenKeys.all(employee.id) })
+    },
+  })
+  const orderWriteLocked = recoveryUnreadable || deliveryReviewRequired || deliveryMutation.isPending || addItemsMutation.isPending || Boolean(submittedItems) || checkoutRecovery
 
   const submitDraft = useCallback(() => {
     if (
       orderFlight.current ||
+      recoveryUnreadable ||
+      deliveryReviewRequired ||
       checkoutRecovery ||
       showCheckoutModal ||
       !sessionId ||
@@ -257,6 +283,8 @@ function PosSessionPage() {
     addItemsMutation.mutate(intent)
   }, [
     sessionId,
+    recoveryUnreadable,
+    deliveryReviewRequired,
     access,
     submittedItems,
     checkoutRecovery,
@@ -500,6 +528,20 @@ function PosSessionPage() {
     )
   }
 
+  function confirmTableDelivery(itemId: string) {
+    if (
+      orderFlight.current || orderWriteLocked ||
+      cancelItemMutation.isPending || transferMutation.isPending ||
+      sessionQuery.isFetching || sessionQuery.isPaused ||
+      !session.table || !can('/orders_items_handoff') || isCompleted || isCancelled ||
+      session.orderItems.find(item => item.id === itemId)?.serveStatus !== 'READY'
+    ) return
+    orderFlight.current = true
+    setActionError(null)
+    setActionSuccess(null)
+    deliveryMutation.mutate(itemId)
+  }
+
   return (
     <div className="space-y-6">
       {/* Header phiên bàn */}
@@ -532,7 +574,7 @@ function PosSessionPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          {checkoutRecovery && canCheckout && (
+          {checkoutRecovery && canCheckout && !recoveryUnreadable && (
             <Button type="button" onClick={() => setShowCheckoutModal(true)}>
               <RefreshCw size={16} aria-hidden="true" />{translate('pos.recoverCheckout')}
             </Button>
@@ -599,11 +641,35 @@ function PosSessionPage() {
         </div>
       </div>
 
+      {recoveryUnreadable && (
+        <div role="alert" className="space-y-3 rounded-md border border-destructive/30 bg-destructive/5 p-4 text-sm">
+          <p>{translate('pos.recoveryUnreadable')}</p>
+          {can('/invoices_read') && (
+            <Link to="/staff/invoices" className={buttonVariants({ variant: 'outline' })}>
+              <Receipt size={16} aria-hidden="true" />{translate('nav.invoices')}
+            </Link>
+          )}
+        </div>
+      )}
       {isOnlineOrder && (
         <p role="status" className="border-y border-border py-3 text-sm">
           {translate('takeaway.posManaged')}{' '}
           {can('/online-orders_read') && <Link to="/staff/online-orders?tab=fulfillment" className="font-medium text-primary underline">{translate('nav.online-orders')}</Link>}
         </p>
+      )}
+      {deliveryReviewRequired && (
+        <div role="alert" className="space-y-2 border-y border-border py-3 text-sm">
+          <p>{translate('pos.tableDeliveryReview')}</p>
+          <Button variant="outline" disabled={sessionQuery.isFetching} onClick={async () => {
+            const refreshed = await sessionQuery.refetch()
+            if (refreshed.isSuccess) {
+              setDeliveryReviewRequired(false)
+              setActionError(null)
+            }
+          }}>
+            <RefreshCw size={16} aria-hidden="true" />{translate('common.retry')}
+          </Button>
+        </div>
       )}
       {actionError && (
         <div
@@ -724,6 +790,9 @@ function PosSessionPage() {
               canCancel={can('/orders_items_cancel') && !orderWriteLocked && !isOnlineOrder}
               onCancelItem={(itemId, reason) => cancelItemMutation.mutate({ itemId, reason })}
               isCancelling={cancelItemMutation.isPending}
+              canConfirmDelivery={Boolean(session.table) && !isCompleted && !isCancelled && can('/orders_items_handoff')}
+              deliveryDisabled={orderWriteLocked || cancelItemMutation.isPending || transferMutation.isPending || sessionQuery.isFetching || sessionQuery.isPaused}
+              onConfirmDelivery={confirmTableDelivery}
             />
 
             {/* Giỏ hàng tạm (Draft items) */}
@@ -736,6 +805,7 @@ function PosSessionPage() {
               onSubmitOrder={submitDraft}
               isSubmitting={addItemsMutation.isPending}
               isLocked={Boolean(submittedItems)}
+              disabled={recoveryUnreadable || deliveryReviewRequired || checkoutRecovery || deliveryMutation.isPending}
             />
 
             {/* Tổng tiền & thanh toán */}

@@ -107,7 +107,7 @@ export const staffDestinations = [
     path: 'promotions',
     label: 'Khuyến mãi',
     icon: Ticket,
-    permissions: ['/promotions_read'],
+    permissions: ['/promotions_read', '/vouchers_read'],
   },
   {
     path: 'reports',

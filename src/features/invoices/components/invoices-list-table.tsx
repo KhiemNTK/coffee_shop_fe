@@ -230,21 +230,27 @@ export function InvoicesListTable({
                       }
                     }}
                   >
-                  <td className="whitespace-nowrap px-4 py-4 font-mono text-xs font-semibold text-foreground">
-                      {invoice.invoiceNumber}
+                    <td className="px-4 py-4 font-mono text-xs font-semibold text-foreground">
+                      <span className="block w-40 [overflow-wrap:anywhere]">
+                        {invoice.invoiceNumber}
+                      </span>
                     </td>
                     <td className="px-4 py-4 font-medium">
-                      {(invoice.documentSnapshot
-                        ? invoice.documentSnapshot.tableName
-                        : invoice.orderSession?.table?.name) ?? 'Mang đi / Quầy'}
+                      <span className="block max-w-48 [overflow-wrap:anywhere]">
+                        {(invoice.documentSnapshot
+                          ? invoice.documentSnapshot.tableName
+                          : invoice.orderSession?.table?.name) ?? 'Mang đi / Quầy'}
+                      </span>
                     </td>
                     <td className="whitespace-nowrap px-4 py-4 text-xs text-muted-foreground">
                       {formatStoreDateTime(invoice.createdAt)}
                     </td>
                     <td className="px-4 py-4 text-xs text-muted-foreground">
-                      {invoice.documentSnapshot?.issuedByName ??
-                        invoice.employee?.fullName ??
-                        'Hệ thống'}
+                      <span className="block max-w-40 [overflow-wrap:anywhere]">
+                        {invoice.documentSnapshot?.issuedByName ??
+                          invoice.employee?.fullName ??
+                          'Hệ thống'}
+                      </span>
                     </td>
                     <td className="px-4 py-4">
                       <PaymentMethodBadge method={invoice.paymentMethod} />

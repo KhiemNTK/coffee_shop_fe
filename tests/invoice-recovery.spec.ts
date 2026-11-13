@@ -408,6 +408,41 @@ test('Retry-After accepts bounded seconds and HTTP dates without scheduling auto
   expect(delays[4]).toBeLessThanOrEqual(3_600_000)
 })
 
+test('long payment fixture labels wrap without changing the invoice snapshot', async ({ page }, info) => {
+  await setup(page)
+  if (info.project.name === 'mobile')
+    await page.addInitScript(() => localStorage.setItem('coffee_theme', 'dark'))
+  const suffix = '4df52966-3fa7-4048-8571-d0994285180d777f7465ef7442ada65f45e3b7c9ede4'
+  const tableName = `Payment table ${suffix}`
+  const itemName = `Payment item ${suffix}`
+  const number = `INV-${suffix}`
+  const invoice = {
+    ...bill,
+    invoiceNumber: number,
+    documentSnapshot: {
+      version: 1, source: 'ISSUED', tableId: sessionId, tableName,
+      issuedByName: `Payment Cashier ${suffix}`, promotionName: null,
+      items: [{ orderItemId: itemId, menuItemId: itemId, name: itemName, quantity: 2, unitPrice: '25000', note: null, selectedOptions: [] }],
+    },
+  }
+  await page.route('**/api/v1/invoices?*', route => route.fulfill({ json: envelope(paged([invoice])) }))
+  await page.route(`**/api/v1/invoices/${invoiceId}`, route => route.fulfill({ json: envelope(invoice) }))
+  await page.goto('/staff/invoices')
+  const row = page.getByRole('row', { name: `Chi tiết hóa đơn ${number}`, exact: true })
+  await expect(row).toBeVisible()
+  for (const cell of await row.getByRole('cell').all())
+    expect(await cell.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true)
+  await row.click()
+  const dialog = page.getByRole('dialog')
+  await expect(dialog.getByText(itemName, { exact: true })).toBeVisible()
+  await expect(dialog.getByText(tableName, { exact: true })).toBeVisible()
+  expect(await dialog.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true)
+  const itemCell = dialog.getByRole('cell').filter({ hasText: itemName })
+  expect(await itemCell.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true)
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+  await page.screenshot({ path: info.outputPath('long-payment-labels.png') })
+})
+
 test('money adapters keep a wide decimal string without rounding', async ({ page }) => {
   await setup(page)
   await page.goto('/staff/invoices')

@@ -18,7 +18,6 @@ import {
   checkoutInvoice,
   checkoutInputSchema,
   quoteInvoice,
-  type CheckoutInput,
   type Invoice,
   type SessionItem,
 } from './pos.api'
@@ -27,7 +26,6 @@ import {
   readPendingIntent,
   writePendingIntent,
   isPendingIntentExpired,
-  type PendingIntent,
 } from '../../shared/api/pending-intent'
 import { WorkflowPermissions } from '@/shared/auth/workflow-permissions'
 import { getActivePromotions, promotionKeys } from '../promotions/promotions.api'
@@ -68,13 +66,16 @@ export function CheckoutModal({
   const [pending, setPending] = useState(false)
   const [activeInvoiceId, setActiveInvoiceId] = useState<string | null>(null)
   const recoveryKey = pendingIntentKey(employee.id, `invoice.checkout:${sessionId}`)
-  const [submittedDirect, setSubmittedDirect] = useState<PendingIntent<CheckoutInput> | null>(() =>
-    readPendingIntent(recoveryKey, checkoutInputSchema)
-  )
+  const [recovery] = useState(() => {
+    try { return { intent: readPendingIntent(recoveryKey, checkoutInputSchema), error: false } }
+    catch { return { intent: null, error: true } }
+  })
+  const [submittedDirect, setSubmittedDirect] = useState(recovery.intent)
   const [reviewRequired, setReviewRequired] = useState(false)
   const [digitalUncertain, setDigitalUncertain] = useState(false)
   const [gatewayLocked, setGatewayLocked] = useState(false)
   const paymentLocked =
+    recovery.error ||
     pending ||
     Boolean(activeInvoiceId) ||
     Boolean(submittedDirect) ||
@@ -140,7 +141,7 @@ export function CheckoutModal({
   ].filter((val, idx, arr) => val >= totalMinor && arr.indexOf(val) === idx)
 
   async function handleDirectCheckout(payMethod: 'CASH' | 'CARD') {
-    if (retryWait || flight.current || !canDirect || (!submittedDirect && !quoteReady)) return
+    if (recovery.error || retryWait || flight.current || !canDirect || (!submittedDirect && !quoteReady)) return
     if (submittedDirect && isPendingIntentExpired(submittedDirect)) {
       setError(translate('pos.checkoutExpired'))
       return
@@ -211,7 +212,7 @@ export function CheckoutModal({
   }
 
   async function handlePrepareDigitalPayment() {
-    if (retryWait || flight.current || !canDigital || (!digitalUncertain && !quoteReady)) return
+    if (recovery.error || retryWait || flight.current || !canDigital || (!digitalUncertain && !quoteReady)) return
     flight.current = true
     setError(null)
     setPending(true)
@@ -264,6 +265,16 @@ export function CheckoutModal({
       flight.current = false
       setPending(false)
     }
+  }
+
+  if (recovery.error) {
+    return (
+      <Dialog open onClose={onClose}>
+        <DialogHeader><DialogTitle>{translate('pos.recoverCheckout')}</DialogTitle></DialogHeader>
+        <p role="alert" className="text-sm text-destructive">{translate('pos.recoveryUnreadable')}</p>
+        <DialogFooter><Button variant="outline" onClick={onClose}>{translate('common.back')}</Button></DialogFooter>
+      </Dialog>
+    )
   }
 
   return (

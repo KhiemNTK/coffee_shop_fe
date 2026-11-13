@@ -4,6 +4,7 @@ import { apiGet, apiMutate } from '../../shared/api/client'
 import { apiIdempotentMutate } from '../../shared/api/idempotency'
 import { selectedOptionsSchema } from '../../shared/api/order-options'
 import { originalRemakeSchema } from '../../shared/api/order-remakes'
+import { voucherSnapshotSchema } from '@/features/online-orders/online-orders.api'
 
 export const invoiceItemSchema = z.object({
   id: z.string(),
@@ -81,6 +82,7 @@ export const invoiceSchema = z.object({
       tableName: z.string().nullable(),
       issuedByName: z.string(),
       promotionName: z.string().nullable(),
+      voucher: voucherSnapshotSchema.nullable().optional(),
       items: z.array(
         z.object({
           orderItemId: z.string(),

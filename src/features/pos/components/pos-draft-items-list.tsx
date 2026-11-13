@@ -11,6 +11,7 @@ interface PosDraftItemsListProps {
   onSubmitOrder: () => void
   isSubmitting: boolean
   isLocked: boolean
+  disabled: boolean
 }
 
 export function PosDraftItemsList({
@@ -20,6 +21,7 @@ export function PosDraftItemsList({
   onSubmitOrder,
   isSubmitting,
   isLocked,
+  disabled,
 }: PosDraftItemsListProps) {
   const { t: translate } = useTranslation()
   if (draftItems.length === 0) return null
@@ -33,7 +35,7 @@ export function PosDraftItemsList({
         </span>
         <button
           type="button"
-          disabled={isSubmitting || isLocked}
+          disabled={isSubmitting || isLocked || disabled}
           onClick={onClearDraft}
           className="text-xs font-semibold text-destructive hover:underline cursor-pointer"
         >
@@ -67,7 +69,7 @@ export function PosDraftItemsList({
             <div className="flex items-center gap-1.5 shrink-0">
               <button
                 type="button"
-                disabled={isSubmitting || isLocked}
+                disabled={isSubmitting || isLocked || disabled}
                 onClick={() => onUpdateQuantity(item.id, -1)}
                 className="flex h-8 w-8 items-center justify-center rounded-lg border border-border bg-card text-foreground hover:bg-muted active:scale-90 transition-transform cursor-pointer disabled:opacity-50"
                 aria-label={translate('common.decreaseQuantity')}
@@ -79,7 +81,7 @@ export function PosDraftItemsList({
               </span>
               <button
                 type="button"
-                disabled={isSubmitting || isLocked}
+                disabled={isSubmitting || isLocked || disabled}
                 onClick={() => onUpdateQuantity(item.id, 1)}
                 className="flex h-8 w-8 items-center justify-center rounded-lg border border-border bg-card text-foreground hover:bg-muted active:scale-90 transition-transform cursor-pointer disabled:opacity-50"
                 aria-label={translate('common.increaseQuantity')}
@@ -94,6 +96,7 @@ export function PosDraftItemsList({
       <Button
         type="button"
         onClick={onSubmitOrder}
+        disabled={disabled || isSubmitting}
         isLoading={isSubmitting}
         className="w-full min-h-[44px] flex items-center justify-center gap-2 font-bold cursor-pointer"
       >
